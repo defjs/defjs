@@ -27,9 +27,9 @@ const logsOnlyClient = createClient(
 );
 
 async function main() {
-  const [error] = await readOrders(client);
-  if (error) {
-    console.error(error.code);
+  const [err] = await readOrders(client);
+  if (err) {
+    console.error(err.code);
     return;
   }
 }

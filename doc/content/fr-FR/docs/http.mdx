@@ -5,7 +5,7 @@ description: Concevez les opérations HTTP de votre SDK et appelez-les avec la c
 
 # Opérations HTTP
 
-Un SDK définit chaque opération HTTP avec `defineRequest` : sa méthode, son patron de chemin, son schéma `input`, son `builder` synchrone et ses schémas de réponse `output` / `error`. Les applications consommatrices importent l'opération, lui transmettent leur `Client` configuré et traitent le tuple `[error, data, response]` renvoyé.
+Un SDK définit chaque opération HTTP avec `defineRequest` : sa méthode, son patron de chemin, son schéma `input`, son `builder` synchrone et ses schémas de réponse `output` / `error`. Les applications consommatrices importent l'opération, lui transmettent leur `Client` configuré et traitent le tuple `[err, data, response]` renvoyé.
 
 ## 1. Définir l'opération et l'appeler
 
@@ -38,7 +38,7 @@ Attribuez à chaque opération son propre export `defineRequest` dans votre modu
 ### Bonnes pratiques de conception d'un SDK
 
 - **Une opération par définition** : Isolez chaque méthode, chemin et contrat dans sa propre définition pour permettre aux applications de tree-shaker les opérations non utilisées.
-- **Joignez `meta` quand les intercepteurs ont besoin de contexte** : `meta` est `{ [key: string]: unknown }` et défini par l'application, par exemple `{ operation: "orders.read" }`. Il ne circule que dans les intercepteurs et les répartiteurs (`request.meta`, `PickInfo.meta`) ; Defjs ne le lit, ne le copie ni ne l'envoie jamais sur le réseau.
+- **Joignez `meta` quand les intercepteurs ont besoin de contexte** : `meta` est `{ [key: string]: unknown }` et défini par l'application, par exemple `{ operation: "orders.read" }`. Il parvient aux intercepteurs et aux répartiteurs (`request.meta`, `PickInfo.meta`) sous la forme d'un seul objet en lecture seule par définition, partagé par chaque appel, chaque tentative et chaque client. Le type en lecture seule est superficiel : gardez donc l'état propre à chaque appel dans la closure de l'intercepteur, et non dans `meta` ni dans ses objets imbriqués. Un type nommé pour `meta` doit être un alias `type` : TypeScript ne considère pas une `interface` comme assignable à sa signature d'index. Le cœur de Defjs ne lit ni ne copie jamais `meta`, et il n'est jamais envoyé avec la requête ; les valeurs destinées à l'URL, aux en-têtes ou au corps passent par `builder`. `@defjs/opentelemetry-server` rapporte chaque clé comme un attribut `defjs.meta.<key>` sur les spans et les logs d'échec, donc gardez les secrets et les données personnelles hors de `meta`.
 - **N'embarquez jamais de client dans le SDK** : N'exportez que des définitions, des schémas `struct` et des types.
 
 ## 2. Résolution d'URL et paramètres de chemin

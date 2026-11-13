@@ -5,7 +5,7 @@ description: Declare service error contracts in your SDK and handle typed execut
 
 # Error handling
 
-In Defjs, request, transport, and decoding failures do not throw exceptions at the call site. Every operation returns an error-first tuple (`[error, ...]`) where `error` is either `null` or a typed `Fault` (a native `Error` instance discriminated by `error.code`).
+In Defjs, request, transport, and decoding failures do not throw exceptions at the call site. Every operation returns an error-first tuple (`[err, ...]`) where `err` is either `null` or a typed `Fault` (a native `Error` instance discriminated by `err.code`). Name that variable `err` and check it right away, as in Go.
 
 A call that TypeScript rejects is the exception: it has no specified result and is not a `Fault`. In practice it typically rejects with the platform's `TypeError`.
 
@@ -33,9 +33,17 @@ A call that TypeScript rejects is the exception: it has no specified result and 
 </Tab>
 </Tabs>
 
-### Why `error` carries the response metadata on HTTP failure
+### Why `err` carries the response metadata on HTTP failure
 
-On an HTTP failure, the tuple is `[error, undefined, undefined]`. Whatever response metadata arrived (`status`, `statusText`, `headers`, `url`) is attached directly to `error.response` so you can pass `error` alone to a logger or error handler without losing context.
+On an HTTP failure, the tuple is `[err, undefined, undefined]`. Whatever response metadata arrived (`status`, `statusText`, `headers`, `url`) is attached directly to `err.response` so you can pass `err` alone to a logger or error handler without losing context.
+
+### Handle each error once
+
+Treat the tuple like Go's `(T, error)`. Check `if (err)` right after the call and leave from inside that block, so the success path stays unindented; put code-specific branches (`err.code === "HTTP_STATUS" && err.status === 404`, or a `switch (err.code)`) inside it, as Go puts `errors.Is` and `errors.As` inside `if err != nil`. Either handle an error (log it, show it, fall back) or return it, never both. Only the top of the program (`main`, a UI event handler, a test) handles; any other function that can fail returns its own error-first tuple, `Promise<[Error, undefined] | [null, T]>`, and never signals failure with `undefined`, `null`, or `false`. With one Defjs call, return the fault as-is (Go's `return nil, err`). With several calls, name each error after its step (`putErr`, `listErr`) and wrap it with `new Error("put object", { cause: putErr })`, the counterpart of `fmt.Errorf("put object: %w", err)`. Throw only where a library contract requires it, such as a TanStack Query `queryFn`.
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. Fault classes and closed code set
 
@@ -61,7 +69,7 @@ The code names what failed, not who supplied the value. For HTTP, a request the 
 | `RES_*`       | `number` | `HttpMeta` (**no `body` field**)                | Absent                                 | `StructError` or parser error     |
 | Other codes   | Absent   | `HttpMeta` if headers arrived, else `undefined` | Absent                                 | Underlying `Error` / abort reason |
 
-## 3. Narrowing union error bodies (`error.data`)
+## 3. Narrowing union error bodies (`err.data`)
 
 Because one `error` struct covers all non-`2xx` statuses, declare a union when different error statuses return different JSON shapes:
 

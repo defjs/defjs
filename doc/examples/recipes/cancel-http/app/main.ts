@@ -14,17 +14,17 @@ const pending = getReport(
 controller.abort("screen closed");
 
 async function main() {
-  const [error] = await pending;
-  if (error?.code === "NET_ABORTED") {
-    console.log("caller cancelled");
-    return;
-  }
-  if (error?.code === "NET_TIMEOUT") {
-    console.log("timed out");
-    return;
-  }
-  if (error) {
-    console.error(error.code);
+  const [err] = await pending;
+  if (err) {
+    if (err.code === "NET_ABORTED") {
+      console.log("caller cancelled");
+      return;
+    }
+    if (err.code === "NET_TIMEOUT") {
+      console.log("timed out");
+      return;
+    }
+    console.error(err.code);
     return;
   }
   console.log("got the report");

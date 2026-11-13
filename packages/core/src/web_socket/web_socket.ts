@@ -118,7 +118,7 @@ interface WebSocketDefinitionBase<
  *
  * - `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.
  *
- * - `meta` is application-defined metadata (`{ [key: string]: unknown }`) that flows only through interceptors and balancers. Defjs never reads or sends it.
+ * - `meta` is application-defined metadata (`{ [key: string]: unknown }`) that flows through interceptors and balancers, read-only there and shared by every connection of this definition. Defjs core never reads it, and it is never sent with the request.
  *
  * - `input` is the struct for the operation input. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see {@link WebSocketRequestShape}.
  *
@@ -242,7 +242,7 @@ export interface WebSocketSession<
  *
  * - On success: `[null, session, connection]`. `session.connection` moves forward on reconnect. The tuple's `connection` preserves the first successful snapshot only for a native Defjs session or a wrapper forwarding the same live `connection` object. Custom sessions and wrappers that transform `connection` instead return their current public `connection`. Sharing `closed` cannot bypass URL sanitization or metadata filtering, and Defjs does not reconstruct first-connection metadata from arbitrary transformations.
  *
- * - On failure: `[fault, undefined, connection]`. `connection` may be `undefined`, for example when the constructor failed before the socket opened.
+ * - On failure: `[err, undefined, connection]`. `connection` may be `undefined`, for example when the constructor failed before the socket opened.
  *
  * - Only startup failures arrive here. Once the session is returned, later errors surface through `onRuntimeError`, `receive`, and `closed`.
  *
@@ -250,13 +250,13 @@ export interface WebSocketSession<
  */
 export type SocketAwaitResult<TIncoming, TOutgoing = never> =
   | [
-      error: null,
-      socket: WebSocketSession<TIncoming, TOutgoing>,
+      err: null,
+      session: WebSocketSession<TIncoming, TOutgoing>,
       connection: WebSocketConnectionInfo,
     ]
   | [
-      error: Fault<undefined>,
-      socket: undefined,
+      err: Fault<undefined>,
+      session: undefined,
       connection: WebSocketConnectionInfo | undefined,
     ];
 

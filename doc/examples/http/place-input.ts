@@ -24,13 +24,13 @@ const updateOrder = defineRequest({
 });
 
 async function main() {
-  const [error, order] = await updateOrder(client, {
+  const [err, order] = await updateOrder(client, {
     id: 7,
     requestId: "request-42",
     profile: { customerName: "Ada" },
   });
-  if (error) {
-    console.error(error.code);
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(order.id);

@@ -5,7 +5,7 @@ description: Llama a un GET y bifurca entre un 200 tipado y un 404 declarado.
 
 # GET con un 404 declarado
 
-Declara tanto `output` (para respuestas 2xx) como `error` (para respuestas no 2xx) en `defineRequest`. En el punto de llamada, comprueba `error?.code === "HTTP_STATUS" && error.status === 404` para leer la carga tipada en `error.data`.
+Declara tanto `output` (para respuestas 2xx) como `error` (para respuestas no 2xx) en `defineRequest`. En el punto de llamada, comprueba primero `if (err)` y, dentro de ese bloque, bifurca con `err.code === "HTTP_STATUS" && err.status === 404` para leer la carga tipada `err.data`.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
@@ -28,7 +28,7 @@ Con un servidor que responda a `GET /orders/7` con `200` y `{ "id": 7, "status":
 Loaded paid from 200
 ```
 
-- Un código de estado no 2xx produce `HTTP_STATUS` cuando se omite `error` o el cuerpo `error` declarado decodifica. Declarar `error` decodifica y valida el cuerpo del error en `error.data`; omitir `error` deja `error.data` como `undefined` sin leer el cuerpo.
+- Un código de estado no 2xx produce `HTTP_STATUS` cuando se omite `error` o el cuerpo `error` declarado decodifica. Declarar `error` decodifica y valida el cuerpo del error en `err.data`; omitir `error` deja `err.data` como `undefined` sin leer el cuerpo.
 - Si un cuerpo de `error` declarado llega con el tipo de medio incorrecto, JSON inválido o no supera la validación del Struct, la operación devuelve en su lugar un fallo `RES_*`. Puesto que un único Struct de `error` abarca todos los estados no 2xx, utiliza `struct.or(...)` cuando diferentes estados de error presenten formas distintas.
 
 Consulta [Operaciones HTTP](/es-ES/docs/http) y [Tratamiento de errores](/es-ES/docs/errors).

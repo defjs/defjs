@@ -5,7 +5,7 @@ description: Deklariere Service-Fehlerverträge im SDK und behandle typisierte A
 
 # Fehlerbehandlung
 
-In Defjs werfen Request-, Transport- und Dekodierungsfehler an der Aufrufstelle keine Exceptions. Jede Operation gibt ein Error-first-Tupel (`[error, ...]`) zurück, bei dem `error` entweder `null` oder ein typisierter `Fault` ist (eine native `Error`-Instanz, diskriminiert über `error.code`).
+In Defjs werfen Request-, Transport- und Dekodierungsfehler an der Aufrufstelle keine Exceptions. Jede Operation gibt ein Error-first-Tupel (`[err, ...]`) zurück, bei dem `err` entweder `null` oder ein typisierter `Fault` ist (eine native `Error`-Instanz, diskriminiert über `err.code`). Nenne diese Variable `err` und prüfe sie sofort, wie in Go.
 
 Ein Aufruf, den TypeScript ablehnt, ist die Ausnahme: Er hat kein festgelegtes Ergebnis und ist kein `Fault`. In der Praxis wird er typischerweise mit dem `TypeError` der Plattform abgelehnt.
 
@@ -33,9 +33,17 @@ Ein Aufruf, den TypeScript ablehnt, ist die Ausnahme: Er hat kein festgelegtes E
 </Tab>
 </Tabs>
 
-### Warum `error` bei HTTP-Fehlern die Response-Metadaten trägt
+### Warum `err` bei HTTP-Fehlern die Response-Metadaten trägt
 
-Bei einem HTTP-Fehler lautet das Tupel `[error, undefined, undefined]`. Sämtliche eingetroffenen Response-Metadaten (`status`, `statusText`, `headers`, `url`) sind direkt an `error.response` angehängt, sodass du `error` isoliert an Logger oder Fehlerbehandlungsroutinen übergeben kannst, ohne Kontext zu verlieren.
+Bei einem HTTP-Fehler lautet das Tupel `[err, undefined, undefined]`. Sämtliche eingetroffenen Response-Metadaten (`status`, `statusText`, `headers`, `url`) sind direkt an `err.response` angehängt, sodass du `err` isoliert an Logger oder Fehlerbehandlungsroutinen übergeben kannst, ohne Kontext zu verlieren.
+
+### Jeden Fehler genau einmal behandeln
+
+Behandle das Tupel wie Gos `(T, error)`. Prüfe `if (err)` direkt nach dem Aufruf und verlasse die Funktion innerhalb dieses Blocks, damit der Erfolgspfad nicht eingerückt bleibt; codespezifische Zweige (`err.code === "HTTP_STATUS" && err.status === 404` oder ein `switch (err.code)`) gehören in diesen Block, so wie Go `errors.Is` und `errors.As` innerhalb von `if err != nil` aufruft. Einen Fehler behandelst du entweder (protokollieren, anzeigen, auf einen Fallback ausweichen) oder du gibst ihn zurück, niemals beides. Nur die Spitze des Programms (`main`, ein UI-Event-Handler, ein Test) behandelt; jede andere Funktion, die fehlschlagen kann, gibt ihr eigenes Error-first-Tupel `Promise<[Error, undefined] | [null, T]>` zurück und meldet einen Fehlschlag nie über `undefined`, `null` oder `false`. Bei einem einzigen Defjs-Aufruf gibst du den Fault unverändert zurück (Gos `return nil, err`). Bei mehreren Aufrufen benennst du jeden Fehler nach seinem Schritt (`putErr`, `listErr`) und umhüllst ihn mit `new Error("put object", { cause: putErr })`, dem Gegenstück zu `fmt.Errorf("put object: %w", err)`. Wirf nur dort, wo ein Bibliotheksvertrag es verlangt, etwa bei der `queryFn` von TanStack Query.
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. Fault-Klassen und geschlossenes Code-Set
 
@@ -61,7 +69,7 @@ Der Code benennt, was fehlgeschlagen ist, nicht wer den Wert geliefert hat. Bei 
 | `RES_*`       | `number`        | `HttpMeta` (**kein `body`-Feld**)                     | Nicht vorhanden                             | `StructError` oder Parser-Fehler           |
 | Andere Codes  | Nicht vorhanden | `HttpMeta`, falls Header eintrafen, sonst `undefined` | Nicht vorhanden                             | Zugrundeliegender `Error` / Abbruchgrund   |
 
-## 3. Union-Fehler-Bodys eingrenzen (`error.data`)
+## 3. Union-Fehler-Bodys eingrenzen (`err.data`)
 
 Da ein einzelnes `error`-Struct alle Nicht-`2xx`-Status abdeckt, deklariere eine Union, wenn unterschiedliche Fehler-Statuscodes abweichende JSON-Strukturen liefern:
 

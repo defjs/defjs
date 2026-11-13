@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` es lógica de negocio, no la cima del programa, así que `placeAndLoadOrder` no registra nada. Devuelve una tupla con el error por delante, `Promise<[Error, undefined] | [null, Checkout]>`, y envuelve el fallo de cada paso con el paso que falló (`new Error("create order", { cause: createErr })`), como el `fmt.Errorf("create order: %w", err)` de Go. Quien llama, por ejemplo un manejador de eventos de la interfaz, comprueba `if (err)` y decide cómo mostrarlo.
+
 ---
 
 ## 3. Patrones clave para proyectos de aplicación
@@ -69,7 +71,7 @@ src/
 Nunca crees un nuevo `Client` mediante `createClient(...)` solo para pasar un tiempo de espera o un `AbortSignal`. En su lugar, deriva en línea un cliente para una sola llamada a partir de tu cliente compartido:
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### Envoltorio de error compartido (`ApiError`)
 
-Declara una sola vez la estructura estándar de error de tu backend (`export const ApiError = struct.object(...)`) en `src/api/models/` y pasa `error: ApiError` en cada `defineRequest` de `src/api/services/`. Cuando una solicitud devuelve un estado distinto de `2xx`, acotar con `if (error.code === "HTTP_STATUS")` te proporciona acceso fuertemente tipado a `error.data.code`, `error.data.message` y `error.data.requestId`.
+Declara una sola vez la estructura estándar de error de tu backend (`export const ApiError = struct.object(...)`) en `src/api/models/` y pasa `error: ApiError` en cada `defineRequest` de `src/api/services/`. Cuando una solicitud devuelve un estado distinto de `2xx`, acotar con `if (err.code === "HTTP_STATUS")` dentro de `if (err)` te proporciona acceso fuertemente tipado a `err.data.code`, `err.data.message` y `err.data.requestId`.
 
 Consulta [Convenciones de ingeniería](/es-ES/docs/best-practices), [Diseño de SDK público](/es-ES/docs/public-sdk), [Cliente](/es-ES/docs/client) e [Interceptores](/es-ES/docs/interceptors).

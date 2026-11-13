@@ -13,13 +13,13 @@ async function main() {
   );
 
   controller.abort("screen closed");
-  const [error] = await pending;
-  if (error?.code === "NET_ABORTED") {
-    console.log("caller cancellation");
-    return;
-  }
-  if (error) {
-    console.error(error.code);
+  const [err] = await pending;
+  if (err) {
+    if (err.code === "NET_ABORTED") {
+      console.log("caller cancellation");
+      return;
+    }
+    console.error(err.code);
     return;
   }
 }

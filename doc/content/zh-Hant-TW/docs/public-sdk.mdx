@@ -139,7 +139,7 @@ description: 以 Amazon S3 SDK 架構為藍本，為公開 API 設計並發布�
 
 ## 4. 外部開發者如何使用你的 SDK
 
-外部應用程式只需一併安裝 `@company/s3-sdk` 與 `@defjs/core`，以自己的端點與簽章攔截器設定 `Client`，即可直接將匯出的操作當作純函式呼叫：
+外部應用程式只需一併安裝 `@company/s3-sdk` 與 `@defjs/core`，以自己的端點與簽章攔截器設定 `Client`，即可直接將匯出的操作當作純函式呼叫。這個範例採用 Go 風格的錯誤處理：`syncReport` 有三個呼叫，所以依步驟命名每個錯誤（`putErr`、`listErr`、`getErr`），回傳 error-first tuple，並用 `new Error("put object", { cause: putErr })` 包裝失敗的步驟，就像 Go 的 `fmt.Errorf("put object: %w", err)`。只有程式最上層的 `main` 會記錄該錯誤：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

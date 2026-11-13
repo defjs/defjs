@@ -5,7 +5,7 @@ description: GraphQL als HTTP-`200`-Envelope mit anwendungsseitigem Entpacken mo
 
 # Einen GraphQL-HTTP-Envelope entpacken
 
-Defjs bettet weder einen GraphQL-Client noch eine eigene `errorPolicy` ein. Modelliere GraphQL über HTTP als reguläre `POST`-Operation, deren `builder` `{ query, operationName, variables }` sendet. Markiere `data` am Envelope-Struct als `.nullish()`, sodass sowohl ein weggelassenes `data` als auch `data: null` die strukturelle Validierung passieren, und entpacke `errors[]` in einer Anwendungs-Hilfsfunktion:
+Defjs bettet weder einen GraphQL-Client noch eine eigene `errorPolicy` ein. Modelliere GraphQL über HTTP als reguläre `POST`-Operation, deren `builder` `{ query, operationName, variables }` sendet. Markiere `data` am Envelope-Struct als `.nullish()`, sodass sowohl ein weggelassenes `data` als auch `data: null` die strukturelle Validierung passieren, und entpacke `errors[]` in einer Anwendungs-Hilfsfunktion, die ein Error-first-Tupel zurückgibt, `Promise<[Error, undefined] | [null, Viewer | null]>`, sodass der Aufrufer genau ein `err` behandelt, ob es ein Defjs-Fault oder ein GraphQL-Fehler ist:
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -32,5 +32,5 @@ Defjs bettet weder einen GraphQL-Client noch eine eigene `errorPolicy` ein. Mode
 ada viewer unavailable viewer unavailable
 ```
 
-- Ein HTTP `200` bedeutet lediglich, dass der GraphQL-Envelope unbeschädigt eingetroffen ist. Fachliche Fehler innerhalb von `errors[]` (selbst wenn sie von `data: null` begleitet werden) sind Ergebnisse auf Anwendungsebene und keine `RES_STRUCT_MISMATCH`-Faults.
+- Ein HTTP `200` bedeutet lediglich, dass der GraphQL-Envelope unbeschädigt eingetroffen ist. Fachliche Fehler innerhalb von `errors[]` (selbst wenn sie von `data: null` begleitet werden) sind Ergebnisse auf Anwendungsebene und keine `RES_STRUCT_MISMATCH`-Faults. Der Helfer gibt sie als eigenen `Error` zurück (ihre Meldungen zusammengefügt) und reicht jeden Defjs-Fault des einzigen Aufrufs unverändert durch. Er wirft nie und gibt nie `undefined` zurück, um einen Fehlschlag zu signalisieren.
 - Siehe [Kernarchitektur](/de-DE/docs/design-decisions) für die Hintergründe, warum protokollspezifische Envelopes in Hilfsfunktionen der Anwendung verbleiben.

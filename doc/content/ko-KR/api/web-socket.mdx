@@ -16,7 +16,7 @@ description: defineWebSocket, 세션, 요청 옵션이에요.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-호출은 `[null, session, connection]` 또는 `[error, undefined, connection?]`을 돌려줘요. 호출별 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. WebSocket은 `signal`, `beforeConnect`, `heartbeat`, `protocols`, `retry`를 읽고, HTTP 진행률 필드는 무시해요.
+호출은 `[null, session, connection]` 또는 `[err, undefined, connection?]`을 돌려줘요. 호출별 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. WebSocket은 `signal`, `beforeConnect`, `heartbeat`, `protocols`, `retry`를 읽고, HTTP 진행률 필드는 무시해요.
 
 `beforeConnect`, `heartbeat`, `protocols`, `retry`는 각각 그 호출에 한해 대응하는 클라이언트 수준 옵션을 통째로 바꿔요. 프로토콜 우선순위는 파생 클라이언트, `withWebSocketProtocols`, 정의의 `protocols` 순서예요. `heartbeat.timeoutMs`는 확인 대기이지, 요청 데드라인이 아니에요.
 
@@ -88,7 +88,7 @@ description: defineWebSocket, 세션, 요청 옵션이에요.
 
 ## SocketAwaitResult
 
-`[null, session, connection]` 또는 `[error, undefined, connection?]`예요.
+`[null, session, connection]` 또는 `[err, undefined, connection?]`예요.
 
 ## ManualSocketCloseReason
 

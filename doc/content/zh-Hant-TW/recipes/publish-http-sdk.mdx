@@ -129,7 +129,7 @@ bun pm pack
 bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-由於 SDK 不綁定任何 client，取用端應用程式自行掌控服務端點（AWS S3、Cloudflare R2 或 MinIO）、簽章攔截器與重試策略，並以純函式方式直接呼叫匯入的操作定義：
+由於 SDK 不綁定任何 client，取用端應用程式自行掌控服務端點（AWS S3、Cloudflare R2 或 MinIO）、簽章攔截器與重試策略，並以純函式方式直接呼叫匯入的操作定義。因為 `syncReport` 有三個呼叫，所以依步驟命名每個錯誤（`putErr`、`listErr`、`getErr`），並回傳 error-first tuple，其中的錯誤會包裝失敗的步驟，就像 Go 的 `fmt.Errorf("put object: %w", err)`。只有 `main` 會記錄它：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

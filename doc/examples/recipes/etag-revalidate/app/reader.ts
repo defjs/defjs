@@ -5,23 +5,24 @@ import { readProduct, type Product } from "../sdk/catalog.ts";
 export function createReader(client: DerivableClient) {
   const cache = new Map<string, { etag: string; product: Product }>();
 
-  return async (sku: string): Promise<Product> => {
+  return async (sku: string): Promise<[Error, undefined] | [null, Product]> => {
     const cached = cache.get(sku);
-    const [error, product, response] = await readProduct(client, {
+    const [err, product, response] = await readProduct(client, {
       sku,
       etag: cached?.etag,
     });
 
-    if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
-      return cached.product;
+    if (err) {
+      if (err.code === "HTTP_STATUS" && err.status === 304 && cached) {
+        return [null, cached.product];
+      }
+      return [err, undefined];
     }
-    // This reader returns Product, so a non-304 fault leaves here by throwing.
-    if (error) throw error;
 
     const etag = response.headers.get("etag");
-    if (!etag) throw new Error("missing ETag");
+    if (!etag) return [new Error("missing etag header"), undefined];
     cache.set(sku, { etag, product });
-    return product;
+    return [null, product];
   };
 }
 // #endregion

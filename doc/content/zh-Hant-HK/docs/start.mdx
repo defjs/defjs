@@ -66,7 +66,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-如果你將 input 由 `{ id: 7 }` 改做 `{ id: 8 }`，mock 會回傳 `404`，Defjs 就會將宣告好嘅 `error` struct 解碼並放落 `error.data`：
+如果你將 input 由 `{ id: 7 }` 改做 `{ id: 8 }`，mock 會回傳 `404`，Defjs 就會將宣告好嘅 `error` struct 解碼並放落 `err.data`：
 
 ```txt
 Order not found
@@ -74,11 +74,11 @@ Order not found
 
 ## 4. 理解 error-first tuple
 
-每次 HTTP 呼叫都會 resolve 出 `[error, data, response]`：
+每次 HTTP 呼叫都會 resolve 出 `[err, data, response]`。一呼叫完就檢查 `if (err)`，並喺個區塊入面離開，就好似 Go 嘅 `if err != nil`：
 
-- **`2xx` 成功**：`error` 係 `null`，`data` 係通過驗證嘅 `output` 值（`Order`），而 `response` 就係 `DecodedResponse<Order>`。
-- **宣告過嘅非 `2xx` 狀態碼**：`error.code` 係 `'HTTP_STATUS'`，`error.status` 係數字狀態碼（`404`），而 `error.data` 係通過驗證嘅 `error` struct（`NotFound`）。
-- **Input、解碼或網絡錯誤**：`error.code` 會標明具體喺邊個階段出事：
+- **`2xx` 成功**：`err` 係 `null`，`data` 係通過驗證嘅 `output` 值（`Order`），而 `response` 就係 `DecodedResponse<Order>`。
+- **宣告過嘅非 `2xx` 狀態碼**：`err.code` 係 `'HTTP_STATUS'`，`err.status` 係數字狀態碼（`404`），而 `err.data` 係通過驗證嘅 `error` struct（`NotFound`）。
+- **Input、解碼或網絡錯誤**：`err.code` 會標明具體喺邊個階段出事：
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — 呼叫端傳入嘅 input 無效，或者 `builder` 拋出例外
   - `RES_MEDIA_TYPE_INVALID` — 宣告咗 JSON body 但伺服器回傳咗非 JSON 嘅 `Content-Type`（喺讀取 body 前就會拒絕）
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — 無法讀取 body 或 schema 結構唔吻合

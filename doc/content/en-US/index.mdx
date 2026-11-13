@@ -31,7 +31,7 @@ Defjs separates the two sides of a TypeScript SDK:
 </Tab>
 </Tabs>
 
-Calling `getHealth(client)` performs I/O and resolves an error-first tuple. Check `if (error)` and return before reading the decoded result.
+Calling `getHealth(client)` performs I/O and resolves an error-first tuple. Check `if (err)` and return before reading the decoded result.
 
 ## Why separate definitions from clients?
 
@@ -52,13 +52,13 @@ Calling `getHealth(client)` performs I/O and resolves an error-first tuple. Chec
 
 Every operation returns a three-item error-first tuple tailored to its transport lifecycle:
 
-| Transport                         | Entry point         | Tuple shape                    | Lifecycle ownership                                                      |
-| --------------------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------ |
-| **[HTTP](/docs/http)**            | `defineRequest`     | `[error, data, response]`      | Cancel in-flight work via `client({ signal })`                           |
-| **[SSE](/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | Release with `await using` or `stream.close()` + `await stream.closed`   |
-| **[WebSocket](/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | Release with `await using` or `session.close()` + `await session.closed` |
+| Transport                         | Entry point         | Tuple shape                  | Lifecycle ownership                                                      |
+| --------------------------------- | ------------------- | ---------------------------- | ------------------------------------------------------------------------ |
+| **[HTTP](/docs/http)**            | `defineRequest`     | `[err, data, response]`      | Cancel in-flight work via `client({ signal })`                           |
+| **[SSE](/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | Release with `await using` or `stream.close()` + `await stream.closed`   |
+| **[WebSocket](/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | Release with `await using` or `session.close()` + `await session.closed` |
 
-On an HTTP failure, the tuple is `[error, undefined, undefined]` because `error` already carries any `HttpMeta` response metadata. For SSE and WebSocket, the third slot holds the startup snapshot whenever one was captured before failure.
+On an HTTP failure, the tuple is `[err, undefined, undefined]` because `err` already carries any `HttpMeta` response metadata. For SSE and WebSocket, the third slot holds the startup snapshot whenever one was captured before failure.
 
 ## Official packages
 

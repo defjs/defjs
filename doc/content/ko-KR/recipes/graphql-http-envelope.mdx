@@ -5,7 +5,7 @@ description: GraphQL을 HTTP 200 + 애플리케이션 언래핑으로 처리합�
 
 # GraphQL HTTP 엔벨로프 언래핑
 
-Defjs는 별도의 GraphQL 클라이언트나 `errorPolicy`를 내장하지 않습니다. HTTP 상의 GraphQL은 `builder`가 `{ query, operationName, variables }`를 전송하는 표준 `POST` 작업으로 모델링하세요. 엔벨로프 Struct에서 `data`를 `.nullish()`로 선언하면 생략된 `data`와 `data: null` 모두 구조적 유효성 검증을 통과하며, `errors[]`는 애플리케이션 헬퍼 함수에서 언래핑합니다:
+Defjs는 별도의 GraphQL 클라이언트나 `errorPolicy`를 내장하지 않습니다. HTTP 상의 GraphQL은 `builder`가 `{ query, operationName, variables }`를 전송하는 표준 `POST` 작업으로 모델링하세요. 엔벨로프 Struct에서 `data`를 `.nullish()`로 선언하면 생략된 `data`와 `data: null` 모두 구조적 유효성 검증을 통과하며, `errors[]`는 애플리케이션 헬퍼 함수에서 언래핑합니다. 이 헬퍼는 error-first 튜플 `Promise<[Error, undefined] | [null, Viewer | null]>`를 반환하므로, 호출자는 Defjs 결함이든 GraphQL 오류든 하나의 `err`만 처리하면 됩니다:
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -32,5 +32,5 @@ Defjs는 별도의 GraphQL 클라이언트나 `errorPolicy`를 내장하지 않�
 ada viewer unavailable viewer unavailable
 ```
 
-- HTTP `200`은 GraphQL 엔벨로프가 손상 없이 온전히 수신되었음을 의미할 뿐입니다. `errors[]` 내부의 비즈니스 도메인 오류(`data: null`과 함께 오는 경우 포함)는 `RES_STRUCT_MISMATCH` 결함이 아니라 애플리케이션 수준의 결과값입니다.
+- HTTP `200`은 GraphQL 엔벨로프가 손상 없이 온전히 수신되었음을 의미할 뿐입니다. `errors[]` 내부의 비즈니스 도메인 오류(`data: null`과 함께 오는 경우 포함)는 `RES_STRUCT_MISMATCH` 결함이 아니라 애플리케이션 수준의 결과값입니다. 헬퍼는 이를 자체 `Error`(메시지를 이어 붙인 것)로 반환하고, 단일 호출에서 발생한 Defjs 결함은 그대로 반환합니다. 실패를 알리려고 throw하거나 `undefined`를 반환하지 않습니다.
 - 프로토콜별 엔벨로프 처리를 애플리케이션 헬퍼에 유지하는 이유에 대해서는 [핵심 아키텍처](/ko-KR/docs/design-decisions)를 참조하세요.

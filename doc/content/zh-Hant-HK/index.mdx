@@ -31,7 +31,7 @@ Defjs 將 TypeScript SDK 拆開做兩邊：
 </Tab>
 </Tabs>
 
-呼叫 `getHealth(client)` 就會真正執行 I/O，並 resolve 一個 error-first tuple。先檢查 `if (error)` 並及早回傳，之後先好讀取解碼後嘅結果。
+呼叫 `getHealth(client)` 就會真正執行 I/O，並 resolve 一個 error-first tuple。先檢查 `if (err)` 並及早回傳，之後先好讀取解碼後嘅結果。
 
 ## 點解要將定義同 Client 分開？
 
@@ -52,13 +52,13 @@ Defjs 將 TypeScript SDK 拆開做兩邊：
 
 每個操作都會回傳一個三項式 error-first tuple，切合相應傳輸嘅生命週期：
 
-| 傳輸層                                       | 入口函式            | tuple 形狀                     | 生命週期擁有權                                                            |
-| -------------------------------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------- |
-| **[HTTP](/zh-Hant-HK/docs/http)**            | `defineRequest`     | `[error, data, response]`      | 透過 `client({ signal })` 取消進行中嘅請求                                |
-| **[SSE](/zh-Hant-HK/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | 透過 `await using` 或 `stream.close()` + `await stream.closed` 釋放資源   |
-| **[WebSocket](/zh-Hant-HK/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | 透過 `await using` 或 `session.close()` + `await session.closed` 釋放資源 |
+| 傳輸層                                       | 入口函式            | tuple 形狀                   | 生命週期擁有權                                                            |
+| -------------------------------------------- | ------------------- | ---------------------------- | ------------------------------------------------------------------------- |
+| **[HTTP](/zh-Hant-HK/docs/http)**            | `defineRequest`     | `[err, data, response]`      | 透過 `client({ signal })` 取消進行中嘅請求                                |
+| **[SSE](/zh-Hant-HK/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | 透過 `await using` 或 `stream.close()` + `await stream.closed` 釋放資源   |
+| **[WebSocket](/zh-Hant-HK/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | 透過 `await using` 或 `session.close()` + `await session.closed` 釋放資源 |
 
-喺 HTTP 失敗嗰陣，tuple 會係 `[error, undefined, undefined]`，因為 `error` 本身已經包含咗 `HttpMeta` 回應元數據。至於 SSE 同 WebSocket，只要喺失敗前已經捕獲到啟動 snapshot，第三個位就會保留佢。
+喺 HTTP 失敗嗰陣，tuple 會係 `[err, undefined, undefined]`，因為 `err` 本身已經包含咗 `HttpMeta` 回應元數據。至於 SSE 同 WebSocket，只要喺失敗前已經捕獲到啟動 snapshot，第三個位就會保留佢。
 
 ## 官方套件
 

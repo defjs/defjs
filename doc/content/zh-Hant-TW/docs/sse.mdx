@@ -37,7 +37,7 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 
 ## 2. 開啟連線交握與 Tuple 結構
 
-只有在初始 HTTP 回應為 `2xx` 且媒體型別為 `text/event-stream` 時，呼叫該操作才會解析為 `[error, stream, startupOpen]`：
+只有在初始 HTTP 回應為 `2xx` 且媒體型別為 `text/event-stream` 時，呼叫該操作才會解析為 `[err, stream, startupOpen]`：
 
 <Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
@@ -54,7 +54,7 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 </Tab>
 </Tabs>
 
-- **非 `2xx` 交握**：回傳 `HTTP_STATUS`。若宣告了 `error` struct，`error.data` 就是解碼後的本文。該本文無法解碼時，結果改為解碼 fault，與 HTTP 相同：JSON 宣告遇到另一種媒體型別時是 `RES_MEDIA_TYPE_INVALID`（例如閘道回傳的 HTML `503`），無法讀取或無法剖析的本文是 `RES_DECODE_FAILED`，不符合 struct 的本文是 `RES_STRUCT_MISMATCH`。它的 `status` 與 `response` 把交握狀態當成中繼資料帶上，`cause` 則放著原因。攔截器、`shouldRetry`，以及重連時失敗的串流的 `closed`，對該回應仍會收到 `HTTP_STATUS`，而且它的 `cause` 是同一個原因，因此閘道的 `503` 不論本文長什麼樣子都會重試。宣告了 `error` 會讓 client 在回報 fault 之前把交握本文讀到結尾，所以伺服器應該結束每一個非 `2xx` 回應。狀態沒有內容時（`304`），或 JSON 宣告遇到不是 JSON 的媒體型別時，不會讀取本文。被讀取卻永不結束的本文會讓呼叫一直懸著，直到呼叫端的 `signal` 中止，或平台切斷連線。被切斷的連線就是無法讀取的本文，因此呼叫會回傳 `RES_DECODE_FAILED`，並以平台的失敗作為 `cause`。`attemptTimeoutMs` 不會限制那次讀取。沒有宣告 `error` 時，本文會在未讀的情況下被取消。沒有 `withRetry` 時，這會結束目前的操作。有的話，`502`、`503` 或 `504` 交握會像連線被拒絕一樣，依第 4 節的規則重試，其他任何狀態會帶著 `retryable: false` 與其 `status` 交給 `shouldRetry`，因此除非你的函式另有決定，否則會結束串流。用盡或被拒絕的重試以 `HTTP_STATUS` 結束。下一次操作會重新選取端點，因此平衡器可能選到另一個端點。
+- **非 `2xx` 交握**：回傳 `HTTP_STATUS`。若宣告了 `error` struct，`err.data` 就是解碼後的本文。該本文無法解碼時，結果改為解碼 fault，與 HTTP 相同：JSON 宣告遇到另一種媒體型別時是 `RES_MEDIA_TYPE_INVALID`（例如閘道回傳的 HTML `503`），無法讀取或無法剖析的本文是 `RES_DECODE_FAILED`，不符合 struct 的本文是 `RES_STRUCT_MISMATCH`。它的 `status` 與 `response` 把交握狀態當成中繼資料帶上，`cause` 則放著原因。攔截器、`shouldRetry`，以及重連時失敗的串流的 `closed`，對該回應仍會收到 `HTTP_STATUS`，而且它的 `cause` 是同一個原因，因此閘道的 `503` 不論本文長什麼樣子都會重試。宣告了 `error` 會讓 client 在回報 fault 之前把交握本文讀到結尾，所以伺服器應該結束每一個非 `2xx` 回應。狀態沒有內容時（`304`），或 JSON 宣告遇到不是 JSON 的媒體型別時，不會讀取本文。被讀取卻永不結束的本文會讓呼叫一直懸著，直到呼叫端的 `signal` 中止，或平台切斷連線。被切斷的連線就是無法讀取的本文，因此呼叫會回傳 `RES_DECODE_FAILED`，並以平台的失敗作為 `cause`。`attemptTimeoutMs` 不會限制那次讀取。沒有宣告 `error` 時，本文會在未讀的情況下被取消。沒有 `withRetry` 時，這會結束目前的操作。有的話，`502`、`503` 或 `504` 交握會像連線被拒絕一樣，依第 4 節的規則重試，其他任何狀態會帶著 `retryable: false` 與其 `status` 交給 `shouldRetry`，因此除非你的函式另有決定，否則會結束串流。用盡或被拒絕的重試以 `HTTP_STATUS` 結束。下一次操作會重新選取端點，因此平衡器可能選到另一個端點。
 - **Content-Type 不符**：媒體型別不是 `text/event-stream` 的 `2xx` 交握會回傳 `RES_MEDIA_TYPE_INVALID`，包含 `204` 與 `205`。
 - **沒有本文**：媒體型別為 `text/event-stream` 且沒有本文的 `2xx` 交握（Node.js 與 Bun 會把 `204` 或 `205` 呈現為 null 本文）是一條空的事件串流：呼叫成功，串流立刻以 `kind: "eof"` 結束，而且絕不會重試。
 - **`startupOpen` 與 `stream.open`**：tuple 的第三項（`startupOpen`）是首次交握回應的快照；`stream.open` 會在串流之後重連時即時更新。若重連交握以非 2xx 狀態結束串流，迭代器會拒絕，`stream.closed` 回報 `HTTP_STATUS`，而 `stream.open.response.status` 保持該狀態；即時的回應狀態請看 `stream.open`。

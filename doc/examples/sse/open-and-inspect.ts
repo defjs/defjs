@@ -13,9 +13,9 @@ const deployEvents = defineEventStream({
 });
 
 async function main() {
-  const [error, stream, startupOpen] = await deployEvents(client);
-  if (error) {
-    console.error(error.code, startupOpen?.response.status);
+  const [err, stream, startupOpen] = await deployEvents(client);
+  if (err) {
+    console.error(err.code, startupOpen?.response.status);
     return;
   }
   console.log(

@@ -16,7 +16,7 @@ description: defineWebSocket、會話，同 request options。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-呼叫回傳 `[null, session, connection]` 或者 `[error, undefined, connection?]`。逐次呼叫嘅選項要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。WebSocket 讀 `signal`、`beforeConnect`、`heartbeat`、`protocols` 同 `retry`，並忽略 HTTP progress 欄位。
+呼叫回傳 `[null, session, connection]` 或者 `[err, undefined, connection?]`。逐次呼叫嘅選項要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。WebSocket 讀 `signal`、`beforeConnect`、`heartbeat`、`protocols` 同 `retry`，並忽略 HTTP progress 欄位。
 
 `beforeConnect`、`heartbeat`、`protocols` 同 `retry` 各自喺該次呼叫成個取代 client 嘅值。協議優先次序係派生 client，然後 `withWebSocketProtocols`，最後係定義嘅 `protocols`。`heartbeat.timeoutMs` 係等確認嘅時間，唔係請求截止期限。
 
@@ -88,7 +88,7 @@ builder 同攔截器鏈每次操作只會執行一次。重連會重用已建構
 
 ## SocketAwaitResult
 
-`[null, session, connection]` 或者 `[error, undefined, connection?]`。
+`[null, session, connection]` 或者 `[err, undefined, connection?]`。
 
 ## ManualSocketCloseReason
 

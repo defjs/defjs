@@ -19,7 +19,8 @@ Pass your OpenTelemetry `tracer`, `meter`, `logger`, or `propagator` to `withOpe
   examples/opentelemetry-server/basic-setup.ts#example
 </include>
 
-- **Span naming**: Span names are the HTTP method, `SSE`, or `WebSocket`. The plugin never reads a definition's `meta`; use `startSpanHook(request)` to copy what you need from `request.meta` into span attributes. The HTTP method in a span name is the normalized `http.request.method`, or `HTTP` when that value is `_OTHER`.
+- **Definition `meta`**: Each own enumerable key of `request.meta` becomes a `defjs.meta.<key>` attribute on the span and on failure logs, with its value as given. The OpenTelemetry SDK keeps or drops each value by its attribute rules and reports a dropped value only through `diag`. An absent or empty `meta` adds nothing. Metrics never carry `meta`, so their attribute sets stay bounded. Attributes returned by `startSpanHook(request)` are applied last and can replace a `defjs.meta.*` value on the span only; failure logs keep the value from `meta`. These values leave the process with your telemetry, so keep secrets and personal data out of `meta`.
+- **Span naming**: Span names are the HTTP method, `SSE`, or `WebSocket`. The HTTP method in a span name is the normalized `http.request.method`, or `HTTP` when that value is `_OTHER`.
 - **Independent signals**: `tracer`, `meter`, and `logger` are all optional and work independently:
   - Omit `tracer` to disable local span creation and span hooks while still recording metrics, logs, and outgoing context propagation.
   - Omit `meter` to disable package metrics.
@@ -124,7 +125,7 @@ Each request or logical connection emits at most one terminal `WARN` (`13`) `Log
 | SSE or WebSocket terminal error or rejected `closed` (including a `1006` drop without a close frame, heartbeat timeout)                                          | One `WARN` with the transport event name, phase `connection`                                    |
 | Normal completion, messages, EOF, server WebSocket close frames (including `1011`), or active non-timeout cancellation                                           | None                                                                                            |
 
-Diagnostics record a fixed message, `exception.type` (platform/transport class name such as `BodyFailure`, `EventStreamFatalError` (a non-`text/event-stream` SSE handshake), `DefjsFault` (including an SSE non-2xx handshake), `TypeError`, or `Error`), phase, server address/port, and protocol fields—never raw URLs, query strings, headers, bodies, or error stacks. A span's `exception` event follows the same rule and carries only `exception.type`; `url.full` replaces any userinfo in the endpoint with `REDACTED:REDACTED` and the values of the semantic-convention default sensitive query keys (such as `sig` and `X-Amz-Signature`) with `REDACTED`.
+Diagnostics record a fixed message, `exception.type` (platform/transport class name such as `BodyFailure`, `EventStreamFatalError` (a non-`text/event-stream` SSE handshake), `DefjsFault` (including an SSE non-2xx handshake), `TypeError`, or `Error`), phase, server address/port, protocol fields, and the `defjs.meta.*` attributes, whose values are exactly what the application put in `meta`. Defjs adds no raw URLs, query strings, headers, bodies, or error stacks. A span's `exception` event follows the same rule and carries only `exception.type`; `url.full` replaces any userinfo in the endpoint with `REDACTED:REDACTED` and the values of the semantic-convention default sensitive query keys (such as `sig` and `X-Amz-Signature`) with `REDACTED`.
 
 ---
 

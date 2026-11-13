@@ -5,7 +5,7 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 
 # HTTP 请求
 
-在 SDK 中，每个 HTTP 操作都用 `defineRequest` 定义：请求方法、路径模板、`input` schema、同步 `builder`，以及 `output` / `error` 响应 schema。消费方应用导入该操作，传入配置好的 `Client`，并处理返回的 `[error, data, response]` 元组。
+在 SDK 中，每个 HTTP 操作都用 `defineRequest` 定义：请求方法、路径模板、`input` schema、同步 `builder`，以及 `output` / `error` 响应 schema。消费方应用导入该操作，传入配置好的 `Client`，并处理返回的 `[err, data, response]` 元组。
 
 ## 1. 定义操作并调用
 
@@ -38,7 +38,7 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 ### SDK 设计最佳实践
 
 - **一个定义对应一个操作**：让每个方法、路径和契约各自成为独立的定义，应用才能对未使用的操作做 tree-shaking。
-- **需要给拦截器提供上下文时附加 `meta`**：`meta` 是 `{ [key: string]: unknown }`，由应用自行定义，例如 `{ operation: "orders.read" }`。它只会流向拦截器和均衡器（`request.meta`、`PickInfo.meta`）；Defjs 从不读取、复制它，也不会通过网络发送它。
+- **需要给拦截器提供上下文时附加 `meta`**：`meta` 是 `{ [key: string]: unknown }`，由应用自行定义，例如 `{ operation: "orders.read" }`。它会传给拦截器和均衡器（`request.meta`、`PickInfo.meta`），并且每个定义只有一个只读对象，由每次调用、每次尝试和每个 client 共享。只读类型是浅层的，因此单次调用的状态应保存在拦截器的闭包中，而不是放在 `meta` 或其嵌套对象里。如果要为 `meta` 命名类型，必须使用 `type` 别名：TypeScript 不会把 `interface` 赋值给其索引签名。Defjs 核心从不读取或复制 `meta`，也从不随请求发送它；URL、请求头或 body 的值都经由 `builder` 设置。`@defjs/opentelemetry-server` 会把每个键作为 `defjs.meta.<key>` 属性上报到 Span 和失败日志，因此请勿把密钥和个人数据放进 `meta`。
 - **绝不在 SDK 内嵌 Client**：只导出定义、`struct` schema 和类型。
 
 ## 2. URL 解析与路径占位符

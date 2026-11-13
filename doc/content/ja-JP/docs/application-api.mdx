@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` はビジネスロジックであり、プログラムの最上位ではないため、`placeAndLoadOrder` はログを出しません。エラーファーストのタプル `Promise<[Error, undefined] | [null, Checkout]>` を返し、各ステップの Fault を失敗したステップ名で包みます（`new Error("create order", { cause: createErr })`）。これは Go の `fmt.Errorf("create order: %w", err)` に相当します。UI のイベントハンドラーなどの呼び出し側が `if (err)` を確認し、どのように表示するかを決めます。
+
 ---
 
 ## 3. アプリケーションプロジェクトにおける主要パターン
@@ -69,7 +71,7 @@ src/
 タイムアウトや `AbortSignal` を渡すためだけに `createClient(...)` で新しい `Client` を作成しないでください。代わりに、共有クライアントから 1 回限りのクライアントをインラインで派生させます。
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### 共通エラーエンベロープ（`ApiError`）
 
-バックエンドの標準エラーエンベロープ（`export const ApiError = struct.object(...)`）を `src/api/models/` で一度宣言し、`src/api/services/` 内のすべての `defineRequest` に `error: ApiError` を指定します。リクエストが非 `2xx` ステータスを返した際、`if (error.code === "HTTP_STATUS")` で型を絞り込むことで、`error.data.code`、`error.data.message`、`error.data.requestId` に強い型付けで安全にアクセスできます。
+バックエンドの標準エラーエンベロープ（`export const ApiError = struct.object(...)`）を `src/api/models/` で一度宣言し、`src/api/services/` 内のすべての `defineRequest` に `error: ApiError` を指定します。リクエストが非 `2xx` ステータスを返した際、`if (err)` の中で `if (err.code === "HTTP_STATUS")` により型を絞り込むことで、`err.data.code`、`err.data.message`、`err.data.requestId` に強い型付けで安全にアクセスできます。
 
 あわせて [エンジニアリング規約](/ja-JP/docs/best-practices)、[公開 SDK 設計](/ja-JP/docs/public-sdk)、[Client](/ja-JP/docs/client)、[インターセプター](/ja-JP/docs/interceptors) も参照してください。

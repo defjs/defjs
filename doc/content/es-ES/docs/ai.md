@@ -30,6 +30,6 @@ and verify the result with the project’s existing tests.
 
 ## Comprobar el resultado [#verify]
 
-Lee la definición y la aplicación por separado. La definición exporta la operación y no crea el cliente. La aplicación crea el cliente y llama a la operación, por ejemplo `getOrder(client, { id: 1 })`. Si `input` está declarado, `builder` es una función síncrona y pura escrita de forma explícita. El valor de éxito solo se usa cuando el hueco del error está vacío.
+Lee la definición y la aplicación por separado. La definición exporta la operación y no crea el cliente. La aplicación crea el cliente y llama a la operación, por ejemplo `getOrder(client, { id: 1 })`. Si `input` está declarado, `builder` es una función síncrona y pura escrita de forma explícita. El valor de éxito solo se usa cuando el hueco del error está vacío: el punto de llamada comprueba `if (err)` justo después de la llamada y sale de la función desde dentro de ese bloque, y una función auxiliar que pueda fallar devuelve su propia tupla `[err, value]` en lugar de registrar el error o devolver `undefined`.
 
 Después ejecuta la comprobación de tipos de ese proyecto y las pruebas que cubren el contrato. La instalación de dependencias y las reglas de CI se quedan en ese proyecto.

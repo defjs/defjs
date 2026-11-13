@@ -38,6 +38,8 @@ export interface ClientCall {
   context: Context;
   /** `server.address` and `server.port`: what the span, metrics and logs share. */
   attributes: Attributes;
+  /** The request's `meta` as `defjs.meta.<key>` attributes, for the span and logs but not metrics. */
+  meta: Attributes;
   /** The normalized `http.request.method`; as given when nothing observes the call, because nothing reads it then. */
   method: string;
 }
@@ -79,6 +81,7 @@ export function startClientCall(
       span: undefined,
       context: parent,
       attributes: NO_ATTRIBUTES,
+      meta: NO_ATTRIBUTES,
       method,
     };
   }
@@ -86,13 +89,24 @@ export function startClientCall(
   const resolved = resolve(req.endpoint, req.baseEndpoint);
   const attributes = serverAttributes(resolved);
   const normalized = normalizeHttpMethod(method);
+  const meta =
+    req.meta && (tracer || options.logger)
+      ? metaAttributes(req.meta)
+      : NO_ATTRIBUTES;
   if (!tracer) {
-    return { span: undefined, context: parent, attributes, method: normalized };
+    return {
+      span: undefined,
+      context: parent,
+      attributes,
+      meta,
+      method: normalized,
+    };
   }
 
   // PERF: one spread, then assignments. A spread per attribute group took about 57 ns, this 26 ns.
   const spanAttributes: Attributes = {
     ...attributes,
+    ...meta,
     "http.request.method": normalized,
     "url.full": resolved.url,
   };
@@ -130,6 +144,20 @@ export function startClientCall(
     span,
     context: trace.setSpan(parent, span),
     attributes,
+    meta,
     method: normalized,
   };
+}
+
+/**
+ * Each own enumerable key of `meta` becomes `defjs.meta.<key>` with its value as given. Attribute
+ * values are OpenTelemetry `AnyValue`; the SDK decides which values it keeps, as it does for any
+ * attribute. An empty `meta` adds nothing.
+ */
+function metaAttributes(meta: { readonly [key: string]: unknown }): Attributes {
+  const attributes: Attributes = {};
+  for (const key of Object.keys(meta)) {
+    attributes[`defjs.meta.${key}`] = meta[key];
+  }
+  return attributes;
 }

@@ -31,7 +31,7 @@ Defjs разделяет две стороны TypeScript SDK:
 </Tab>
 </Tabs>
 
-Вызов `getHealth(client)` выполняет ввод-вывод и возвращает error-first кортеж. Сделайте проверку `if (error)` и верните управление до чтения декодированного результата.
+Вызов `getHealth(client)` выполняет ввод-вывод и возвращает error-first кортеж. Сделайте проверку `if (err)` и верните управление до чтения декодированного результата.
 
 ## Зачем разделять определения и клиенты?
 
@@ -52,13 +52,13 @@ Defjs разделяет две стороны TypeScript SDK:
 
 Каждая операция возвращает error-first кортеж из трёх элементов, адаптированный под жизненный цикл своего транспорта:
 
-| Транспорт                               | Точка входа         | Форма кортежа                  | Управление жизненным циклом                                                     |
-| --------------------------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
-| **[HTTP](/ru-RU/docs/http)**            | `defineRequest`     | `[error, data, response]`      | Отмена выполняемого запроса через `client({ signal })`                          |
-| **[SSE](/ru-RU/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | Освобождение через `await using` или `stream.close()` + `await stream.closed`   |
-| **[WebSocket](/ru-RU/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | Освобождение через `await using` или `session.close()` + `await session.closed` |
+| Транспорт                               | Точка входа         | Форма кортежа                | Управление жизненным циклом                                                     |
+| --------------------------------------- | ------------------- | ---------------------------- | ------------------------------------------------------------------------------- |
+| **[HTTP](/ru-RU/docs/http)**            | `defineRequest`     | `[err, data, response]`      | Отмена выполняемого запроса через `client({ signal })`                          |
+| **[SSE](/ru-RU/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | Освобождение через `await using` или `stream.close()` + `await stream.closed`   |
+| **[WebSocket](/ru-RU/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | Освобождение через `await using` или `session.close()` + `await session.closed` |
 
-При сбое HTTP кортеж принимает вид `[error, undefined, undefined]`, поскольку `error` уже содержит метаданные ответа `HttpMeta`. Для SSE и WebSocket третий слот хранит снимок старта, если он успел сформироваться до ошибки.
+При сбое HTTP кортеж принимает вид `[err, undefined, undefined]`, поскольку `err` уже содержит метаданные ответа `HttpMeta`. Для SSE и WebSocket третий слот хранит снимок старта, если он успел сформироваться до ошибки.
 
 ## Официальные пакеты
 

@@ -45,16 +45,20 @@ const client = createClient(
 
 ## Definition `meta`
 
-The plugin never reads a definition's `meta`, which is application-defined and stays inside the process. Spans are named after the HTTP method (`HTTP` for `_OTHER`), `SSE`, or `WebSocket`. To record something from `meta`, copy it in a start hook:
+Each own enumerable key of a definition's `meta` becomes a `defjs.meta.<key>` attribute on the span and on failure logs, with its value as given; the OpenTelemetry SDK keeps or drops each value by its attribute rules. An absent or empty `meta` adds nothing, and metrics never carry it. Spans are named after the HTTP method (`HTTP` for `_OTHER`), `SSE`, or `WebSocket`.
 
 ```typescript
-withOpenTelemetryServer({
-  tracer,
-  http: {
-    startSpanHook: (request) => ({ "app.meta": JSON.stringify(request.meta) }),
-  },
+const getOrder = defineRequest({
+  method: "GET",
+  meta: { operation: "orders.get" },
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
 });
+// The span carries "defjs.meta.operation": "orders.get".
 ```
+
+Attributes returned by `startSpanHook` are applied last and can replace a `defjs.meta.*` value on the span only; failure logs keep the value from `meta`. The SDK reports a dropped value only through `diag`. Keep values that should not leave the process out of `meta`.
 
 ## Configuration
 
@@ -96,7 +100,7 @@ HTTP, SSE, and WebSocket follow one rule. A caller cancellation (an abort that i
 
 - `webSocket.queryPropagation` defaults to `false`: trace context and baggage do not ride on the WebSocket URL. Enable it only after reviewing how your proxies, browsers, and access logs record query strings.
 - No bodies, full headers, baggage values, or message payloads are added as telemetry fields, and no built-in redactor exists beyond `url.full`, whose endpoint userinfo is replaced with `REDACTED:REDACTED` and whose default sensitive query values (`sig`, `X-Amz-Signature`, and the other keys in the semantic conventions) are replaced with `REDACTED`. Prefer allowlists and low-cardinality attributes in hooks.
-- Diagnostics carry a fixed message, phase, server address/port, and exception type — not raw URLs, headers, bodies, or stacks. Span `exception` events carry only `exception.type` for the same reason.
+- Diagnostics carry a fixed message, phase, server address/port, exception type, and the `defjs.meta.*` attributes — not raw URLs, headers, bodies, or stacks. Span `exception` events carry only `exception.type` for the same reason.
 - SSE and WebSocket are traced per logical connection, not per event or message.
 
 ## Documentation

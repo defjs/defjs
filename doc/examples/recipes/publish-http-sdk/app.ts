@@ -6,6 +6,7 @@ import {
   withHTTPHandle,
   withInterceptors,
   withRetry,
+  type DerivableClient,
   type FetchHandle,
 } from "@defjs/core";
 import { getObject, listObjectsV2, putObject } from "./src/index.ts";
@@ -64,8 +65,12 @@ const s3Client = createClient(
   withHTTPHandle(handle),
 );
 
-async function main() {
-  const [putErr, , putRes] = await putObject(s3Client, {
+type Report = { etag: string | null; count: number; text: string };
+
+export async function syncReport(
+  client: DerivableClient,
+): Promise<[Error, undefined] | [null, Report]> {
+  const [putErr, , putRes] = await putObject(client, {
     bucket: "assets",
     key: "reports/q1.pdf",
     body: new Blob(["hello-s3-pdf"], { type: "application/pdf" }),
@@ -73,36 +78,43 @@ async function main() {
     storageClass: "STANDARD",
   });
   if (putErr) {
-    if (putErr.code === "HTTP_STATUS") {
-      console.error(putErr.data.code, putErr.data.requestId);
-    }
-    return;
+    return [new Error("put object", { cause: putErr }), undefined];
   }
 
-  const [listErr, page] = await listObjectsV2(s3Client, {
+  const [listErr, page] = await listObjectsV2(client, {
     bucket: "assets",
     prefix: "reports/",
     maxKeys: 50,
   });
   if (listErr) {
-    console.error(listErr.code);
-    return;
+    return [new Error("list objects", { cause: listErr }), undefined];
   }
 
   const [getErr, blob] = await getObject(
-    s3Client({ signal: AbortSignal.timeout(10_000) }),
+    client({ signal: AbortSignal.timeout(10_000) }),
     { bucket: "assets", key: "reports/q1.pdf" },
   );
   if (getErr) {
-    console.error(getErr.code);
-    return;
+    return [new Error("get object", { cause: getErr }), undefined];
   }
 
-  console.log(
-    putRes.headers.get("etag"),
-    page.contents.length,
-    await blob.text(),
-  );
+  return [
+    null,
+    {
+      etag: putRes.headers.get("etag"),
+      count: page.contents.length,
+      text: await blob.text(),
+    },
+  ];
+}
+
+async function main() {
+  const [err, report] = await syncReport(s3Client);
+  if (err) {
+    console.error(err);
+    return;
+  }
+  console.log(report.etag, report.count, report.text);
 }
 
 void main();

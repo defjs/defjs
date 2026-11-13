@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` est de la logique métier, pas le sommet du programme : `placeAndLoadOrder` ne journalise donc rien. Elle renvoie un tuple error-first, `Promise<[Error, undefined] | [null, Checkout]>`, et enveloppe le fault de chaque étape avec l'étape en échec (`new Error("create order", { cause: createErr })`), comme le `fmt.Errorf("create order: %w", err)` de Go. L'appelant, par exemple un gestionnaire d'événements d'interface, vérifie `if (err)` et décide comment l'afficher.
+
 ---
 
 ## 3. Modèles clés pour les projets d'application
@@ -69,7 +71,7 @@ src/
 Ne créez jamais un nouveau `Client` via `createClient(...)` uniquement pour passer un délai d'expiration ou un `AbortSignal`. Dérivez plutôt en ligne un client à usage unique à partir de votre client partagé :
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### Enveloppe d'erreur partagée (`ApiError`)
 
-Déclarez une seule fois l'enveloppe d'erreur standard de votre backend (`export const ApiError = struct.object(...)`) dans `src/api/models/` et passez `error: ApiError` sur chaque `defineRequest` de `src/api/services/`. Lorsqu'une requête renvoie un statut autre que `2xx`, l'affinement de type `if (error.code === "HTTP_STATUS")` vous donne un accès fortement typé à `error.data.code`, `error.data.message` et `error.data.requestId`.
+Déclarez une seule fois l'enveloppe d'erreur standard de votre backend (`export const ApiError = struct.object(...)`) dans `src/api/models/` et passez `error: ApiError` sur chaque `defineRequest` de `src/api/services/`. Lorsqu'une requête renvoie un statut autre que `2xx`, l'affinement de type `if (err.code === "HTTP_STATUS")` dans `if (err)` vous donne un accès fortement typé à `err.data.code`, `err.data.message` et `err.data.requestId`.
 
 Consultez [Conventions d'ingénierie](/fr-FR/docs/best-practices), [Conception de SDK public](/fr-FR/docs/public-sdk), [Client](/fr-FR/docs/client) et [Intercepteurs](/fr-FR/docs/interceptors).

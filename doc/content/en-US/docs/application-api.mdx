@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` is business logic, not the top of the program, so `placeAndLoadOrder` does not log. It returns an error-first tuple, `Promise<[Error, undefined] | [null, Checkout]>`, and wraps each step's fault with the step that failed (`new Error("create order", { cause: createErr })`), like Go's `fmt.Errorf("create order: %w", err)`. The caller, such as a UI event handler, checks `if (err)` and decides how to show it.
+
 ---
 
 ## 3. Key patterns for application projects
@@ -69,7 +71,7 @@ src/
 Never create a new `Client` via `createClient(...)` just to pass a timeout or `AbortSignal`. Instead, derive a single-call client inline from your shared client:
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### Shared error envelope (`ApiError`)
 
-Declare your backend's standard error envelope once (`export const ApiError = struct.object(...)`) in `src/api/models/` and pass `error: ApiError` on every `defineRequest` in `src/api/services/`. When a request returns a non-`2xx` status, narrowing `if (error.code === "HTTP_STATUS")` gives you strongly typed access to `error.data.code`, `error.data.message`, and `error.data.requestId`.
+Declare your backend's standard error envelope once (`export const ApiError = struct.object(...)`) in `src/api/models/` and pass `error: ApiError` on every `defineRequest` in `src/api/services/`. When a request returns a non-`2xx` status, narrowing `if (err.code === "HTTP_STATUS")` inside `if (err)` gives you strongly typed access to `err.data.code`, `err.data.message`, and `err.data.requestId`.
 
 See [Engineering conventions](/docs/best-practices), [Public SDK design](/docs/public-sdk), [Client](/docs/client), and [Interceptors](/docs/interceptors).

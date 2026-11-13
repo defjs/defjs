@@ -16,7 +16,7 @@ Déclarez un flux d'événements, appelez l'opération avec un client, itérez l
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-L’appel renvoie `[null, stream, open]` ou `[error, undefined, open?]`. Quand `error` est déclaré, le fault est `Fault` de ce struct ; sinon c’est `Fault<undefined>`. Passez `signal` en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). SSE ne lit que `signal` et `retry` et ignore les champs de progression et de WebSocket.
+L’appel renvoie `[null, stream, open]` ou `[err, undefined, open?]`. Quand `error` est déclaré, le fault est `Fault` de ce struct ; sinon c’est `Fault<undefined>`. Passez `signal` en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). SSE ne lit que `signal` et `retry` et ignore les champs de progression et de WebSocket.
 
 ## EventStreamExecuteOptions
 
@@ -74,7 +74,7 @@ Mêmes champs que `HttpRequestShape` pour la méthode et le chemin du flux.
 
 ## StreamAwaitResult
 
-`[null, stream, open]` ou `[error, undefined, open?]`.
+`[null, stream, open]` ou `[err, undefined, open?]`.
 
 ## EventStreamData
 

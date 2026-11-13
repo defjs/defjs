@@ -5,7 +5,7 @@ description: SDK에서 서비스 오류 계약을 선언하고, 사용하는 애
 
 # 오류 처리
 
-Defjs에서는 요청, 전송, 디코딩 실패가 발생해도 호출 지점에서 예외(throw)를 던지지 않습니다. 모든 작업은 error-first 튜플(`[error, ...]`)을 반환하며, `error`는 `null`이거나 `error.code`로 구분되는 표준 `Error` 인스턴스인 타입화된 `Fault` 객체입니다.
+Defjs에서는 요청, 전송, 디코딩 실패가 발생해도 호출 지점에서 예외(throw)를 던지지 않습니다. 모든 작업은 error-first 튜플(`[err, ...]`)을 반환하며, `err`는 `null`이거나 `err.code`로 구분되는 표준 `Error` 인스턴스인 타입화된 `Fault` 객체입니다. 이 변수는 Go처럼 `err`라고 이름 짓고 곧바로 확인하세요.
 
 TypeScript가 거부하는 호출은 예외입니다. 결과가 규정되어 있지 않으며 `Fault`도 아닙니다. 실제로는 보통 플랫폼의 `TypeError`로 reject됩니다.
 
@@ -33,9 +33,17 @@ TypeScript가 거부하는 호출은 예외입니다. 결과가 규정되어 있
 </Tab>
 </Tabs>
 
-### HTTP 실패 시 `error`가 응답 메타데이터를 담는 이유
+### HTTP 실패 시 `err`가 응답 메타데이터를 담는 이유
 
-HTTP 실패 시 반환되는 튜플은 `[error, undefined, undefined]`입니다. 수신된 응답 메타데이터(`status`, `statusText`, `headers`, `url`)는 모두 `error.response`에 직접 첨부되므로, 로거나 오류 처리 함수에 `error` 객체 하나만 전달해도 컨텍스트를 잃지 않고 안전하게 처리할 수 있습니다.
+HTTP 실패 시 반환되는 튜플은 `[err, undefined, undefined]`입니다. 수신된 응답 메타데이터(`status`, `statusText`, `headers`, `url`)는 모두 `err.response`에 직접 첨부되므로, 로거나 오류 처리 함수에 `err` 객체 하나만 전달해도 컨텍스트를 잃지 않고 안전하게 처리할 수 있습니다.
+
+### 오류는 한 번만 처리하기
+
+튜플은 Go의 `(T, error)`처럼 다룹니다. 호출 직후에 `if (err)`를 확인하고 그 블록 안에서 빠져나오면 성공 경로는 들여쓰기 없이 유지됩니다. 코드별 분기(`err.code === "HTTP_STATUS" && err.status === 404` 또는 `switch (err.code)`)는 그 블록 안에 둡니다. Go에서 `errors.Is`와 `errors.As`를 `if err != nil` 안에서 쓰는 것과 같습니다. 오류는 처리하거나(로그 기록, 표시, 폴백) 반환하거나 둘 중 하나만 하며, 둘 다 하지 않습니다. 처리는 프로그램의 최상위(`main`, UI 이벤트 핸들러, 테스트)에서만 합니다. 실패할 수 있는 다른 모든 함수는 자신의 error-first 튜플 `Promise<[Error, undefined] | [null, T]>`를 반환하며, 실패를 `undefined`, `null`, `false`로 알리지 않습니다. Defjs 호출이 하나뿐이면 fault를 그대로 반환합니다(Go의 `return nil, err`). 호출이 여러 개면 각 오류에 단계 이름을 붙이고(`putErr`, `listErr`) `new Error("put object", { cause: putErr })`로 감쌉니다. `fmt.Errorf("put object: %w", err)`에 해당합니다. throw는 TanStack Query의 `queryFn`처럼 라이브러리 계약이 요구하는 곳에서만 합니다.
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. 결함 클래스 및 닫힌 코드 유니온
 
@@ -61,7 +69,7 @@ HTTP 실패 시 반환되는 튜플은 `[error, undefined, undefined]`입니다.
 | `RES_*`       | `number` | `HttpMeta` (**`body` 필드 없음**)          | 없음                                      | `StructError` 또는 파서 오류 |
 | 기타 코드     | 없음     | 헤더 수신 시 `HttpMeta`, 그 외 `undefined` | 없음                                      | 기반 `Error` / abort 사유    |
 
-## 3. 유니온 오류 본문 타입 좁히기 (`error.data`)
+## 3. 유니온 오류 본문 타입 좁히기 (`err.data`)
 
 하나의 `error` struct가 모든 비`2xx` 상태 코드를 포괄하므로, 상태 코드별로 서로 다른 JSON 형태를 반환하는 API라면 유니온 스키마를 선언하세요:
 

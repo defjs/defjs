@@ -111,21 +111,21 @@ function parseState(
  *
  * const Order = struct.object({ id: struct.number(), customerName: struct.string() });
  *
- * function readOrder() {
- *   const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
- *   if (error) {
- *     console.error(error.prettify());
+ * function main() {
+ *   const [err, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
+ *   if (err) {
+ *     console.error(err.prettify());
  *     return;
  *   }
  *   console.log(order.customerName);
  * }
  *
- * readOrder();
+ * main();
  * ```
  *
  * `any` and `unknown` do not traverse their values, but an intersection may recursively merge two distinct object or array values returned by those leaves. This merge shares the same 256-container budget with its enclosing logical path. Exceeding it produces `invalid_intersection` at the rejected container's logical path. Identical references are retained without traversal, including a shared cyclic value.
  *
- * @returns `[null, output]` or `[StructError, undefined]`. Validation failures do not throw. Exceptions from caller-provided getters and `errorMap` callbacks propagate unchanged.
+ * @returns `[null, output]` or `[err, undefined]` where `err` is a `StructError`. Validation failures do not throw. Exceptions from caller-provided getters and `errorMap` callbacks propagate unchanged.
  * @group struct
  * @see {@link Struct}
  * @see {@link ParseResult}

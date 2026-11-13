@@ -74,12 +74,12 @@ Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、�
 | メディアタイプが宣言された JSON 表現と一致しない            | `RES_MEDIA_TYPE_INVALID`（最初に検査されます。ボディは読まれず、内容の有無は違いを生みません） |
 | バイト列を宣言された表現としてデコードできない              | `RES_DECODE_FAILED`（空の JSON バイト列を含みます）                                            |
 | デコードされた値が `struct` の検証にパスしない              | `RES_STRUCT_MISMATCH`                                                                          |
-| 非 `2xx` ステータスで `error` struct が正常にデコードされた | `HTTP_STATUS`（型付けされた `error.data` が格納されます）                                      |
-| 非 `2xx` ステータスで `error` の宣言が省略されていた        | `HTTP_STATUS`（`error.data: undefined`）                                                       |
+| 非 `2xx` ステータスで `error` struct が正常にデコードされた | `HTTP_STATUS`（型付けされた `err.data` が格納されます）                                        |
+| 非 `2xx` ステータスで `error` の宣言が省略されていた        | `HTTP_STATUS`（`err.data: undefined`）                                                         |
 
 ### ルール 4: デコードに失敗したレスポンスにはボディが存在しない
 
-ボディは、デコードと検証を通過した後にのみ存在します。デコードに失敗した場合、Fault の `response` は `HttpMeta` 型（`body` プロパティを持たない型）となり、パースや検証のエラー詳細は `fault.cause` に格納されます。
+ボディは、デコードと検証を通過した後にのみ存在します。デコードに失敗した場合、Fault の `response` は `HttpMeta` 型（`body` プロパティを持たない型）となり、パースや検証のエラー詳細は `err.cause` に格納されます。
 
 ### ルール 5: 宣言の省略は読み取りの明示的なスキップを意味する
 
@@ -93,9 +93,9 @@ Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、�
 
 3 つのトランスポートはすべて、呼び出し元で例外を throw するのではなく、3 要素のエラーファーストタプルを返します。
 
-- **HTTP** → `[error, data, response]` — デコード済みペイロード + `DecodedResponse<T>`（`output` 省略時は `HttpMeta`）
-- **SSE** → `[error, stream, open]` — `EventStreamHandle` + 初回ハンドシェイクのスナップショット
-- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + 初回接続のスナップショット
+- **HTTP** → `[err, data, response]` — デコード済みペイロード + `DecodedResponse<T>`（`output` 省略時は `HttpMeta`）
+- **SSE** → `[err, stream, open]` — `EventStreamHandle` + 初回ハンドシェイクのスナップショット
+- **WebSocket** → `[err, session, connection]` — `WebSocketSession` + 初回接続のスナップショット
 
 クライアントは設定を保持するだけであり、アクティブな接続を抱え込むことはありません。HTTP リクエスト、SSE ストリーム、または WebSocket セッションを開始した呼び出し元が、キャンセルやクローズの責任を負います（HTTP の場合は `AbortSignal`、SSE や WebSocket の場合は `await using` または `.close()` + `await .closed`）。
 

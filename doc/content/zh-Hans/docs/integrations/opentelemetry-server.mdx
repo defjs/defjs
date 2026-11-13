@@ -19,7 +19,8 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
   examples/opentelemetry-server/basic-setup.ts#example
 </include>
 
-- **Span 命名**：Span 名称就是 HTTP 方法、`SSE` 或 `WebSocket`。插件从不读取定义上的 `meta`；需要时用 `startSpanHook(request)` 把 `request.meta` 中需要的内容复制到 Span 属性。Span 名称里的 HTTP 方法是规范化后的 `http.request.method`；该值为 `_OTHER` 时用 `HTTP`。
+- **定义上的 `meta`**：`request.meta` 的每个自有可枚举键都会成为 Span 和失败日志上的 `defjs.meta.<key>` 属性，值保持原样。OpenTelemetry SDK 会按其属性规则保留或丢弃每个值，并且只通过 `diag` 报告被丢弃的值。`meta` 缺失或为空时不添加任何内容。指标从不携带 `meta`，因此其属性集保持有界。`startSpanHook(request)` 返回的属性最后应用，并且只能替换 Span 上的 `defjs.meta.*` 值；失败日志保留 `meta` 中的值。这些值会随你的遥测数据离开进程，因此请勿把密钥和个人数据放进 `meta`。
+- **Span 命名**：Span 名称就是 HTTP 方法、`SSE` 或 `WebSocket`。Span 名称里的 HTTP 方法是规范化后的 `http.request.method`；该值为 `_OTHER` 时用 `HTTP`。
 - **独立信号**：`tracer`、`meter` 和 `logger` 都可选，且彼此独立：
   - 省略 `tracer` 会禁用本地 Span 创建与 Span Hook，但仍会记录指标、日志并传播出站上下文。
   - 省略 `meter` 会禁用该包的指标。
@@ -124,7 +125,7 @@ SSE 和 WebSocket 的连接建立耗时与连接持续时长样本带有 `defjs.
 | SSE 或 WebSocket 终态错误或 `closed` 被 reject（包括没有关闭帧的 `1006` 断开、心跳超时）                                                 | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
 | 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动发起的非超时取消                                        | 不生成日志                                                                                                            |
 
-诊断记录固定消息、`exception.type`（平台/传输层类名，如 `BodyFailure`、`EventStreamFatalError`（响应不是 `text/event-stream` 的 SSE 握手）、`DefjsFault`（包括返回非 2xx 的 SSE 握手）、`TypeError` 或 `Error`）、phase、服务端地址/端口和协议字段——从不记录原始 URL、query 字符串、请求头、body 或错误堆栈。Span 的 `exception` 事件遵循同一规则，只携带 `exception.type`；`url.full` 会把端点中的 userinfo 替换为 `REDACTED:REDACTED`，并把语义约定默认敏感查询键（例如 `sig` 和 `X-Amz-Signature`）的值替换为 `REDACTED`。
+诊断记录固定消息、`exception.type`（平台/传输层类名，如 `BodyFailure`、`EventStreamFatalError`（响应不是 `text/event-stream` 的 SSE 握手）、`DefjsFault`（包括返回非 2xx 的 SSE 握手）、`TypeError` 或 `Error`）、phase、服务端地址/端口、协议字段和 `defjs.meta.*` 属性，其值与应用放入 `meta` 的内容完全一致。Defjs 不会添加原始 URL、query 字符串、请求头、body 或错误堆栈。Span 的 `exception` 事件遵循同一规则，只携带 `exception.type`；`url.full` 会把端点中的 userinfo 替换为 `REDACTED:REDACTED`，并把语义约定默认敏感查询键（例如 `sig` 和 `X-Amz-Signature`）的值替换为 `REDACTED`。
 
 ---
 

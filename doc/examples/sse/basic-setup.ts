@@ -15,9 +15,9 @@ const deployEvents = defineEventStream({
 });
 
 async function main() {
-  const [error, stream] = await deployEvents(client);
-  if (error) {
-    console.error(error.code);
+  const [err, stream] = await deployEvents(client);
+  if (err) {
+    console.error(err.code);
     return;
   }
   await using ownedStream = stream;

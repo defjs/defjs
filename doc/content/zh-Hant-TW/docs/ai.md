@@ -30,6 +30,6 @@ and verify the result with the project’s existing tests.
 
 ## 核對結果 [#verify]
 
-把定義與應用程式分開檢視。定義匯出操作，不建立 client。應用程式建立 client 並呼叫操作，例如 `getOrder(client, { id: 1 })`。有宣告 `input` 時，`builder` 是明確的同步純函式。只有 error 欄位為空時，才使用成功值。
+把定義與應用程式分開檢視。定義匯出操作，不建立 client。應用程式建立 client 並呼叫操作，例如 `getOrder(client, { id: 1 })`。有宣告 `input` 時，`builder` 是明確的同步純函式。只有 error 欄位為空時，才使用成功值：呼叫處在呼叫後立刻檢查 `if (err)` 並在該區塊內 return，而可能失敗的 helper 則回傳自己的 `[err, value]` tuple，而不是寫日誌或回傳 `undefined`。
 
 接著執行該專案自己的型別檢查，以及涵蓋這份契約的測試。相依套件安裝與 CI 規則仍由該專案負責。

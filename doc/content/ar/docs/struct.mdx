@@ -98,7 +98,7 @@ description: حدّد عقود المدخلات والاستجابات التي 
   examples/struct/parse-failures.ts#example
 </include>
 
-يحتوي كل عنصر `StructIssue` على: `code` (مثل `invalid_type` أو `missing_key` أو `invalid_literal` أو `invalid_enum` أو `invalid_union` أو `invalid_intersection` أو `custom`)، و`path`، و`expected`، و`received`، و`message`. تحذف الرسائل الافتراضية القيمة المستلمة وتُبلّغ عن _نوعها_ فقط، لكن المسارات تحتفظ بمفاتيح record الديناميكية، التي قد تحتوي على قيم حساسة. ليست `String(error)` و`error.prettify()` حد تنقيح؛ استخدم قائمة سماح للحقول الآمنة عند التسجيل، وعامل قيم `received` الخام والرسائل المخصصة على أنها حساسة.
+يحتوي كل عنصر `StructIssue` على: `code` (مثل `invalid_type` أو `missing_key` أو `invalid_literal` أو `invalid_enum` أو `invalid_union` أو `invalid_intersection` أو `custom`)، و`path`، و`expected`، و`received`، و`message`. تحذف الرسائل الافتراضية القيمة المستلمة وتُبلّغ عن _نوعها_ فقط، لكن المسارات تحتفظ بمفاتيح record الديناميكية، التي قد تحتوي على قيم حساسة. ليست `String(err)` و`err.prettify()` حد تنقيح؛ استخدم قائمة سماح للحقول الآمنة عند التسجيل، وعامل قيم `received` الخام والرسائل المخصصة على أنها حساسة.
 
 ## 6. مرجع دوال البناء (Constructors)
 

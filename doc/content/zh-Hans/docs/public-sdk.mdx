@@ -139,7 +139,7 @@ description: 以 Amazon S3 SDK 架构为蓝本，为企业开放平台设计并�
 
 ## 4. 外部开发者如何接入你的公共 SDK
 
-外部应用只需安装 `@company/s3-sdk` 与 `@defjs/core`，使用自己的服务端点和签名拦截器创建 `Client`，即可直接以纯函数方式调用 SDK 导出的操作：
+外部应用只需安装 `@company/s3-sdk` 与 `@defjs/core`，使用自己的服务端点和签名拦截器创建 `Client`，即可直接以纯函数方式调用 SDK 导出的操作。该示例采用 Go 风格的错误处理：`syncReport` 发起三次调用，因此按步骤给每个错误命名（`putErr`、`listErr`、`getErr`），返回错误优先元组，并用 `new Error("put object", { cause: putErr })` 包装失败的那一步，就像 Go 的 `fmt.Errorf("put object: %w", err)`。只有程序顶层的 `main` 通过记录日志来处理错误：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

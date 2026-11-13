@@ -5,7 +5,7 @@ description: Keep GraphQL as HTTP 200 + application unwrap; Core does not ship a
 
 # Unwrap a GraphQL HTTP envelope
 
-Defjs does not embed a GraphQL client or `errorPolicy`. Model GraphQL over HTTP as a standard `POST` operation whose `builder` sends `{ query, operationName, variables }`. Mark `data` as `.nullish()` on the envelope Struct so both omitted `data` and `data: null` pass structural validation, then unwrap `errors[]` in an application helper:
+Defjs does not embed a GraphQL client or `errorPolicy`. Model GraphQL over HTTP as a standard `POST` operation whose `builder` sends `{ query, operationName, variables }`. Mark `data` as `.nullish()` on the envelope Struct so both omitted `data` and `data: null` pass structural validation, then unwrap `errors[]` in an application helper that returns an error-first tuple, `Promise<[Error, undefined] | [null, Viewer | null]>`, so the caller handles one `err`, whether it is a Defjs fault or a GraphQL error:
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -32,5 +32,5 @@ Defjs does not embed a GraphQL client or `errorPolicy`. Model GraphQL over HTTP 
 ada viewer unavailable viewer unavailable
 ```
 
-- An HTTP `200` only means the GraphQL envelope arrived intact. Domain errors inside `errors[]` (even when accompanied by `data: null`) are application-level results rather than `RES_STRUCT_MISMATCH` faults.
+- An HTTP `200` only means the GraphQL envelope arrived intact. Domain errors inside `errors[]` (even when accompanied by `data: null`) are application-level results rather than `RES_STRUCT_MISMATCH` faults. The helper returns them as its own `Error` (their messages joined), and returns any Defjs fault from the single call as-is. It never throws and never returns `undefined` to signal failure.
 - See [Core architecture](/docs/design-decisions) for why protocol-specific envelopes stay in application helpers.

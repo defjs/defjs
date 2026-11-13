@@ -59,10 +59,10 @@ export function OrderProfile({ id }: { id: number }) {
     const abort = new AbortController();
 
     void getOrder(client({ signal: abort.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (abort.signal.aborted) return;
-        if (error) {
-          setName(error.message);
+        if (err) {
+          setName(err.message);
           return;
         }
         setName(order.status);

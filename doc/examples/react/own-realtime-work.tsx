@@ -18,11 +18,11 @@ export function QuoteTicker() {
     const controller = new AbortController();
 
     void (async () => {
-      const [error, session] = await quotes(
+      const [err, session] = await quotes(
         client({ signal: controller.signal }),
       );
-      if (error) {
-        if (error.code !== "NET_ABORTED") console.error(error.code);
+      if (err) {
+        if (err.code !== "NET_ABORTED") console.error(err.code);
         return;
       }
       await using owned = session;

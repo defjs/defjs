@@ -16,7 +16,7 @@ description: defineEventStream، وخيارات الطلب، ومقبض التد
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-يُرجع الاستدعاء `[null, stream, open]` أو `[error, undefined, open?]`. عندما يُعلَن `error`، يكون الخطأ `Fault` لذلك struct؛ وإلا فهو `Fault<undefined>`. مرّر `signal` باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ SSE الحقلين `signal` و`retry` فقط ويتجاهل التقدّم وحقول WebSocket.
+يُرجع الاستدعاء `[null, stream, open]` أو `[err, undefined, open?]`. عندما يُعلَن `error`، يكون الخطأ `Fault` لذلك struct؛ وإلا فهو `Fault<undefined>`. مرّر `signal` باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ SSE الحقلين `signal` و`retry` فقط ويتجاهل التقدّم وحقول WebSocket.
 
 ## EventStreamExecuteOptions
 
@@ -74,7 +74,7 @@ description: defineEventStream، وخيارات الطلب، ومقبض التد
 
 ## StreamAwaitResult
 
-`[null, stream, open]` أو `[error, undefined, open?]`.
+`[null, stream, open]` أو `[err, undefined, open?]`.
 
 ## EventStreamData
 

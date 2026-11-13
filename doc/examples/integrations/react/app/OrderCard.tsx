@@ -11,10 +11,10 @@ export function OrderCard({ id }: { id: number }) {
     const controller = new AbortController();
 
     void getOrder(client({ signal: controller.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (controller.signal.aborted) return;
-        if (error) {
-          console.error(error.code);
+        if (err) {
+          console.error(err.code);
           setStatus(undefined);
           return;
         }

@@ -12,7 +12,7 @@ export type ParseMode = "field" | "value";
  * @group struct
  */
 export type ParseResult<O> =
-  [error: null, value: O] | [error: StructError, value: undefined];
+  [err: null, value: O] | [err: StructError, value: undefined];
 export type LiteralValue = boolean | null | number | string;
 
 export interface StructTypes<

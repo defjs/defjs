@@ -16,7 +16,7 @@ description: defineEventStream、リクエストオプション、ストリー�
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼び出しは `[null, stream, open]` または `[error, undefined, open?]` を返します。`error` を宣言していれば Fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`signal` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `signal` と `retry` だけで、進捗と WebSocket のフィールドは無視します。
+呼び出しは `[null, stream, open]` または `[err, undefined, open?]` を返します。`error` を宣言していれば Fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`signal` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `signal` と `retry` だけで、進捗と WebSocket のフィールドは無視します。
 
 ## EventStreamExecuteOptions
 
@@ -74,7 +74,7 @@ description: defineEventStream、リクエストオプション、ストリー�
 
 ## StreamAwaitResult
 
-`[null, stream, open]` または `[error, undefined, open?]` です。
+`[null, stream, open]` または `[err, undefined, open?]` です。
 
 ## EventStreamData
 

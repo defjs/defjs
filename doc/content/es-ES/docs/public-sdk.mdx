@@ -139,7 +139,7 @@ Divide el paquete del SDK en `src/models/` (estructuras de datos) y `src/service
 
 ## 4. Cómo consumen tu SDK los desarrolladores externos
 
-Las aplicaciones externas instalan `@company/s3-sdk` junto con `@defjs/core`, configuran su propio `Client` con su endpoint e interceptor de firma, e invocan directamente tus operaciones exportadas como funciones puras:
+Las aplicaciones externas instalan `@company/s3-sdk` junto con `@defjs/core`, configuran su propio `Client` con su endpoint e interceptor de firma, e invocan directamente tus operaciones exportadas como funciones puras. El ejemplo sigue el manejo de errores al estilo Go: `syncReport` hace tres llamadas, así que nombra cada error según su paso (`putErr`, `listErr`, `getErr`), devuelve una tupla con el error por delante y envuelve el paso que falló con `new Error("put object", { cause: putErr })`, como el `fmt.Errorf("put object: %w", err)` de Go. Solo `main`, la cima del programa, gestiona el error registrándolo:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

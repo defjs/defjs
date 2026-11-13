@@ -55,8 +55,8 @@ export type RequestEndpoint<
   client: Client,
   ...args: Args
 ) => Promise<
-  | [error: null, result: Data, response: Response]
-  | [error: FaultOf<ErrorData>, result: undefined, response: undefined]
+  | [err: null, result: Data, response: Response]
+  | [err: FaultOf<ErrorData>, result: undefined, response: undefined]
 >;
 
 export type { BuilderInput, HttpRequestShape } from "../internal/builder_types";
@@ -119,7 +119,7 @@ export type RequestDefinition<
 };
 
 /**
- * Await-result tuple for an HTTP call: success is `[null, data, response]`, and failure is `[fault, undefined, undefined]`.
+ * Await-result tuple for an HTTP call: success is `[null, data, response]`, and failure is `[err, undefined, undefined]`.
  *
  * `TData` and `TErrorData` are decoded body types. On success the third slot
  * carries `body` only when `output` was declared. On failure it is `undefined`,
@@ -129,22 +129,22 @@ export type RequestDefinition<
  */
 export type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
   | [
-      error: null,
+      err: null,
       result: TData,
       response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>,
     ]
-  | [error: FaultOf<TErrorData>, result: undefined, response: undefined];
+  | [err: FaultOf<TErrorData>, result: undefined, response: undefined];
 
 export type HttpExecuteAwaitResult<
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined,
 > =
   | [
-      error: null,
+      err: null,
       result: RequestSuccessData<TOutput>,
       response: DeclaredResponse<TOutput>,
     ]
-  | [error: Fault<TError>, result: undefined, response: undefined];
+  | [err: Fault<TError>, result: undefined, response: undefined];
 
 /**
  * Declares a typed HTTP request endpoint.

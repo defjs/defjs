@@ -66,7 +66,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-Si vous remplacez l'entrée `{ id: 7 }` par `{ id: 8 }`, le mock renvoie `404` et Defjs décode le struct `error` déclaré dans `error.data` :
+Si vous remplacez l'entrée `{ id: 7 }` par `{ id: 8 }`, le mock renvoie `404` et Defjs décode le struct `error` déclaré dans `err.data` :
 
 ```txt
 Order not found
@@ -74,11 +74,11 @@ Order not found
 
 ## 4. Comprendre le tuple error-first
 
-Chaque appel HTTP résout un tuple `[error, data, response]` :
+Chaque appel HTTP résout un tuple `[err, data, response]`. Vérifiez `if (err)` juste après l'appel et sortez depuis ce bloc, comme Go avec `if err != nil` :
 
-- **En cas de succès `2xx`** : `error` vaut `null`, `data` contient la valeur validée par `output` (`Order`), et `response` est un `DecodedResponse<Order>`.
-- **En cas de statut hors `2xx` déclaré** : `error.code` vaut `'HTTP_STATUS'`, `error.status` indique le code de statut (`404`), et `error.data` contient le struct `error` validé (`NotFound`).
-- **En cas de fault d'entrée, de décodage ou de réseau** : `error.code` identifie avec précision l'étape défaillante :
+- **En cas de succès `2xx`** : `err` vaut `null`, `data` contient la valeur validée par `output` (`Order`), et `response` est un `DecodedResponse<Order>`.
+- **En cas de statut hors `2xx` déclaré** : `err.code` vaut `'HTTP_STATUS'`, `err.status` indique le code de statut (`404`), et `err.data` contient le struct `error` validé (`NotFound`).
+- **En cas de fault d'entrée, de décodage ou de réseau** : `err.code` identifie avec précision l'étape défaillante :
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — entrée de l'appelant invalide ou exception levée dans le `builder`
   - `RES_MEDIA_TYPE_INVALID` — un corps JSON déclaré a été reçu avec un en-tête `Content-Type` non-JSON (rejeté avant toute lecture du flux)
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — corps illisible ou non-conforme au schéma attendu

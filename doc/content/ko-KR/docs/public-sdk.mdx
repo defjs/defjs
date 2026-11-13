@@ -139,7 +139,7 @@ SDK 패키지를 `src/models/`(데이터 구조)와 `src/services/`(리소스별
 
 ## 4. 외부 개발자가 SDK를 소비하는 방법
 
-외부 애플리케이션은 `@defjs/core`와 함께 `@company/s3-sdk`를 설치하고, 자체 엔드포인트 및 서명 인터셉터로 자신의 `Client`를 구성한 뒤, export된 작업들을 순수 함수로 직접 호출합니다:
+외부 애플리케이션은 `@defjs/core`와 함께 `@company/s3-sdk`를 설치하고, 자체 엔드포인트 및 서명 인터셉터로 자신의 `Client`를 구성한 뒤, export된 작업들을 순수 함수로 직접 호출합니다. 이 예제는 Go 방식의 오류 처리를 따릅니다. `syncReport`는 호출이 세 번이므로 각 오류에 단계 이름을 붙이고(`putErr`, `listErr`, `getErr`), error-first 튜플을 반환하며, 실패한 단계를 `new Error("put object", { cause: putErr })`로 감쌉니다. Go의 `fmt.Errorf("put object: %w", err)`에 해당합니다. 오류를 로그로 남겨 처리하는 것은 프로그램의 최상위인 `main`뿐입니다:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

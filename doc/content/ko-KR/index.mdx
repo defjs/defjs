@@ -31,7 +31,7 @@ Defjs는 TypeScript SDK를 두 가지 영역으로 명확히 분리합니다:
 </Tab>
 </Tabs>
 
-`getHealth(client)`를 호출하면 실제 I/O가 수행되며 error-first 튜플로 반환됩니다. 디코딩된 결과를 읽기 전에 항상 `if (error)`를 확인하고 먼저 반환하세요.
+`getHealth(client)`를 호출하면 실제 I/O가 수행되며 error-first 튜플로 반환됩니다. 디코딩된 결과를 읽기 전에 항상 `if (err)`를 확인하고 먼저 반환하세요.
 
 ## 정의와 클라이언트를 분리하는 이유
 
@@ -52,13 +52,13 @@ Defjs는 TypeScript SDK를 두 가지 영역으로 명확히 분리합니다:
 
 모든 작업은 각 전송 수단의 수명 주기에 최적화된 3개 항목의 error-first 튜플을 반환합니다:
 
-| 전송 방식                               | 진입 함수           | 튜플 형태                      | 수명 주기 소유권                                                     |
-| --------------------------------------- | ------------------- | ------------------------------ | -------------------------------------------------------------------- |
-| **[HTTP](/ko-KR/docs/http)**            | `defineRequest`     | `[error, data, response]`      | `client({ signal })`을 통해 진행 중인 요청 취소                      |
-| **[SSE](/ko-KR/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | `await using` 또는 `stream.close()` + `await stream.closed`로 해제   |
-| **[WebSocket](/ko-KR/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | `await using` 또는 `session.close()` + `await session.closed`로 해제 |
+| 전송 방식                               | 진입 함수           | 튜플 형태                    | 수명 주기 소유권                                                     |
+| --------------------------------------- | ------------------- | ---------------------------- | -------------------------------------------------------------------- |
+| **[HTTP](/ko-KR/docs/http)**            | `defineRequest`     | `[err, data, response]`      | `client({ signal })`을 통해 진행 중인 요청 취소                      |
+| **[SSE](/ko-KR/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | `await using` 또는 `stream.close()` + `await stream.closed`로 해제   |
+| **[WebSocket](/ko-KR/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | `await using` 또는 `session.close()` + `await session.closed`로 해제 |
 
-HTTP 요청 실패 시 튜플은 `[error, undefined, undefined]`가 됩니다. `error` 자체가 이미 `HttpMeta` 응답 메타데이터를 담고 있기 때문입니다. SSE와 WebSocket의 경우, 실패 전 초기 스냅샷이 수집되었다면 세 번째 자리에 해당 스냅샷이 반환됩니다.
+HTTP 요청 실패 시 튜플은 `[err, undefined, undefined]`가 됩니다. `err` 자체가 이미 `HttpMeta` 응답 메타데이터를 담고 있기 때문입니다. SSE와 WebSocket의 경우, 실패 전 초기 스냅샷이 수집되었다면 세 번째 자리에 해당 스냅샷이 반환됩니다.
 
 ## 공식 패키지
 

@@ -16,7 +16,7 @@ description: defineEventStream, 요청 옵션, 스트림 핸들이에요.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-호출은 `[null, stream, open]` 또는 `[error, undefined, open?]`을 돌려줘요. `error`를 선언하면 결함은 그 struct의 `Fault`이고, 아니면 `Fault<undefined>`예요. `signal`은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. SSE는 `signal`과 `retry`만 읽고, 진행률과 WebSocket 필드는 무시해요.
+호출은 `[null, stream, open]` 또는 `[err, undefined, open?]`을 돌려줘요. `error`를 선언하면 결함은 그 struct의 `Fault`이고, 아니면 `Fault<undefined>`예요. `signal`은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. SSE는 `signal`과 `retry`만 읽고, 진행률과 WebSocket 필드는 무시해요.
 
 ## EventStreamExecuteOptions
 
@@ -74,7 +74,7 @@ description: defineEventStream, 요청 옵션, 스트림 핸들이에요.
 
 ## StreamAwaitResult
 
-`[null, stream, open]` 또는 `[error, undefined, open?]`예요.
+`[null, stream, open]` 또는 `[err, undefined, open?]`예요.
 
 ## EventStreamData
 

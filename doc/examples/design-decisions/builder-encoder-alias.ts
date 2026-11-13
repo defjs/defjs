@@ -23,15 +23,16 @@ const createBatch = defineRequest({
   output: struct.object({ accepted: struct.number() }),
 });
 
-async function submit(client: Client) {
-  const [error, result] = await createBatch(client, {
+async function submit(
+  client: Client,
+): Promise<[Error, undefined] | [null, number]> {
+  const [err, result] = await createBatch(client, {
     accountId: 42,
     orders: [{ customerName: "Ada", totalCents: 4200 }],
   });
-  if (error) {
-    console.error(error.code);
-    return;
+  if (err) {
+    return [err, undefined];
   }
-  console.log(result.accepted);
+  return [null, result.accepted];
 }
 // #endregion

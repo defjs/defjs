@@ -32,5 +32,5 @@ Defjs에서는 오직 `2xx` 응답만이 성공 브랜치를 타므로, `304 Not
 Flask
 ```
 
-- `304` 확인 후의 `if (error) throw error`는 명시적인 정책입니다. `createReader`가 `Promise<Product>`를 반환하므로 다른 모든 결함은 throw됩니다.
+- `if (err)` 안에서는 캐시된 항목이 있는 `304`만 처리하며(캐시된 제품을 반환합니다), 그 밖의 결함은 모두 그대로 반환합니다. Go의 `return nil, err`와 같습니다. 따라서 `createReader`는 `Promise<[Error, undefined] | [null, Product]>`를 반환하고 throw하지 않습니다. `ETag` 헤더가 없는 것은 헬퍼 자신의 실패이므로 이것도 새 `Error`로 반환합니다. `main`은 프로그램의 최상위이므로 오류를 로그로 남기고 return합니다.
 - 인터셉터 내부에서 `304`를 가짜 `200`으로 억지 변환하지 마세요. 캐시 상태는 작업 호출을 둘러싼 애플리케이션 코드에서 유지하는 것이 올바른 설계입니다. 자세한 내용은 [HTTP 작업](/ko-KR/docs/http) 문서를 참조하세요.

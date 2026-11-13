@@ -129,7 +129,7 @@ Instala tu SDK junto a `@defjs/core`:
 bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-Dado que el SDK no vincula ningún cliente, la aplicación consumidora es propietaria del endpoint (AWS S3, Cloudflare R2 o MinIO), del interceptor de firma y de la política de reintentos, e invoca cada operación importada directamente como una función pura:
+Dado que el SDK no vincula ningún cliente, la aplicación consumidora es propietaria del endpoint (AWS S3, Cloudflare R2 o MinIO), del interceptor de firma y de la política de reintentos, e invoca cada operación importada directamente como una función pura. Como `syncReport` hace tres llamadas, nombra cada error según su paso (`putErr`, `listErr`, `getErr`) y devuelve una tupla con el error por delante cuyo error envuelve el paso que falló, como el `fmt.Errorf("put object: %w", err)` de Go. Solo `main` lo registra:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

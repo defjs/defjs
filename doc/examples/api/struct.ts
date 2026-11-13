@@ -7,9 +7,9 @@ const Order = struct.object({
 });
 
 function readOrder() {
-  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
-  if (error) {
-    console.error(error.message);
+  const [err, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
+  if (err) {
+    console.error(err.message);
     return;
   }
   console.log(order.customerName);

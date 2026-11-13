@@ -16,7 +16,7 @@ description: defineWebSocket، والجلسة، وخيارات الطلب.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-يُرجع الاستدعاء `[null, session, connection]` أو `[error, undefined, connection?]`. مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ WebSocket الحقول `signal` و`beforeConnect` و`heartbeat` و`protocols` و`retry`، ويتجاهل حقول تقدّم HTTP.
+يُرجع الاستدعاء `[null, session, connection]` أو `[err, undefined, connection?]`. مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ WebSocket الحقول `signal` و`beforeConnect` و`heartbeat` و`protocols` و`retry`، ويتجاهل حقول تقدّم HTTP.
 
 يستبدل كل من `beforeConnect` و`heartbeat` و`protocols` و`retry` قيمة العميل لذلك الاستدعاء كاملة. أسبقية البروتوكول هي العميل المشتق، ثم `withWebSocketProtocols`، ثم `protocols` في التعريف. `heartbeat.timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.
 
@@ -88,7 +88,7 @@ description: defineWebSocket، والجلسة، وخيارات الطلب.
 
 ## SocketAwaitResult
 
-`[null, session, connection]` أو `[error, undefined, connection?]`.
+`[null, session, connection]` أو `[err, undefined, connection?]`.
 
 ## ManualSocketCloseReason
 

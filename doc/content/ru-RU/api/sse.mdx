@@ -16,7 +16,7 @@ description: defineEventStream, опции запроса и stream handle.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-Вызов возвращает `[null, stream, open]` или `[error, undefined, open?]`. Если объявлен `error`, сбой — это `Fault` этого struct; иначе `Fault<undefined>`. Передавайте `signal`, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). SSE читает только `signal` и `retry` и игнорирует прогресс и поля WebSocket.
+Вызов возвращает `[null, stream, open]` или `[err, undefined, open?]`. Если объявлен `error`, сбой — это `Fault` этого struct; иначе `Fault<undefined>`. Передавайте `signal`, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). SSE читает только `signal` и `retry` и игнорирует прогресс и поля WebSocket.
 
 ## EventStreamExecuteOptions
 
@@ -74,7 +74,7 @@ description: defineEventStream, опции запроса и stream handle.
 
 ## StreamAwaitResult
 
-`[null, stream, open]` или `[error, undefined, open?]`.
+`[null, stream, open]` или `[err, undefined, open?]`.
 
 ## EventStreamData
 

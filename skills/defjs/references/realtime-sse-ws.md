@@ -40,9 +40,9 @@ export const followDeployLog = defineEventStream({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, stream, startupOpen] = await followDeployLog(client, { id: 7 });
-  if (error) {
-    console.error(error.code, startupOpen?.response.status);
+  const [err, stream, startupOpen] = await followDeployLog(client, { id: 7 });
+  if (err) {
+    console.error(err.code, startupOpen?.response.status);
     return;
   }
   await using ownedStream = stream;
@@ -89,19 +89,22 @@ const deployEvents = defineEventStream({
 export async function consumeWithHandshakeDeadline(
   handshakeMs: number,
   lifecycleSignal: AbortSignal,
-) {
-  const [error, stream] = await deployEvents(
+): Promise<Error | null> {
+  const [err, stream] = await deployEvents(
     client({
       signal: lifecycleSignal,
       retry: { maxRetries: 0, attemptTimeoutMs: handshakeMs },
     }),
   );
-  if (error) return;
+  if (err) {
+    return err;
+  }
 
   await using ownedStream = stream;
   for await (const event of ownedStream) {
     console.log(event.data);
   }
+  return null;
 }
 ```
 
@@ -182,11 +185,11 @@ export const quoteFeed = defineWebSocket({
 const client = createClient(withEndpoint("https://quotes.example.com"));
 
 async function main() {
-  const [error, session, startupConnection] = await quoteFeed(client, {
+  const [err, session, startupConnection] = await quoteFeed(client, {
     market: "nasdaq",
   });
-  if (error) {
-    console.error(error.code, startupConnection?.generation);
+  if (err) {
+    console.error(err.code, startupConnection?.generation);
     return;
   }
   await using ownedSession = session;
@@ -262,8 +265,8 @@ const client = createClient(
   }),
 );
 
-export async function runWithHeartbeat() {
-  const [error, session] = await PingPongSocket(
+export async function runWithHeartbeat(): Promise<Error | null> {
+  const [err, session] = await PingPongSocket(
     client({
       heartbeat: {
         intervalMs: 30_000,
@@ -277,11 +280,14 @@ export async function runWithHeartbeat() {
       },
     }),
   );
-  if (error) return;
+  if (err) {
+    return err;
+  }
   await using ownedSession = session;
   for await (const frame of ownedSession.receive) {
     if (frame.type === "price") console.log(frame.value);
   }
+  return null;
 }
 ```
 

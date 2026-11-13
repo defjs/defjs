@@ -5,7 +5,7 @@ description: Declara en tu SDK los contratos de error del servicio y trata los f
 
 # Tratamiento de errores
 
-En Defjs, los fallos de petición, transporte y decodificación no lanzan excepciones en el punto de llamada. Cada operación devuelve una tupla con el error por delante (`[error, ...]`) donde `error` es `null` o bien una instancia tipada de `Fault` (una instancia nativa de `Error` discriminada por `error.code`).
+En Defjs, los fallos de petición, transporte y decodificación no lanzan excepciones en el punto de llamada. Cada operación devuelve una tupla con el error por delante (`[err, ...]`) donde `err` es `null` o bien una instancia tipada de `Fault` (una instancia nativa de `Error` discriminada por `err.code`). Llama a esa variable `err` y compruébala de inmediato, como en Go.
 
 Una llamada que TypeScript rechaza es la excepción: no tiene un resultado especificado y no es un `Fault`. En la práctica suele rechazar con el `TypeError` de la plataforma.
 
@@ -33,9 +33,17 @@ Una llamada que TypeScript rechaza es la excepción: no tiene un resultado espec
 </Tab>
 </Tabs>
 
-### Por qué `error` transporta los metadatos de respuesta en fallos HTTP
+### Por qué `err` transporta los metadatos de respuesta en fallos HTTP
 
-En un fallo HTTP, la tupla es `[error, undefined, undefined]`. Cualquier metadato de respuesta recibido (`status`, `statusText`, `headers`, `url`) se adjunta directamente a `error.response`, lo que permite pasar el objeto `error` directamente a un logger o gestor de errores sin perder contexto.
+En un fallo HTTP, la tupla es `[err, undefined, undefined]`. Cualquier metadato de respuesta recibido (`status`, `statusText`, `headers`, `url`) se adjunta directamente a `err.response`, lo que permite pasar el objeto `err` directamente a un logger o gestor de errores sin perder contexto.
+
+### Gestiona cada error una sola vez
+
+Trata la tupla como el `(T, error)` de Go. Comprueba `if (err)` justo después de la llamada y sal de la función desde dentro de ese bloque, de modo que el camino de éxito quede sin sangrar; coloca dentro las ramas específicas de cada código (`err.code === "HTTP_STATUS" && err.status === 404`, o un `switch (err.code)`), igual que Go coloca `errors.Is` y `errors.As` dentro de `if err != nil`. O bien gestionas un error (lo registras, lo muestras, recurres a un valor alternativo) o bien lo devuelves, nunca ambas cosas. Solo la cima del programa (`main`, un manejador de eventos de la interfaz, una prueba) gestiona; cualquier otra función que pueda fallar devuelve su propia tupla con el error por delante, `Promise<[Error, undefined] | [null, T]>`, y nunca señala el fallo con `undefined`, `null` o `false`. Con una sola llamada a Defjs, devuelve el fallo tal cual (el `return nil, err` de Go). Con varias llamadas, nombra cada error según su paso (`putErr`, `listErr`) y envuélvelo con `new Error("put object", { cause: putErr })`, el equivalente de `fmt.Errorf("put object: %w", err)`. Lanza excepciones solo donde lo exija el contrato de una biblioteca, como el `queryFn` de TanStack Query.
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. Clases de fallos y conjunto cerrado de códigos
 
@@ -61,7 +69,7 @@ El código nombra qué falló, no quién aportó el valor. En HTTP, una petició
 | `RES_*`         | `number` | `HttpMeta` (**sin campo `body`**)               | Ausente                                      | `StructError` o error del parser     |
 | Otros códigos   | Ausente  | `HttpMeta` si llegaron cabeceras, o `undefined` | Ausente                                      | `Error` subyacente / motivo de abort |
 
-## 3. Estrechar uniones en los cuerpos de error (`error.data`)
+## 3. Estrechar uniones en los cuerpos de error (`err.data`)
 
 Dado que un único struct de `error` cubre todos los códigos de estado no `2xx`, declara una unión cuando diferentes estados de error devuelvan distintas estructuras JSON:
 

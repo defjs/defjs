@@ -46,10 +46,10 @@ export function OrderStatus({ id }: { id: number }) {
     const controller = new AbortController();
 
     void getOrder(client({ signal: controller.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (controller.signal.aborted) return;
-        if (error) {
-          setStatus(undefined);
+        if (err) {
+          setStatus(err.message);
           return;
         }
         setStatus(order.status);
@@ -85,11 +85,11 @@ export function QuoteTicker() {
     const controller = new AbortController();
 
     void (async () => {
-      const [error, session] = await quotes(
+      const [err, session] = await quotes(
         client({ signal: controller.signal }),
       );
-      if (error) {
-        if (error.code !== "NET_ABORTED") console.error(error.code);
+      if (err) {
+        if (err.code !== "NET_ABORTED") console.error(err.code);
         return;
       }
       await using owned = session;
@@ -158,9 +158,13 @@ watch(
     onCleanup(() => controller.abort());
 
     void getOrder(client({ signal: controller.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (controller.signal.aborted) return;
-        status.value = error ? "Error" : order.status;
+        if (err) {
+          status.value = err.message;
+          return;
+        }
+        status.value = order.status;
       },
     );
   },
@@ -178,10 +182,13 @@ const streamController = new AbortController();
 onScopeDispose(() => streamController.abort());
 
 void (async () => {
-  const [error, stream] = await deployEvents(
+  const [err, stream] = await deployEvents(
     client({ signal: streamController.signal }),
   );
-  if (error) return;
+  if (err) {
+    console.error(err.code);
+    return;
+  }
   try {
     for await (const event of stream) {
       console.info(event.data);
@@ -203,7 +210,7 @@ void (async () => {
 `@defjs/opentelemetry-server` instruments outbound HTTP, SSE, and WebSocket operations on a `@defjs/core` client via `withOpenTelemetryServer({ tracer?, meter?, logger?, ... })`.
 
 - **Boundary**: The plugin does **not** initialize the OpenTelemetry SDK—configure your `TracerProvider`, `MeterProvider`, and `LoggerProvider` in application bootstrap code.
-- **Application-defined `meta`**: Attach `meta` (`{ [key: string]: unknown }`, for example `{ operation: "orders.read" }`) when interceptors need context. `@defjs/opentelemetry-server` never reads it; copy what you need through `startSpanHook(request)`. It never leaves the process.
+- **Application-defined `meta`**: Attach `meta` (`{ [key: string]: unknown }`, for example `{ operation: "orders.read" }`) when interceptors need context. `@defjs/opentelemetry-server` reports each key as a `defjs.meta.<key>` attribute on spans and failure logs (not metrics); an empty `meta` adds nothing. It is one read-only object shared by every call of the definition, and Defjs core never sends it with the request.
 - **WebSocket trace propagation**: Browser/standard WebSockets cannot set handshake headers. Enable `webSocket: { queryPropagation: true }` only when the server explicitly reads W3C `traceparent` / `tracestate` from query parameters (it replaces any existing same-name query pairs).
 - **Attempts vs logical sessions**: HTTP retries emit one span per attempt as siblings under the active parent. SSE and WebSocket reconnects retain one logical-session span across reconnects. Caller aborts (`NET_ABORTED`) leave span status unset and emit no error log; timeouts (`NET_TIMEOUT`) mark the span `ERROR` with `error.type: "timeout"`.
 - **Privacy defaults**: Request/response bodies, full headers, and `request.query` on `url.full` are never captured by default.
@@ -285,11 +292,11 @@ test("postOrder encodes wire aliases and decodes 201 and 400 responses", async (
     }),
   );
 
-  const [error, order, response] = await postOrder(client, {
+  const [err, order, response] = await postOrder(client, {
     region: "eu",
     order: { customerName: "Ada" },
   });
-  expect(error).toBeNull();
+  expect(err).toBeNull();
   expect(order).toEqual({ id: 9, customerName: "Ada" });
   expect(response?.status).toBe(201);
 });
@@ -484,7 +491,11 @@ const s3Client = createClient(
   withRetry({ maxRetries: 3 }),
 );
 
-export async function syncReport(bucket: string, key: string, pdf: Blob) {
+export async function syncReport(
+  bucket: string,
+  key: string,
+  pdf: Blob,
+): Promise<[Error, undefined] | [null, { count: number; size: number }]> {
   const [putErr] = await putObject(s3Client, {
     bucket,
     key,
@@ -493,10 +504,7 @@ export async function syncReport(bucket: string, key: string, pdf: Blob) {
     storageClass: "STANDARD",
   });
   if (putErr) {
-    if (putErr.code === "HTTP_STATUS") {
-      console.error(putErr.data.code, putErr.data.requestId);
-    }
-    return undefined;
+    return [new Error("put object", { cause: putErr }), undefined];
   }
 
   const [listErr, page] = await listObjectsV2(s3Client, {
@@ -504,16 +512,32 @@ export async function syncReport(bucket: string, key: string, pdf: Blob) {
     prefix: "reports/",
     maxKeys: 50,
   });
-  if (listErr) return undefined;
+  if (listErr) {
+    return [new Error("list objects", { cause: listErr }), undefined];
+  }
 
   const [getErr, blob] = await getObject(
     s3Client({ signal: AbortSignal.timeout(10_000) }),
     { bucket, key },
   );
-  if (getErr) return undefined;
+  if (getErr) {
+    return [new Error("get object", { cause: getErr }), undefined];
+  }
 
-  return { count: page.contents.length, size: blob.size };
+  return [null, { count: page.contents.length, size: blob.size }];
 }
+
+async function main() {
+  const pdf = new Blob(["%PDF-1.7"], { type: "application/pdf" });
+  const [err, report] = await syncReport("reports", "q3.pdf", pdf);
+  if (err) {
+    console.error(err);
+    return;
+  }
+  console.log(report.count, report.size);
+}
+
+void main();
 ```
 
 ---

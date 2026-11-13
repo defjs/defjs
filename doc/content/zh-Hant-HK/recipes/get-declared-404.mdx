@@ -5,7 +5,7 @@ description: 呼叫一次 GET，按具型別嘅 200 同已宣告嘅 404 分支�
 
 # 處理已宣告嘅 404 回應
 
-喺 `defineRequest` 上同時宣告 `output`（對應 2xx 成功回應）同 `error`（對應非 2xx 回應）。喺呼叫處透過 `error?.code === "HTTP_STATUS" && error.status === 404` 進行條件判斷，即可安全讀取帶型別嘅 `error.data` payload。
+喺 `defineRequest` 上同時宣告 `output`（對應 2xx 成功回應）同 `error`（對應非 2xx 回應）。喺呼叫處先檢查 `if (err)`，再喺個區塊入面透過 `err.code === "HTTP_STATUS" && err.status === 404` 進行條件判斷，即可安全讀取帶型別嘅 `err.data` payload。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
@@ -28,7 +28,7 @@ description: 呼叫一次 GET，按具型別嘅 200 同已宣告嘅 404 分支�
 Loaded paid from 200
 ```
 
-- 冇宣告 `error`，或者已宣告嘅 `error` body 解碼成功嘅時候，非 2xx 狀態碼先會產生 `HTTP_STATUS`。宣告 `error` 會將錯誤 body 解碼兼驗證到 `error.data`；如果省略 `error`，則根本唔會讀取 body，`error.data` 會保持為 `undefined`。
+- 冇宣告 `error`，或者已宣告嘅 `error` body 解碼成功嘅時候，非 2xx 狀態碼先會產生 `HTTP_STATUS`。宣告 `error` 會將錯誤 body 解碼兼驗證到 `err.data`；如果省略 `error`，則根本唔會讀取 body，`err.data` 會保持為 `undefined`。
 - 如果宣告咗嘅 `error` body media type 唔啱、JSON 損壞，或者通唔過 Struct 驗證，操作會改為回傳 `RES_*` fault。因為單一 `error` Struct 涵蓋所有非 2xx 狀態碼，當唔同錯誤狀態碼回傳唔同結構時，可以使用 `struct.or(...)`。
 
 詳情請參閱 [HTTP 操作](/zh-Hant-HK/docs/http) 與 [錯誤處理](/zh-Hant-HK/docs/errors)。

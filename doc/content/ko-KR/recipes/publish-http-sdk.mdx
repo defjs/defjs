@@ -129,7 +129,7 @@ Tarball 내에 `dist/index.js`와 `dist/index.d.ts`가 정상적으로 포함되
 bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-SDK는 클라이언트를 바인딩하지 않으므로 사용하는 애플리케이션이 엔드포인트(AWS S3, Cloudflare R2 또는 MinIO), 서명 인터셉터, 재시도 정책의 소유권을 가지며, import한 각 작업을 순수 함수로 직접 호출합니다:
+SDK는 클라이언트를 바인딩하지 않으므로 사용하는 애플리케이션이 엔드포인트(AWS S3, Cloudflare R2 또는 MinIO), 서명 인터셉터, 재시도 정책의 소유권을 가지며, import한 각 작업을 순수 함수로 직접 호출합니다. `syncReport`는 호출이 세 번이므로 각 오류에 단계 이름을 붙이고(`putErr`, `listErr`, `getErr`), 실패한 단계를 감싼 오류를 error-first 튜플로 반환합니다. Go의 `fmt.Errorf("put object: %w", err)`에 해당합니다. 로그로 남기는 것은 `main`뿐입니다:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

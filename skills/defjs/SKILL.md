@@ -13,26 +13,27 @@ metadata:
 Defjs separates the two sides of an SDK so operation contracts can be shared or published without coupling to endpoints, credentials, or transport state:
 
 - **Definition (`defineRequest`, `defineEventStream`, `defineWebSocket`, `struct`)**: Pure declarative data exported by SDK modules. Importing or defining an operation performs no I/O and captures no client.
-- **Execution (`createClient`, `withEndpoint`, `operation(client, input)`)**: The consuming application owns the client and calls the operation (`getOrder(client, input)` or `getOrder(client(options), input)`). Calling the operation performs I/O and resolves to an error-first tuple `[error, data, response]`.
+- **Execution (`createClient`, `withEndpoint`, `operation(client, input)`)**: The consuming application owns the client and calls the operation (`getOrder(client, input)` or `getOrder(client(options), input)`). Calling the operation performs I/O and resolves to an error-first tuple `[err, data, response]`, the shape of Go's `(T, error)`.
 
 ## Workflow
 
 1. **Separate definition from execution.** Put `struct` schemas and `defineRequest` / `defineEventStream` / `defineWebSocket` exports in SDK modules; put `createClient(...)` and operation calls in application modules.
 2. **Load only the task reference file you need** from the [Task routing table](#task-routing-table) below.
 3. **Declare schemas and explicit placement.** Define `input`, `output`, and `error` with `struct`. Whenever `input` is declared, provide a synchronous pure `builder: (input) => ({ path?, query?, headers?, body? })`.
-4. **Call the operation and guard the error slot first.** Pass `client` (or `client({ signal })` per call), check `if (error)` and return before reading the success value.
+4. **Call the operation and guard the error slot first.** Pass `client` (or `client({ signal })` per call), name the slot `err`, and check `if (err)` right after the call. Leave the function from inside that block so the success path stays unindented.
 5. **Own realtime lifecycles.** Bind every opened SSE stream or WebSocket session with `await using` or close it and `await closed` in `finally`.
 6. **Put cross-cutting policies in client options and interceptors.** Use `withRetry` for retries and reconnects, `withInterceptors` for auth/refresh/`Retry-After`/logging, and optional application-defined `meta` on definitions when interceptors need context.
 7. **Verify** with the project's typecheck and deterministic `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle` tests.
 
-## The six rules
+## The seven rules
 
 1. **`input` declares, `builder` places.** Any definition with `input` requires a synchronous pure `builder`. Defjs never infers placement from field names or `:param` placeholders.
 2. **Calling an operation runs it.** Call `getOrder(client, input)` or `getOrder(client(options), input)`. Calling `client(options)` performs no I/O and returns a single-call, non-callable `Client` value (`client()()` is a compile error). There is no global client.
-3. **Results are error-first tuples.** Operations resolve to `[error, data, response]` (HTTP), `[error, stream, startupOpen]` (SSE), or `[error, session, startupConnection]` (WebSocket). Request, validation, HTTP status, decode, and network failures never throw at the call site.
+3. **Results are error-first tuples.** Operations resolve to `[err, data, response]` (HTTP), `[err, stream, startupOpen]` (SSE), or `[err, session, startupConnection]` (WebSocket). Request, validation, HTTP status, decode, and network failures never throw at the call site.
 4. **`struct` only declares structure.** Struct instances have no `.parse()` method; call `struct.parse(schema, value, options?)`. There is no `struct.encode`, no regex/length validation DSL, and no zero-filling.
 5. **Auth, token refresh, `Retry-After`, and tracing belong in interceptors**, never in `builder`. Use `withRetry` for HTTP, SSE, and WebSocket retries. Attach optional `meta` (such as `{ operation: "orders.get" }`) for interceptor context.
 6. **The caller owns streams and sessions.** After a successful SSE or WebSocket startup, handle runtime errors, close the handle/session, and `await closed` (or use `await using`).
+7. **Write error handling like Go.** Name the tuple's error `err` (a function with several calls names each after its step: `putErr`, `listErr`). Check `if (err)` immediately and return inside it; put `err.code` branches (the counterpart of Go's `errors.Is` and `errors.As`) inside that block, never `if (!err)` or `err?.code` chains. Handle an error once (log, show, or fall back) or return it, never both; only `main` or a UI handler logs. A function that can fail returns an error-first tuple, `Promise<[Error, undefined] | [null, T]>`, never `undefined`/`null`/`false`. With one Defjs call return the fault as-is (`return [err, undefined]`, typed `AnyFault` when the caller branches on `err.code`); with several, wrap it with the step (`new Error("put object", { cause: err })`, lowercase, no trailing punctuation).
 
 ## Common habits vs Defjs best practices
 
@@ -44,10 +45,13 @@ Agents trained on Axios, Fetch, or Zod often apply habits that break Defjs contr
 | Omitting `builder` expecting `:id` to be inferred from `input`        | Always write `builder: (input) => ({ path: { id: input.id } })` whenever `input` is present             |
 | Making `builder: async (input) => ...` or reading auth tokens         | Keep `builder` synchronous and pure; read tokens inside `createHttpInterceptor`                         |
 | Mapping `.alias("wire_key")` by hand in `builder` literals            | Pass the typed struct value (`body: input.order`) so Defjs encodes wire aliases automatically           |
-| Wrapping `await getOrder(client, input)` in `try / catch`             | Destructure `const [error, data] = await getOrder(client, input); if (error) return;`                   |
-| Calling `OrderSchema.parse(raw)`                                      | Call `const [error, data] = struct.parse(OrderSchema, raw);`                                            |
+| Wrapping `await getOrder(client, input)` in `try / catch`             | Destructure `const [err, data] = await getOrder(client, input); if (err) return;`                       |
+| Calling `OrderSchema.parse(raw)`                                      | Call `const [err, data] = struct.parse(OrderSchema, raw);`                                              |
 | Reusing `const timed = client({ signal: AbortSignal.timeout(5000) })` | Derive `client({ signal: AbortSignal.timeout(5000) })` inline at each call site                         |
 | Passing `useClient()` to `useState(client)` or `watch(client)`        | `DerivableClient` is a function; call `useClient()` / `injectClient()` directly and never wrap in state |
+| Naming the tuple slot `error`, or `if (!err) { ... } else { ... }`    | Name it `err`; `if (err) { return ... }` right after the call, success path stays unindented            |
+| Branching on `err?.code === ...` before `if (err)`                    | Put `if (err.code === "HTTP_STATUS" && err.status === 404)` inside the `if (err)` block                 |
+| Returning `undefined` / `null` on failure, or logging and continuing  | `return [err, undefined]`, or wrap with `new Error("put object", { cause: err })` when several calls    |
 
 ## End-to-end best practice example
 
@@ -91,16 +95,16 @@ const client = createClient(
 );
 
 async function main() {
-  const [error, order, response] = await getOrder(
+  const [err, order, response] = await getOrder(
     client({ signal: AbortSignal.timeout(5_000) }),
     { id: 42 },
   );
-  if (error) {
-    if (error.code === "HTTP_STATUS") {
-      console.error(error.status, error.data.code, error.data.message);
+  if (err) {
+    if (err.code === "HTTP_STATUS") {
+      console.error(err.status, err.data.code, err.data.message);
       return;
     }
-    console.error(error.code, error.message);
+    console.error(err.code, err.message);
     return;
   }
   console.log(order.customerName, order.status, response.status);
@@ -137,7 +141,8 @@ Load only the reference file that matches your current task:
 - [ ] Definition modules (`defineRequest`, `defineEventStream`, `defineWebSocket`) do not import or create a client.
 - [ ] Every definition with `input` has an explicit, synchronous, pure `builder`.
 - [ ] `builder` performs no I/O, reads no auth tokens, and passes typed struct values (`body: input.order`) so `.alias(...)` applies.
-- [ ] Every call site checks `if (error)` and returns before reading the success value; no `try/catch` is used expecting HTTP or network errors to throw.
+- [ ] Every call site names the tuple slot `err`, checks `if (err)` right after the call, and returns inside that block before reading the success value; no `try/catch` is used expecting HTTP or network errors to throw.
+- [ ] Each error is handled once (logged at `main` or a UI handler) or returned, never both; helpers that can fail return `[err, undefined]` / `[null, value]` (wrapped with `new Error(step, { cause: err })` when they make several calls), never `undefined` or `null`.
 - [ ] Derived clients carrying a `signal` (`client({ signal })`) are created per call, not shared across unrelated calls.
 - [ ] Authentication, token refresh, `Retry-After`, and tracing live in interceptors (`withInterceptors`), not in `builder`.
 - [ ] Retries are enabled with `withRetry`; `ReadableStream` bodies are never replayed.

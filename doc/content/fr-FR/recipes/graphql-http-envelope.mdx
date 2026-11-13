@@ -5,7 +5,7 @@ description: Traitez GraphQL comme un HTTP 200 avec extraction applicative ; le 
 
 # Déballer une enveloppe GraphQL HTTP
 
-Defjs n'intègre aucun client GraphQL ni politique `errorPolicy`. Modélisez GraphQL sur HTTP comme une opération `POST` standard dont le `builder` transmet `{ query, operationName, variables }`. Déclarez `data` comme `.nullish()` sur le Struct de l'enveloppe afin qu'une propriété `data` omise ou valant `null` satisfasse la validation structurelle, puis extrayez `errors[]` dans une fonction utilitaire applicative :
+Defjs n'intègre aucun client GraphQL ni politique `errorPolicy`. Modélisez GraphQL sur HTTP comme une opération `POST` standard dont le `builder` transmet `{ query, operationName, variables }`. Déclarez `data` comme `.nullish()` sur le Struct de l'enveloppe afin qu'une propriété `data` omise ou valant `null` satisfasse la validation structurelle, puis extrayez `errors[]` dans une fonction utilitaire applicative qui renvoie un tuple error-first, `Promise<[Error, undefined] | [null, Viewer | null]>`, de sorte que l'appelant traite un seul `err`, qu'il s'agisse d'un fault Defjs ou d'une erreur GraphQL :
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -32,5 +32,5 @@ Defjs n'intègre aucun client GraphQL ni politique `errorPolicy`. Modélisez Gra
 ada viewer unavailable viewer unavailable
 ```
 
-- Un code HTTP `200` signifie uniquement que l'enveloppe GraphQL a été reçue intacte. Les erreurs métier présentes dans `errors[]` (même accompagnées de `data: null`) sont des résultats applicatifs et non des faults `RES_STRUCT_MISMATCH`.
+- Un code HTTP `200` signifie uniquement que l'enveloppe GraphQL a été reçue intacte. Les erreurs métier présentes dans `errors[]` (même accompagnées de `data: null`) sont des résultats applicatifs et non des faults `RES_STRUCT_MISMATCH`. La fonction utilitaire les renvoie sous la forme de sa propre `Error` (leurs messages joints) et renvoie tel quel tout fault Defjs de l'appel unique. Elle ne lève jamais d'exception et ne renvoie jamais `undefined` pour signaler un échec.
 - Consultez [Architecture du cœur](/fr-FR/docs/design-decisions) pour comprendre pourquoi les enveloppes propres à un protocole sont confiées à des helpers applicatifs.

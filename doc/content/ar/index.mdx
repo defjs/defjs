@@ -31,7 +31,7 @@ description: صمّم وانشر حزم TypeScript SDK عبر تعريفات API
 </Tab>
 </Tabs>
 
-يؤدي استدعاء `getHealth(client)` إلى تنفيذ عمليات الإدخال والإخراج (I/O) وإرجاع مصفوفة يكون الخطأ في أولها (error-first tuple). تحقّق من `if (error)` واخرج من الدالة قبل قراءة النتيجة المفكوكة.
+يؤدي استدعاء `getHealth(client)` إلى تنفيذ عمليات الإدخال والإخراج (I/O) وإرجاع مصفوفة يكون الخطأ في أولها (error-first tuple). تحقّق من `if (err)` واخرج من الدالة قبل قراءة النتيجة المفكوكة.
 
 ## لماذا نفصل بين التعريفات والعملاء؟
 
@@ -52,13 +52,13 @@ description: صمّم وانشر حزم TypeScript SDK عبر تعريفات API
 
 تُرجع كل عملية مصفوفة من ثلاثة عناصر يكون الخطأ في أولها ومصمَّمة لتناسب دورة حياة وسيلة النقل الخاصة بها:
 
-| وسيلة النقل                          | نقطة الإدخال        | شكل المصفوفة                   | مِلكية دورة الحياة                                                              |
-| ------------------------------------ | ------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
-| **[HTTP](/ar/docs/http)**            | `defineRequest`     | `[error, data, response]`      | إلغاء الطلبات الجارية عبر `client({ signal })`                                  |
-| **[SSE](/ar/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | التحرير عبر `await using` أو `stream.close()` متبوعة بـ `await stream.closed`   |
-| **[WebSocket](/ar/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | التحرير عبر `await using` أو `session.close()` متبوعة بـ `await session.closed` |
+| وسيلة النقل                          | نقطة الإدخال        | شكل المصفوفة                 | مِلكية دورة الحياة                                                              |
+| ------------------------------------ | ------------------- | ---------------------------- | ------------------------------------------------------------------------------- |
+| **[HTTP](/ar/docs/http)**            | `defineRequest`     | `[err, data, response]`      | إلغاء الطلبات الجارية عبر `client({ signal })`                                  |
+| **[SSE](/ar/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | التحرير عبر `await using` أو `stream.close()` متبوعة بـ `await stream.closed`   |
+| **[WebSocket](/ar/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | التحرير عبر `await using` أو `session.close()` متبوعة بـ `await session.closed` |
 
-عند حدوث خطأ في طلب HTTP، يكون شكل المصفوفة `[error, undefined, undefined]` لأن كائن `error` يحمل بالفعل بيانات الاستجابة الوصفية `HttpMeta`. أما في حالتي SSE وWebSocket، فيحمل الموضع الثالث لقطة لحظة الاتصال متى ما تم التقاطها قبل حدوث الفشل.
+عند حدوث خطأ في طلب HTTP، يكون شكل المصفوفة `[err, undefined, undefined]` لأن كائن `err` يحمل بالفعل بيانات الاستجابة الوصفية `HttpMeta`. أما في حالتي SSE وWebSocket، فيحمل الموضع الثالث لقطة لحظة الاتصال متى ما تم التقاطها قبل حدوث الفشل.
 
 ## الحزم الرسمية
 

@@ -5,7 +5,7 @@ description: Appelez une requête GET et aiguillez entre un 200 typé et une err
 
 # GET avec un 404 déclaré
 
-Déclarez à la fois `output` (pour les réponses 2xx) et `error` (pour les réponses hors 2xx) sur `defineRequest`. Au point d'appel, aiguillez sur `error?.code === "HTTP_STATUS" && error.status === 404` pour lire la charge utile typée `error.data`.
+Déclarez à la fois `output` (pour les réponses 2xx) et `error` (pour les réponses hors 2xx) sur `defineRequest`. Au point d'appel, vérifiez d'abord `if (err)`, puis aiguillez dans ce bloc sur `err.code === "HTTP_STATUS" && err.status === 404` pour lire la charge utile typée `err.data`.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
@@ -28,7 +28,7 @@ Avec un serveur répondant à `GET /orders/7` par `200` et `{ "id": 7, "status":
 Loaded paid from 200
 ```
 
-- Un statut hors 2xx produit un fault `HTTP_STATUS` quand `error` est omis ou que le corps `error` déclaré décode. Déclarer `error` décode et valide le corps d'erreur dans `error.data` ; omettre `error` laisse `error.data` à `undefined` sans lire le corps.
+- Un statut hors 2xx produit un fault `HTTP_STATUS` quand `error` est omis ou que le corps `error` déclaré décode. Déclarer `error` décode et valide le corps d'erreur dans `err.data` ; omettre `error` laisse `err.data` à `undefined` sans lire le corps.
 - Si le corps d'un `error` déclaré a un mauvais media type, du JSON invalide ou échoue à la validation Struct, l'opération renvoie un fault `RES_*` à la place. Comme un unique Struct `error` couvre tous les statuts hors 2xx, utilisez `struct.or(...)` lorsque des statuts d'erreur différents retournent des structures distinctes.
 
 Consultez [Opérations HTTP](/fr-FR/docs/http) et [Gestion des erreurs](/fr-FR/docs/errors).

@@ -74,12 +74,12 @@ Defjs chooses the response side using `response.ok`: `output` for `2xx`, `error`
 | Media type does not match declared JSON representation | `RES_MEDIA_TYPE_INVALID` (checked first; the body is never read, and content or not makes no difference) |
 | Bytes cannot be decoded as the declared representation | `RES_DECODE_FAILED` (empty JSON bytes included)                                                          |
 | Decoded value fails `struct` validation                | `RES_STRUCT_MISMATCH`                                                                                    |
-| Non-`2xx` status with decoded `error` struct           | `HTTP_STATUS` with typed `error.data`                                                                    |
-| Non-`2xx` status with `error` omitted                  | `HTTP_STATUS` with `error.data: undefined`                                                               |
+| Non-`2xx` status with decoded `error` struct           | `HTTP_STATUS` with typed `err.data`                                                                      |
+| Non-`2xx` status with `error` omitted                  | `HTTP_STATUS` with `err.data: undefined`                                                                 |
 
 ### Rule 4: A failed decode has no body
 
-A body exists only after it passes decoding and validation. When decoding fails, the fault's `response` is typed as `HttpMeta` (which has no `body` property), and the parser/validation error is attached to `fault.cause`.
+A body exists only after it passes decoding and validation. When decoding fails, the fault's `response` is typed as `HttpMeta` (which has no `body` property), and the parser/validation error is attached to `err.cause`.
 
 ### Rule 5: Omitting a side opts out of reading it
 
@@ -93,9 +93,9 @@ Omitting `output` means `2xx` bodies are never read. Omitting `error` means non-
 
 All three transports return a three-item error-first tuple instead of throwing at the call site:
 
-- **HTTP** → `[error, data, response]` — decoded payload + `DecodedResponse<T>` (`HttpMeta` when `output` is omitted).
-- **SSE** → `[error, stream, open]` — `EventStreamHandle` + initial handshake snapshot.
-- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + initial connection snapshot.
+- **HTTP** → `[err, data, response]` — decoded payload + `DecodedResponse<T>` (`HttpMeta` when `output` is omitted).
+- **SSE** → `[err, stream, open]` — `EventStreamHandle` + initial handshake snapshot.
+- **WebSocket** → `[err, session, connection]` — `WebSocketSession` + initial connection snapshot.
 
 Clients carry configuration, not active connections. The caller that starts an HTTP request, SSE stream, or WebSocket session owns canceling or closing it (`AbortSignal` for HTTP; `await using` or `.close()` + `await .closed` for SSE and WebSocket).
 

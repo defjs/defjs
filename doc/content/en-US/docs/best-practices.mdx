@@ -73,12 +73,12 @@ Even when writing an [application API layer](/docs/application-api) inside a sin
 
 Keep each concern in its designated layer:
 
-| Concern                                                                              | Where it belongs                                                 | Why                                                                      |
-| :----------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :----------------------------------------------------------------------- |
-| Routing caller parameters into `path`, `query`, `headers`, and `body`                | Operation `builder` in `services/*.ts`                           | Synchronous pure function of the current `input`                         |
-| Application-defined context for interceptors (`{ operation: "orders.create" }`)      | Operation `meta` field in `services/*.ts`                        | `{ [key: string]: unknown }`; internal only, never sent over the network |
-| Base URLs, auth headers (`Authorization`, signatures, XSRF), retries, load balancing | `createClient(...)` in `client.ts`                               | Environment- and session-specific execution policy                       |
-| Per-call deadlines, cancellation (`signal`), and transfer progress callbacks         | Inline `client({ signal, onDownloadProgress })` at the call site | Scoped to a single invocation without mutating the shared client         |
+| Concern                                                                              | Where it belongs                                                 | Why                                                                                                                        |
+| :----------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------- |
+| Routing caller parameters into `path`, `query`, `headers`, and `body`                | Operation `builder` in `services/*.ts`                           | Synchronous pure function of the current `input`                                                                           |
+| Application-defined context for interceptors (`{ operation: "orders.create" }`)      | Operation `meta` field in `services/*.ts`                        | `{ [key: string]: unknown }`; read-only and shared per definition; never sent with the request; reported as `defjs.meta.*` |
+| Base URLs, auth headers (`Authorization`, signatures, XSRF), retries, load balancing | `createClient(...)` in `client.ts`                               | Environment- and session-specific execution policy                                                                         |
+| Per-call deadlines, cancellation (`signal`), and transfer progress callbacks         | Inline `client({ signal, onDownloadProgress })` at the call site | Scoped to a single invocation without mutating the shared client                                                           |
 
 ---
 

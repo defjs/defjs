@@ -74,12 +74,12 @@ Defjs는 `response.ok`로 응답 쪽을 고릅니다. `2xx`는 `output`, `2xx`�
 | 미디어 타입이 선언된 JSON 표현과 일치하지 않음     | `RES_MEDIA_TYPE_INVALID` (먼저 검사함. 본문은 읽지 않으며, 내용이 있든 없든 차이가 없음) |
 | 바이트를 선언된 표현 형식으로 디코딩할 수 없음     | `RES_DECODE_FAILED` (빈 JSON 바이트 포함)                                                |
 | 디코딩된 값이 `struct` 스키마 검증을 통과하지 못함 | `RES_STRUCT_MISMATCH`                                                                    |
-| 디코딩된 `error` struct를 포함한 비`2xx` 상태 코드 | 타입화된 `error.data`를 포함하는 `HTTP_STATUS`                                           |
-| `error`가 선언되지 않은 비`2xx` 상태 코드          | `error.data: undefined`인 `HTTP_STATUS`                                                  |
+| 디코딩된 `error` struct를 포함한 비`2xx` 상태 코드 | 타입화된 `err.data`를 포함하는 `HTTP_STATUS`                                             |
+| `error`가 선언되지 않은 비`2xx` 상태 코드          | `err.data: undefined`인 `HTTP_STATUS`                                                    |
 
 ### 규칙 4: 디코딩에 실패하면 본문도 존재하지 않는다
 
-본문은 디코딩과 검증을 통과한 후에만 존재합니다. 디코딩이 실패하면 결함 객체의 `response`는 `HttpMeta` 타입(`body` 프로퍼티가 없음)이 되며, 파서/유효성 검증 오류는 `fault.cause`에 첨부됩니다.
+본문은 디코딩과 검증을 통과한 후에만 존재합니다. 디코딩이 실패하면 결함 객체의 `response`는 `HttpMeta` 타입(`body` 프로퍼티가 없음)이 되며, 파서/유효성 검증 오류는 `err.cause`에 첨부됩니다.
 
 ### 규칙 5: 한쪽을 생략하는 것은 해당 본문을 읽지 않겠다는 선택이다
 
@@ -93,9 +93,9 @@ Defjs는 `response.ok`로 응답 쪽을 고릅니다. `2xx`는 `output`, `2xx`�
 
 세 가지 전송 방식 모두 호출 지점에서 예외(throw)를 던지는 대신 3개 항목의 error-first 튜플을 반환합니다:
 
-- **HTTP** → `[error, data, response]` — 디코딩된 페이로드 + `DecodedResponse<T>` (`output` 생략 시 `HttpMeta`).
-- **SSE** → `[error, stream, open]` — `EventStreamHandle` + 초기 핸드셰이크 스냅샷.
-- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + 초기 연결 스냅샷.
+- **HTTP** → `[err, data, response]` — 디코딩된 페이로드 + `DecodedResponse<T>` (`output` 생략 시 `HttpMeta`).
+- **SSE** → `[err, stream, open]` — `EventStreamHandle` + 초기 핸드셰이크 스냅샷.
+- **WebSocket** → `[err, session, connection]` — `WebSocketSession` + 초기 연결 스냅샷.
 
 클라이언트는 활성 연결이 아닌 설정 정보를 보관합니다. HTTP 요청, SSE 스트림, WebSocket 세션을 시작한 호출자가 직접 취소하거나 닫는 책임을 갖습니다(HTTP는 `AbortSignal`, SSE와 WebSocket은 `await using` 또는 `.close()` + `await .closed`).
 

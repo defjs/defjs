@@ -5,7 +5,7 @@ description: Entwirfe HTTP-Operationen für dein SDK und rufe sie mit anwendungs
 
 # HTTP-Operationen
 
-Ein SDK definiert jede HTTP-Operation mit `defineRequest`: ihre Methode, die Pfadvorlage, das `input`-Schema, einen synchronen `builder` sowie die Response-Schemas für `output` und `error`. Konsumierende Anwendungen importieren die Operation, übergeben ihren konfigurierten `Client` und behandeln das zurückgegebene `[error, data, response]`-Tupel.
+Ein SDK definiert jede HTTP-Operation mit `defineRequest`: ihre Methode, die Pfadvorlage, das `input`-Schema, einen synchronen `builder` sowie die Response-Schemas für `output` und `error`. Konsumierende Anwendungen importieren die Operation, übergeben ihren konfigurierten `Client` und behandeln das zurückgegebene `[err, data, response]`-Tupel.
 
 ## 1. Operation definieren und aufrufen
 
@@ -38,7 +38,7 @@ Gib jeder Operation einen eigenen `defineRequest`-Export in deinem SDK-Modul und
 ### Best Practices für das SDK-Design
 
 - **Eine Operation pro Definition**: Halte jede Methode, jeden Pfad und jeden Vertrag in einer eigenen Definition, damit Anwendungen ungenutzte Operationen per Tree-Shaking entfernen können.
-- **`meta` anhängen, wenn Interceptors Kontext brauchen**: `meta` ist `{ [key: string]: unknown }` und anwendungsdefiniert, zum Beispiel `{ operation: "orders.read" }`. Es fließt nur durch Interceptors und Balancer (`request.meta`, `PickInfo.meta`); Defjs liest, kopiert oder sendet es nie über das Netzwerk.
+- **`meta` anhängen, wenn Interceptors Kontext brauchen**: `meta` ist `{ [key: string]: unknown }` und anwendungsdefiniert, zum Beispiel `{ operation: "orders.read" }`. Es erreicht Interceptors und Balancer (`request.meta`, `PickInfo.meta`) als ein schreibgeschütztes Objekt pro Definition, das von jedem Aufruf, jedem Versuch und jedem Client geteilt wird. Der schreibgeschützte Typ wirkt nur auf der obersten Ebene. Halte Zustand pro Aufruf daher in der Closure des Interceptors, nicht in `meta` oder in dessen verschachtelten Objekten. Ein benannter Typ für `meta` muss ein `type`-Alias sein, denn TypeScript weist ein `interface` nicht der Index-Signatur von `meta` zu. Der Defjs-Core liest oder kopiert `meta` nie, und es wird nie mit dem Request gesendet; Werte für URL, Header oder Body laufen über `builder`. `@defjs/opentelemetry-server` meldet jeden Schlüssel als Attribut `defjs.meta.<key>` an Spans und Fehler-Logs, halte daher Geheimnisse und personenbezogene Daten aus `meta` heraus.
 - **Niemals einen Client im SDK einbetten**: Exportiere ausschließlich Definitionen, `struct`-Schemas und Typen.
 
 ## 2. URL-Auflösung und Pfadparameter

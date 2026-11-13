@@ -73,12 +73,12 @@ Selbst wenn du eine [Anwendungs-API-Schicht](/de-DE/docs/application-api) innerh
 
 Halte jede Zuständigkeit in ihrer vorgesehenen Schicht:
 
-| Zuständigkeit                                                                        | Wo sie hingehört                                                           | Warum                                                                         |
-| :----------------------------------------------------------------------------------- | :------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
-| Verteilung von Aufrufer-Parametern auf `path`, `query`, `headers` und `body`         | Operations-`builder` in `services/*.ts`                                    | Synchrone reine Funktion des aktuellen `input`                                |
-| Anwendungsdefinierter Kontext für Interceptors (`{ operation: "orders.create" }`)    | Feld `meta` der Operation in `services/*.ts`                               | `{ [key: string]: unknown }`; nur intern, wird nie über das Netzwerk gesendet |
-| Basis-URLs, Auth-Header (`Authorization`, Signaturen, XSRF), Retries, Lastverteilung | `createClient(...)` in `client.ts`                                         | Umgebungs- und sitzungsspezifische Ausführungsrichtlinie                      |
-| Aufrufbezogene Fristen, Abbruch (`signal`) und Fortschritts-Callbacks                | Inline-Aufruf `client({ signal, onDownloadProgress })` an der Aufrufstelle | Auf einen einzelnen Aufruf begrenzt, ohne den gemeinsamen Client zu verändern |
+| Zuständigkeit                                                                        | Wo sie hingehört                                                           | Warum                                                                                                                                     |
+| :----------------------------------------------------------------------------------- | :------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
+| Verteilung von Aufrufer-Parametern auf `path`, `query`, `headers` und `body`         | Operations-`builder` in `services/*.ts`                                    | Synchrone reine Funktion des aktuellen `input`                                                                                            |
+| Anwendungsdefinierter Kontext für Interceptors (`{ operation: "orders.create" }`)    | Feld `meta` der Operation in `services/*.ts`                               | `{ [key: string]: unknown }`; schreibgeschützt und pro Definition geteilt; wird nie mit dem Request gesendet; gemeldet als `defjs.meta.*` |
+| Basis-URLs, Auth-Header (`Authorization`, Signaturen, XSRF), Retries, Lastverteilung | `createClient(...)` in `client.ts`                                         | Umgebungs- und sitzungsspezifische Ausführungsrichtlinie                                                                                  |
+| Aufrufbezogene Fristen, Abbruch (`signal`) und Fortschritts-Callbacks                | Inline-Aufruf `client({ signal, onDownloadProgress })` an der Aufrufstelle | Auf einen einzelnen Aufruf begrenzt, ohne den gemeinsamen Client zu verändern                                                             |
 
 ---
 

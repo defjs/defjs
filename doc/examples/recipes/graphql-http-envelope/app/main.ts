@@ -16,14 +16,19 @@ const client = createClient(
   ),
 );
 
-const viewer = await loadViewer(client);
-const graphQlErrors: string[] = [];
-for (let attempt = 0; attempt < 2; attempt += 1) {
-  try {
-    await loadViewer(client);
-  } catch (error) {
-    graphQlErrors.push(error instanceof Error ? error.message : String(error));
+async function main() {
+  const [viewerErr, viewer] = await loadViewer(client);
+  if (viewerErr) {
+    console.error(viewerErr);
+    return;
   }
+  const graphQlErrors: string[] = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const [err] = await loadViewer(client);
+    if (err) graphQlErrors.push(err.message);
+  }
+  console.log(viewer?.login, ...graphQlErrors);
 }
-console.log(viewer?.login, ...graphQlErrors);
+
+void main();
 // #endregion

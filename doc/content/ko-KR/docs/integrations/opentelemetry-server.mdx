@@ -19,7 +19,8 @@ description: SDK 정의를 텔레메트리 설정과 완전히 분리한 상태�
   examples/opentelemetry-server/basic-setup.ts#example
 </include>
 
-- **Span 이름 지정**: span 이름은 HTTP 메서드, `SSE`, `WebSocket`입니다. 플러그인은 정의의 `meta`를 읽지 않으므로, 필요한 값은 `startSpanHook(request)`에서 `request.meta`로부터 span 속성으로 복사하세요. span 이름의 HTTP 메서드는 정규화된 `http.request.method`이며, 그 값이 `_OTHER`이면 `HTTP`가 됩니다.
+- **정의 `meta`**: `request.meta`의 각 own enumerable 키는 값을 그대로 유지한 채 span과 실패 로그의 `defjs.meta.<key>` 속성이 됩니다. 각 값을 유지할지 버릴지는 OpenTelemetry SDK의 속성 규칙에 따르며, 버려진 값은 `diag`로만 보고됩니다. `meta`가 없거나 비어 있으면 아무것도 추가되지 않습니다. 메트릭에는 `meta`가 붙지 않으므로 속성 집합이 한정된 상태로 유지됩니다. `startSpanHook(request)`가 반환한 속성은 마지막에 적용되며, `defjs.meta.*` 값은 span에서만 대체할 수 있고 실패 로그는 `meta`의 값을 그대로 유지합니다. 이 값들은 텔레메트리와 함께 프로세스 밖으로 나가므로, 비밀 값과 개인 정보는 `meta`에 넣지 마세요.
+- **Span 이름 지정**: span 이름은 HTTP 메서드, `SSE`, `WebSocket`입니다. span 이름의 HTTP 메서드는 정규화된 `http.request.method`이며, 그 값이 `_OTHER`이면 `HTTP`가 됩니다.
 - **독립적인 신호(Signals)**: `tracer`, `meter`, `logger`는 모두 선택 사항이며 각각 독립적으로 동작합니다:
   - `tracer`를 생략하면 로컬 span 생성과 span 훅이 비활성화되지만, 메트릭, 로그, 아웃바운드 컨텍스트 전파는 계속 기록됩니다.
   - `meter`를 생략하면 패키지 메트릭이 비활성화됩니다.
@@ -124,7 +125,7 @@ SSE와 WebSocket의 연결 수립 시간 및 연결 지속 시간 샘플에는 `
 | SSE 또는 WebSocket 최종 오류 또는 reject된 `closed` (종료 프레임 없는 `1006` 단절, 하트비트 타임아웃 포함)                          | 전송 이벤트 이름을 가진 단일 `WARN`, 단계 `connection`                                            |
 | 정상 완료, 메시지, EOF, 서버 WebSocket 종료 프레임(`1011` 포함), 또는 타임아웃이 아닌 활성 취소                                     | 없음                                                                                              |
 
-진단 기록에는 고정 메시지, `exception.type`(플랫폼/전송 클래스 이름인 `BodyFailure`, `EventStreamFatalError`(응답이 `text/event-stream`이 아닌 SSE 핸드셰이크), `DefjsFault`(비 2xx SSE 핸드셰이크 포함), `TypeError`, `Error` 등), 단계(phase), 서버 주소/포트, 프로토콜 필드만이 기록되며, 원시 URL, 쿼리 스트링, 헤더, 본문, 오류 스택은 절대 기록되지 않습니다. span의 `exception` 이벤트도 같은 규칙을 따르며 `exception.type`만 담습니다. `url.full`은 엔드포인트의 userinfo를 `REDACTED:REDACTED`로 바꾸고, 시맨틱 컨벤션의 기본 민감 쿼리 키(예: `sig`, `X-Amz-Signature`)의 값을 `REDACTED`로 바꿉니다.
+진단 기록에는 고정 메시지, `exception.type`(플랫폼/전송 클래스 이름인 `BodyFailure`, `EventStreamFatalError`(응답이 `text/event-stream`이 아닌 SSE 핸드셰이크), `DefjsFault`(비 2xx SSE 핸드셰이크 포함), `TypeError`, `Error` 등), 단계(phase), 서버 주소/포트, 프로토콜 필드, `defjs.meta.*` 속성이 기록되며, 이 속성의 값은 애플리케이션이 `meta`에 넣은 그대로입니다. Defjs는 원시 URL, 쿼리 스트링, 헤더, 본문, 오류 스택을 추가하지 않습니다. span의 `exception` 이벤트도 같은 규칙을 따르며 `exception.type`만 담습니다. `url.full`은 엔드포인트의 userinfo를 `REDACTED:REDACTED`로 바꾸고, 시맨틱 컨벤션의 기본 민감 쿼리 키(예: `sig`, `X-Amz-Signature`)의 값을 `REDACTED`로 바꿉니다.
 
 ---
 

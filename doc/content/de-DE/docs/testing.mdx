@@ -32,10 +32,10 @@ Nutze `withHTTPHandle`, `withSSEHandle` oder `withWebSocketHandle` an `createCli
 
 ### Das Error-first-Tupel prüfen, nicht interne Details
 
-Rufe stets die exportierte SDK-Operation mit deinem Test-Client auf und prüfe das zurückgegebene `[error, data, response]`-Tupel:
+Rufe stets die exportierte SDK-Operation mit deinem Test-Client auf und prüfe das zurückgegebene `[err, data, response]`-Tupel:
 
-- Für `2xx`-Fälle prüfe `expect(error).toBeNull()` und verifiziere die dekodierten `data`-Felder (einschließlich des `.alias()`-Mappings von Wire- auf logische Namen).
-- Für Fehlerfälle prüfe `error?.code`, `error?.status`, `error?.data` und `error?.cause`, sofern diese Bestandteil des Vertrags sind.
+- Für `2xx`-Fälle prüfe `expect(err).toBeNull()` und verifiziere die dekodierten `data`-Felder (einschließlich des `.alias()`-Mappings von Wire- auf logische Namen).
+- Für Fehlerfälle prüfe `err?.code`, `err?.status`, `err?.data` und `err?.cause`, sofern diese Bestandteil des Vertrags sind.
 
 ### Wire-Bytes ausgehender Anfragen verifizieren
 

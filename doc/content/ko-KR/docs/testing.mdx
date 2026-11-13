@@ -32,10 +32,10 @@ Defjs는 작업 정의와 클라이언트 실행을 명확히 분리하기 때�
 
 ### 내부 구현이 아닌 error-first 튜플을 단언하세요
 
-항상 export된 SDK 작업을 테스트 클라이언트로 호출하고, 반환된 `[error, data, response]` 튜플의 결과를 검증하세요:
+항상 export된 SDK 작업을 테스트 클라이언트로 호출하고, 반환된 `[err, data, response]` 튜플의 결과를 검증하세요:
 
-- `2xx` 성공 케이스: `expect(error).toBeNull()`을 확인하고 디코딩된 `data` 필드(`.alias()` 통신 별칭 매핑 포함)를 검증합니다.
-- 실패 케이스: 계약의 일부라면 `error?.code`, `error?.status`, `error?.data`, `error?.cause`를 명시적으로 단언합니다.
+- `2xx` 성공 케이스: `expect(err).toBeNull()`을 확인하고 디코딩된 `data` 필드(`.alias()` 통신 별칭 매핑 포함)를 검증합니다.
+- 실패 케이스: 계약의 일부라면 `err?.code`, `err?.status`, `err?.data`, `err?.cause`를 명시적으로 단언합니다.
 
 ### 아웃바운드 요청의 통신 바이트를 직접 검증하세요
 

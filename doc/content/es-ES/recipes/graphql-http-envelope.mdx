@@ -5,7 +5,7 @@ description: Deja GraphQL como HTTP 200 más un desempaquetado en la aplicación
 
 # Desempaquetar una envoltura GraphQL sobre HTTP
 
-Defjs no incluye un cliente de GraphQL ni una opción `errorPolicy`. Modela GraphQL sobre HTTP como una operación `POST` estándar cuyo `builder` envíe `{ query, operationName, variables }`. Marca `data` como `.nullish()` en el Struct de la envoltura para que tanto la omisión de `data` como `data: null` superen la validación estructural, y luego desempaqueta `errors[]` en una función auxiliar de tu aplicación:
+Defjs no incluye un cliente de GraphQL ni una opción `errorPolicy`. Modela GraphQL sobre HTTP como una operación `POST` estándar cuyo `builder` envíe `{ query, operationName, variables }`. Marca `data` como `.nullish()` en el Struct de la envoltura para que tanto la omisión de `data` como `data: null` superen la validación estructural, y luego desempaqueta `errors[]` en una función auxiliar de tu aplicación que devuelve una tupla con el error por delante, `Promise<[Error, undefined] | [null, Viewer | null]>`, de modo que quien llama gestiona un único `err`, sea un fallo de Defjs o un error de GraphQL:
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -32,5 +32,5 @@ Defjs no incluye un cliente de GraphQL ni una opción `errorPolicy`. Modela Grap
 ada viewer unavailable viewer unavailable
 ```
 
-- Un código HTTP `200` solo significa que la envoltura GraphQL llegó intacta. Los errores de dominio dentro de `errors[]` (incluso acompañados de `data: null`) son resultados del nivel de aplicación, no fallos `RES_STRUCT_MISMATCH`.
+- Un código HTTP `200` solo significa que la envoltura GraphQL llegó intacta. Los errores de dominio dentro de `errors[]` (incluso acompañados de `data: null`) son resultados del nivel de aplicación, no fallos `RES_STRUCT_MISMATCH`. La función auxiliar los devuelve como su propio `Error` (con sus mensajes unidos) y devuelve tal cual cualquier fallo de Defjs de la única llamada. Nunca lanza excepciones ni devuelve `undefined` para señalar un fallo.
 - Consulta [Arquitectura central](/es-ES/docs/design-decisions) para entender por qué las envolturas específicas de protocolo se gestionan en funciones auxiliares de la aplicación.

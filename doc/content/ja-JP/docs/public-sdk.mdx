@@ -139,7 +139,7 @@ SDK パッケージを `src/models/`（データ構造）と `src/services/`（�
 
 ## 4. 外部の開発者が SDK を利用する方法
 
-外部のアプリケーションは、`@company/s3-sdk` と `@defjs/core` をインストールし、自身のエンドポイントと署名インターセプターで `Client` を構成するだけで、export された操作を純粋関数として直接呼び出せます。
+外部のアプリケーションは、`@company/s3-sdk` と `@defjs/core` をインストールし、自身のエンドポイントと署名インターセプターで `Client` を構成するだけで、export された操作を純粋関数として直接呼び出せます。この例は Go 流のエラーハンドリングに従っています。`syncReport` は 3 回の呼び出しを行うため、各エラーにステップ名を付け（`putErr`、`listErr`、`getErr`）、エラーファーストのタプルを返し、失敗したステップを `new Error("put object", { cause: putErr })` で包みます。これは Go の `fmt.Errorf("put object: %w", err)` に相当します。エラーをログに出して処理するのは、プログラムの最上位である `main` だけです。
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

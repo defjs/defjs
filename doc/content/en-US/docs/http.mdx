@@ -5,7 +5,7 @@ description: Design HTTP operations for your SDK and call them with application-
 
 # HTTP operations
 
-An SDK defines each HTTP operation with `defineRequest`: its method, path template, `input` schema, synchronous `builder`, and `output` / `error` response schemas. Consuming applications import the operation, pass their configured `Client`, and handle the returned `[error, data, response]` tuple.
+An SDK defines each HTTP operation with `defineRequest`: its method, path template, `input` schema, synchronous `builder`, and `output` / `error` response schemas. Consuming applications import the operation, pass their configured `Client`, and handle the returned `[err, data, response]` tuple.
 
 ## 1. Define the operation and call it
 
@@ -38,7 +38,7 @@ Give each operation its own `defineRequest` export in your SDK module, and keep 
 ### SDK design best practices
 
 - **One operation per definition**: Keep each method, path, and contract in its own definition so applications can tree-shake unused operations.
-- **Attach `meta` when interceptors need context**: `meta` is `{ [key: string]: unknown }` and application-defined, for example `{ operation: "orders.read" }`. It flows only through interceptors and balancers (`request.meta`, `PickInfo.meta`); Defjs never reads it, copies it, or sends it over the network.
+- **Attach `meta` when interceptors need context**: `meta` is `{ [key: string]: unknown }` and application-defined, for example `{ operation: "orders.read" }`. It reaches interceptors and balancers (`request.meta`, `PickInfo.meta`) as one read-only object per definition, shared by every call, attempt, and client. The read-only type is shallow, so keep per-call state in the interceptor's closure, not in `meta` or its nested objects. A named type for `meta` must be a `type` alias: TypeScript does not assign an `interface` to its index signature. Defjs core never reads or copies `meta`, and it is never sent with the request; values for the URL, headers, or body go through `builder`. `@defjs/opentelemetry-server` reports each key as a `defjs.meta.<key>` attribute on spans and failure logs, so keep secrets and personal data out of `meta`.
 - **Never embed a client in the SDK**: Export only definitions, `struct` schemas, and types.
 
 ## 2. URL resolution and path parameters

@@ -30,6 +30,6 @@ and verify the result with the project’s existing tests.
 
 ## 核对结果 [#verify]
 
-分别阅读定义和应用。定义导出操作，不创建 Client。应用创建 Client 并调用操作，例如 `getOrder(client, { id: 1 })`。声明了 `input` 时，`builder` 是显式的同步纯函数。只有 error 槽为空后才使用成功值。
+分别阅读定义和应用。定义导出操作，不创建 Client。应用创建 Client 并调用操作，例如 `getOrder(client, { id: 1 })`。声明了 `input` 时，`builder` 是显式的同步纯函数。只有 error 槽为空后才使用成功值：调用处在调用后立即检查 `if (err)`，并在该块内部返回；可能失败的辅助函数返回自己的 `[err, value]` 元组，而不是记录日志或返回 `undefined`。
 
 然后运行该项目自己的类型检查，以及真正执行这份契约的测试。依赖安装和 CI 规则留在那个项目里。

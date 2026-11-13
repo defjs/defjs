@@ -32,5 +32,5 @@ description: 把 304 當成 HTTP 狀態 fault 處理；把快取 Map 留在操�
 Flask
 ```
 
-- 在 `304` 檢查之後的 `if (error) throw error` 是一項明確的決策：`createReader` 回傳 `Promise<Product>`，所以其他 fault 一律拋出。
+- 在 `if (err)` 內，只有帶有快取項目的 `304` 會被處理（回傳快取的 product）。其他所有 fault 都原樣回傳，就像 Go 的 `return nil, err`，所以 `createReader` 回傳 `Promise<[Error, undefined] | [null, Product]>`，而且絕不拋出。缺少 `ETag` 標頭是 helper 自己的失敗，同樣以新的 `Error` 回傳。`main` 是程式的最上層，所以它記錄該錯誤後 return。
 - 絕不要在攔截器內把 `304` 改寫成合成的 `200`；請把快取狀態留在操作呼叫外圍的應用程式程式碼中。詳見 [HTTP 操作](/zh-Hant-TW/docs/http)。

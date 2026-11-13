@@ -30,6 +30,6 @@ and verify the result with the project’s existing tests.
 
 ## Check the result [#verify]
 
-Read the definition and the application separately. The definition exports the operation and does not create the client. The application creates the client and calls the operation, for example `getOrder(client, { id: 1 })`. Where `input` is declared, `builder` is an explicit synchronous pure function. The success value is used only after the error slot is empty.
+Read the definition and the application separately. The definition exports the operation and does not create the client. The application creates the client and calls the operation, for example `getOrder(client, { id: 1 })`. Where `input` is declared, `builder` is an explicit synchronous pure function. The success value is used only after the error slot is empty: the call site checks `if (err)` right after the call and returns from inside that block, and a helper that can fail returns its own `[err, value]` tuple instead of logging or returning `undefined`.
 
 Then run that project's typecheck and the tests that cover the contract. Dependency installation and CI rules stay with that project.

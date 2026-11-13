@@ -5,7 +5,7 @@ description: 调用一次 GET，并在带类型的 200 与声明的 404 之间�
 
 # 声明了 404 的 GET
 
-在 `defineRequest` 上同时声明 `output`（用于 2xx 响应）和 `error`（用于非 2xx 响应）。在调用点用 `error?.code === "HTTP_STATUS" && error.status === 404` 分支，读取带类型的 `error.data`。
+在 `defineRequest` 上同时声明 `output`（用于 2xx 响应）和 `error`（用于非 2xx 响应）。在调用点先检查 `if (err)`，再在该块内按 `err.code === "HTTP_STATUS" && err.status === 404` 分支，读取带类型的 `err.data` 载荷。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
@@ -28,7 +28,7 @@ description: 调用一次 GET，并在带类型的 200 与声明的 404 之间�
 Loaded paid from 200
 ```
 
-- 未声明 `error`，或声明的 `error` body 能解码时，非 `2xx` 状态才会产生 `HTTP_STATUS`。声明 `error` 会把错误 body 解码并校验到 `error.data`；省略 `error` 时 `error.data` 为 `undefined`，且不读取 body。
+- 未声明 `error`，或声明的 `error` body 能解码时，非 `2xx` 状态才会产生 `HTTP_STATUS`。声明 `error` 会把错误 body 解码并校验到 `err.data`；省略 `error` 时 `err.data` 为 `undefined`，且不读取 body。
 - 声明的 `error` body 媒体类型错误、JSON 无效或未通过 struct 校验时，操作改为返回 `RES_*` Fault。由于单个 `error` struct 覆盖所有非 `2xx` 状态，不同错误状态返回不同结构时应使用 `struct.or(...)`。
 
 见 [HTTP 请求](/zh-Hans/docs/http) 与 [错误处理](/zh-Hans/docs/errors)。

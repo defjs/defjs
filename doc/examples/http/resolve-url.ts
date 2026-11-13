@@ -18,9 +18,9 @@ const getOrder = defineRequest({
 // → https://api.example.com/v1/orders/a%2Fb?fields=status
 
 async function main() {
-  const [error] = await getOrder(client, { id: "a/b", fields: "status" });
-  if (error) {
-    console.error(error.code);
+  const [err] = await getOrder(client, { id: "a/b", fields: "status" });
+  if (err) {
+    console.error(err.code);
     return;
   }
 }

@@ -16,7 +16,7 @@ description: defineWebSocket, session и опции запроса.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `retry` и игнорирует поля прогресса HTTP.
+Вызов возвращает `[null, session, connection]` или `[err, undefined, connection?]`. Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `retry` и игнорирует поля прогресса HTTP.
 
 Каждый из параметров `beforeConnect`, `heartbeat`, `protocols` и `retry` целиком заменяет значение клиента для этого вызова. Приоритет protocols: выведенный клиент, затем `withWebSocketProtocols`, затем `protocols` определения. `heartbeat.timeoutMs` — ожидание подтверждения, а не дедлайн запроса.
 
@@ -88,7 +88,7 @@ Builder и цепочка перехватчиков выполняются од
 
 ## SocketAwaitResult
 
-`[null, session, connection]` или `[error, undefined, connection?]`.
+`[null, session, connection]` или `[err, undefined, connection?]`.
 
 ## ManualSocketCloseReason
 

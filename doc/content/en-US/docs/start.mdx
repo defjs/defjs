@@ -66,7 +66,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-If you change the input from `{ id: 7 }` to `{ id: 8 }`, the mock returns `404` and Defjs decodes the declared `error` struct into `error.data`:
+If you change the input from `{ id: 7 }` to `{ id: 8 }`, the mock returns `404` and Defjs decodes the declared `error` struct into `err.data`:
 
 ```txt
 Order not found
@@ -74,11 +74,11 @@ Order not found
 
 ## 4. Understand the error-first tuple
 
-Every HTTP call resolves `[error, data, response]`:
+Every HTTP call resolves `[err, data, response]`. Check `if (err)` right after the call and leave from inside that block, as Go does with `if err != nil`:
 
-- **On `2xx` success**: `error` is `null`, `data` is the validated `output` value (`Order`), and `response` is `DecodedResponse<Order>`.
-- **On a declared non-`2xx` status**: `error.code` is `'HTTP_STATUS'`, `error.status` is the status number (`404`), and `error.data` is the validated `error` struct (`NotFound`).
-- **On input, decode, or network faults**: `error.code` identifies the exact failure stage:
+- **On `2xx` success**: `err` is `null`, `data` is the validated `output` value (`Order`), and `response` is `DecodedResponse<Order>`.
+- **On a declared non-`2xx` status**: `err.code` is `'HTTP_STATUS'`, `err.status` is the status number (`404`), and `err.data` is the validated `error` struct (`NotFound`).
+- **On input, decode, or network faults**: `err.code` identifies the exact failure stage:
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — invalid caller input or a throwing `builder`
   - `RES_MEDIA_TYPE_INVALID` — declared JSON body arrived with a non-JSON `Content-Type` (rejected before reading the body)
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — unreadable body or schema mismatch

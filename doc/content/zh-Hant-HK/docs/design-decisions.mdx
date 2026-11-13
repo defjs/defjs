@@ -74,12 +74,12 @@ Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 
 | Media type 唔符合宣告嘅 JSON 格式          | `RES_MEDIA_TYPE_INVALID`（最先檢查；body 根本唔會被讀，有冇內容都冇分別） |
 | Bytes 無法解碼成宣告嘅資料格式             | `RES_DECODE_FAILED`（包括空嘅 JSON bytes）                                |
 | 解碼後嘅值無法通過 `struct` 驗證           | `RES_STRUCT_MISMATCH`                                                     |
-| 非 `2xx` 狀態碼，並成功解碼 `error` struct | `HTTP_STATUS`，帶有具型別嘅 `error.data`                                  |
-| 非 `2xx` 狀態碼，但冇宣告 `error`          | `HTTP_STATUS`，且 `error.data: undefined`                                 |
+| 非 `2xx` 狀態碼，並成功解碼 `error` struct | `HTTP_STATUS`，帶有具型別嘅 `err.data`                                    |
+| 非 `2xx` 狀態碼，但冇宣告 `error`          | `HTTP_STATUS`，且 `err.data: undefined`                                   |
 
 ### 規則 4：解碼失敗就冇 Body
 
-只有喺通過解碼同驗證之後，body 先會存在。解碼失敗嗰陣，fault 嘅 `response` 型別只會係 `HttpMeta`（完全冇 `body` 屬性），而解析器或驗證錯誤會附帶喺 `fault.cause`。
+只有喺通過解碼同驗證之後，body 先會存在。解碼失敗嗰陣，fault 嘅 `response` 型別只會係 `HttpMeta`（完全冇 `body` 屬性），而解析器或驗證錯誤會附帶喺 `err.cause`。
 
 ### 規則 5：冇宣告嗰邊就代表放棄讀取
 
@@ -93,9 +93,9 @@ Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 
 
 三種傳輸層都會回傳三項式 error-first tuple，而唔會喺呼叫處直接 throw：
 
-- **HTTP** → `[error, data, response]` — 解碼後嘅 payload + `DecodedResponse<T>`（未宣告 `output` 時為 `HttpMeta`）。
-- **SSE** → `[error, stream, open]` — `EventStreamHandle` + 初始握手 snapshot。
-- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + 初始連線 snapshot。
+- **HTTP** → `[err, data, response]` — 解碼後嘅 payload + `DecodedResponse<T>`（未宣告 `output` 時為 `HttpMeta`）。
+- **SSE** → `[err, stream, open]` — `EventStreamHandle` + 初始握手 snapshot。
+- **WebSocket** → `[err, session, connection]` — `WebSocketSession` + 初始連線 snapshot。
 
 Client 只負責帶住設定，唔會持有活躍連線。發起 HTTP 請求、SSE 串流或 WebSocket 會話嘅呼叫端，負責取消或者關閉資源（HTTP 用 `AbortSignal`；SSE 同 WebSocket 則用 `await using` 或 `.close()` + `await .closed`）。
 

@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` ist Geschäftslogik und nicht die Spitze des Programms, daher protokolliert `placeAndLoadOrder` nichts. Die Funktion gibt ein Error-first-Tupel zurück, `Promise<[Error, undefined] | [null, Checkout]>`, und umhüllt den Fault jedes Schritts mit dem Schritt, der fehlgeschlagen ist (`new Error("create order", { cause: createErr })`), wie Gos `fmt.Errorf("create order: %w", err)`. Der Aufrufer, etwa ein UI-Event-Handler, prüft `if (err)` und entscheidet, wie er den Fehler anzeigt.
+
 ---
 
 ## 3. Zentrale Muster für Anwendungsprojekte
@@ -69,7 +71,7 @@ src/
 Erstelle niemals über `createClient(...)` einen neuen `Client`, nur um ein Timeout oder ein `AbortSignal` zu übergeben. Leite stattdessen direkt an der Aufrufstelle einen Client für einen einzelnen Aufruf von deinem gemeinsamen Client ab:
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### Gemeinsames Fehler-Envelope (`ApiError`)
 
-Deklariere das Standard-Fehler-Envelope deines Backends einmalig (`export const ApiError = struct.object(...)`) in `src/api/models/` und übergib `error: ApiError` bei jedem `defineRequest` in `src/api/services/`. Wenn eine Anfrage einen Status außerhalb von `2xx` zurückgibt, erhältst du durch die Eingrenzung `if (error.code === "HTTP_STATUS")` streng typisierten Zugriff auf `error.data.code`, `error.data.message` und `error.data.requestId`.
+Deklariere das Standard-Fehler-Envelope deines Backends einmalig (`export const ApiError = struct.object(...)`) in `src/api/models/` und übergib `error: ApiError` bei jedem `defineRequest` in `src/api/services/`. Wenn eine Anfrage einen Status außerhalb von `2xx` zurückgibt, erhältst du durch die Eingrenzung `if (err.code === "HTTP_STATUS")` innerhalb von `if (err)` streng typisierten Zugriff auf `err.data.code`, `err.data.message` und `err.data.requestId`.
 
 Siehe auch [Engineering-Konventionen](/de-DE/docs/best-practices), [Design öffentlicher SDKs](/de-DE/docs/public-sdk), [Client](/de-DE/docs/client) und [Interceptors](/de-DE/docs/interceptors).

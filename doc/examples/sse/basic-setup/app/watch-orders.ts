@@ -5,9 +5,9 @@ import { watchOrders } from "../sdk/orders-stream.ts";
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
+  const [err, stream] = await watchOrders(client);
+  if (err) {
+    console.error(err.code);
     return;
   }
 

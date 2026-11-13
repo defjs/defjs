@@ -32,10 +32,10 @@ Utiliza `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle` en `createClie
 
 ### Comprueba la tupla con error por delante, no las funciones internas
 
-Invoca siempre la operación exportada del SDK pasando tu cliente de prueba y comprueba la tupla devuelta `[error, data, response]`:
+Invoca siempre la operación exportada del SDK pasando tu cliente de prueba y comprueba la tupla devuelta `[err, data, response]`:
 
-- Para casos `2xx`, comprueba `expect(error).toBeNull()` y verifica los campos decodificados en `data` (incluyendo la conversión de claves de red a nombres lógicos mediante `.alias()`).
-- Para casos de fallo, comprueba `error?.code`, `error?.status`, `error?.data` y `error?.cause` cuando formen parte del contrato.
+- Para casos `2xx`, comprueba `expect(err).toBeNull()` y verifica los campos decodificados en `data` (incluyendo la conversión de claves de red a nombres lógicos mediante `.alias()`).
+- Para casos de fallo, comprueba `err?.code`, `err?.status`, `err?.data` y `err?.cause` cuando formen parte del contrato.
 
 ### Verifica los bytes de red en las peticiones salientes
 

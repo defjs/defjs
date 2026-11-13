@@ -30,8 +30,8 @@ test("request deadline follows the controlled timer", async () => {
     const pending = getStatus(client({ signal: controller.signal }));
     await ready;
     await vi.advanceTimersByTimeAsync(100);
-    const [error] = await pending;
-    expect(error?.code).toBe("NET_TIMEOUT");
+    const [err] = await pending;
+    expect(err?.code).toBe("NET_TIMEOUT");
   } finally {
     clearTimeout(timer);
     controller.abort();

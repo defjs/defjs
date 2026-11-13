@@ -129,7 +129,7 @@ bun pm pack
 bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-نظرًا لأن حزمة SDK لا تربط أي عميل، يمتلك التطبيق المستهلك نقطة النهاية (AWS S3 أو Cloudflare R2 أو MinIO)، ومعترض التوقيع، وسياسة إعادة المحاولة، ويستدعي كل عملية مستوردة مباشرةً كدالة نقية:
+نظرًا لأن حزمة SDK لا تربط أي عميل، يمتلك التطبيق المستهلك نقطة النهاية (AWS S3 أو Cloudflare R2 أو MinIO)، ومعترض التوقيع، وسياسة إعادة المحاولة، ويستدعي كل عملية مستوردة مباشرةً كدالة نقية. ولأن `syncReport` تجري ثلاثة استدعاءات، فإنها تسمي كل خطأ باسم خطوته (`putErr` و`listErr` و`getErr`) وتُرجع مصفوفة يكون الخطأ في أولها يغلّف الخطوة التي فشلت، على غرار `fmt.Errorf("put object: %w", err)` في Go. و`main` وحدها تسجّله:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

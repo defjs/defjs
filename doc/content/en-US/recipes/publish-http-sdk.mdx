@@ -129,7 +129,7 @@ Install your SDK alongside `@defjs/core`:
 bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-Because the SDK binds no client, the consuming application owns the endpoint (AWS S3, Cloudflare R2, or MinIO), signing interceptor, and retry policy, and calls each imported operation directly as a pure function:
+Because the SDK binds no client, the consuming application owns the endpoint (AWS S3, Cloudflare R2, or MinIO), signing interceptor, and retry policy, and calls each imported operation directly as a pure function. Because `syncReport` makes three calls, it names each error after its step (`putErr`, `listErr`, `getErr`) and returns an error-first tuple whose error wraps the step that failed, like Go's `fmt.Errorf("put object: %w", err)`. Only `main` logs it:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

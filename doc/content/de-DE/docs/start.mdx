@@ -66,7 +66,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-Wenn du die Eingabe von `{ id: 7 }` auf `{ id: 8 }` änderst, antwortet der Mock mit `404` und Defjs dekodiert das deklarierte `error`-Struct in `error.data`:
+Wenn du die Eingabe von `{ id: 7 }` auf `{ id: 8 }` änderst, antwortet der Mock mit `404` und Defjs dekodiert das deklarierte `error`-Struct in `err.data`:
 
 ```txt
 Order not found
@@ -74,11 +74,11 @@ Order not found
 
 ## 4. Das Error-first-Tupel verstehen
 
-Jeder HTTP-Aufruf liefert ein dreiteiliges Tupel `[error, data, response]` zurück:
+Jeder HTTP-Aufruf liefert ein dreiteiliges Tupel `[err, data, response]` zurück. Prüfe `if (err)` direkt nach dem Aufruf und verlasse die Funktion innerhalb dieses Blocks, wie Go es mit `if err != nil` tut:
 
-- **Bei `2xx`-Erfolg**: `error` ist `null`, `data` ist der validierte `output`-Wert (`Order`), und `response` ist `DecodedResponse<Order>`.
-- **Bei einem deklarierten Nicht-`2xx`-Status**: `error.code` lautet `'HTTP_STATUS'`, `error.status` ist der numerische HTTP-Statuscode (`404`), und `error.data` ist das validierte `error`-Struct (`NotFound`).
-- **Bei Eingabe-, Dekodierungs- oder Netzwerkfehlern**: `error.code` kennzeichnet die genaue Fehlerphase:
+- **Bei `2xx`-Erfolg**: `err` ist `null`, `data` ist der validierte `output`-Wert (`Order`), und `response` ist `DecodedResponse<Order>`.
+- **Bei einem deklarierten Nicht-`2xx`-Status**: `err.code` lautet `'HTTP_STATUS'`, `err.status` ist der numerische HTTP-Statuscode (`404`), und `err.data` ist das validierte `error`-Struct (`NotFound`).
+- **Bei Eingabe-, Dekodierungs- oder Netzwerkfehlern**: `err.code` kennzeichnet die genaue Fehlerphase:
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — ungültige Aufruf-Eingabe oder eine Exception im `builder`
   - `RES_MEDIA_TYPE_INVALID` — deklarierter JSON-Body traf mit einem Nicht-JSON-`Content-Type` ein (wird bereits vor dem Lesen des Body abgewiesen)
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — unlesbarer Body oder Schema-Diskrepanz

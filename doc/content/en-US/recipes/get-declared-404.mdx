@@ -5,7 +5,7 @@ description: Call one GET and branch on typed 200 vs declared 404.
 
 # GET with a declared 404
 
-Declare both `output` (for 2xx responses) and `error` (for non-2xx responses) on `defineRequest`. At the call site, branch on `error?.code === "HTTP_STATUS" && error.status === 404` to read the typed `error.data` payload.
+Declare both `output` (for 2xx responses) and `error` (for non-2xx responses) on `defineRequest`. At the call site, check `if (err)` first, then branch on `err.code === "HTTP_STATUS" && err.status === 404` inside that block to read the typed `err.data` payload.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
@@ -28,7 +28,7 @@ With a server that answers `GET /orders/7` with `200` and `{ "id": 7, "status": 
 Loaded paid from 200
 ```
 
-- A non-2xx status produces `HTTP_STATUS` when `error` is omitted or the declared `error` body decodes. Declaring `error` decodes and validates the error body into `error.data`; omitting `error` leaves `error.data` as `undefined` without reading the body.
+- A non-2xx status produces `HTTP_STATUS` when `error` is omitted or the declared `error` body decodes. Declaring `error` decodes and validates the error body into `err.data`; omitting `error` leaves `err.data` as `undefined` without reading the body.
 - If a declared `error` body has the wrong media type, invalid JSON, or fails Struct validation, the operation returns a `RES_*` fault instead. Because a single `error` Struct covers all non-2xx statuses, use `struct.or(...)` when different error statuses return different shapes.
 
 See [HTTP operations](/docs/http) and [Error handling](/docs/errors).

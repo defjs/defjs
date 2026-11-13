@@ -16,7 +16,7 @@ Declare a socket, call the operation with a client, send and receive typed messa
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-The call returns `[null, session, connection]` or `[error, undefined, connection?]`. Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). WebSocket reads `signal`, `beforeConnect`, `heartbeat`, `protocols`, and `retry`, and ignores HTTP progress fields.
+The call returns `[null, session, connection]` or `[err, undefined, connection?]`. Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). WebSocket reads `signal`, `beforeConnect`, `heartbeat`, `protocols`, and `retry`, and ignores HTTP progress fields.
 
 `beforeConnect`, `heartbeat`, `protocols`, and `retry` each override the client-level option for that call as a whole. Protocol precedence is the derived client, then `withWebSocketProtocols`, then the definition's `protocols`. `heartbeat.timeoutMs` is the acknowledgement wait, not a request deadline.
 
@@ -88,7 +88,7 @@ The operation returned by `defineWebSocket`. The first argument is a client. Fur
 
 ## SocketAwaitResult
 
-`[null, session, connection]` or `[error, undefined, connection?]`.
+`[null, session, connection]` or `[err, undefined, connection?]`.
 
 ## ManualSocketCloseReason
 

@@ -74,12 +74,12 @@ Defjs elige el lado de la respuesta con `response.ok`: `output` para `2xx` y `er
 | El tipo de medio no coincide con la representación JSON declarada | `RES_MEDIA_TYPE_INVALID` (se comprueba primero; el cuerpo nunca se lee, y que haya contenido o no no cambia nada) |
 | Los bytes no pueden decodificarse según lo declarado              | `RES_DECODE_FAILED` (incluidos los bytes JSON vacíos)                                                             |
 | El valor decodificado no supera la validación del `struct`        | `RES_STRUCT_MISMATCH`                                                                                             |
-| Código no `2xx` con struct de `error` decodificado                | `HTTP_STATUS` con `error.data` tipado                                                                             |
-| Código no `2xx` habiendo omitido `error`                          | `HTTP_STATUS` con `error.data: undefined`                                                                         |
+| Código no `2xx` con struct de `error` decodificado                | `HTTP_STATUS` con `err.data` tipado                                                                               |
+| Código no `2xx` habiendo omitido `error`                          | `HTTP_STATUS` con `err.data: undefined`                                                                           |
 
 ### Regla 4: Una decodificación fallida no tiene cuerpo
 
-Un cuerpo solo existe tras haber superado la decodificación y la validación. Cuando la decodificación falla, la propiedad `response` del fallo está tipada como `HttpMeta` (que carece de la propiedad `body`), y el error de análisis o validación se adjunta en `fault.cause`.
+Un cuerpo solo existe tras haber superado la decodificación y la validación. Cuando la decodificación falla, la propiedad `response` del fallo está tipada como `HttpMeta` (que carece de la propiedad `body`), y el error de análisis o validación se adjunta en `err.cause`.
 
 ### Regla 5: Omitir una parte descarta su lectura
 
@@ -93,9 +93,9 @@ Omitir `output` significa que los cuerpos `2xx` nunca se leen. Omitir `error` si
 
 Los tres transportes devuelven una tupla de tres elementos con el error en primer lugar en vez de lanzar excepciones en el punto de llamada:
 
-- **HTTP** → `[error, data, response]` — carga decodificada + `DecodedResponse<T>` (`HttpMeta` cuando se omite `output`).
-- **SSE** → `[error, stream, open]` — `EventStreamHandle` + instantánea del handshake inicial.
-- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + instantánea de conexión inicial.
+- **HTTP** → `[err, data, response]` — carga decodificada + `DecodedResponse<T>` (`HttpMeta` cuando se omite `output`).
+- **SSE** → `[err, stream, open]` — `EventStreamHandle` + instantánea del handshake inicial.
+- **WebSocket** → `[err, session, connection]` — `WebSocketSession` + instantánea de conexión inicial.
 
 Los clientes almacenan configuración, no conexiones activas. Quien inicia una petición HTTP, flujo SSE o sesión WebSocket es responsable de cancelarla o cerrarla (`AbortSignal` para HTTP; `await using` o `.close()` + `await .closed` para SSE y WebSocket).
 

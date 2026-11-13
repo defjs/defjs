@@ -37,7 +37,7 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 
 ## 2. 初始握手与返回元组
 
-只有当初始 HTTP 响应为 `2xx` 且媒体类型为 `text/event-stream` 时，调用操作才会解析为 `[error, stream, startupOpen]`：
+只有当初始 HTTP 响应为 `2xx` 且媒体类型为 `text/event-stream` 时，调用操作才会解析为 `[err, stream, startupOpen]`：
 
 <Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
@@ -54,7 +54,7 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 </Tab>
 </Tabs>
 
-- **非 `2xx` 握手**：返回 `HTTP_STATUS`。声明了 `error` struct 时，`error.data` 是解码后的 body。该 body 无法解码时，结果改为解码 Fault，与 HTTP 一样：JSON 声明遇到另一种媒体类型时为 `RES_MEDIA_TYPE_INVALID`（例如网关返回的 HTML `503`），不可读或无法解析的 body 为 `RES_DECODE_FAILED`，与 struct 不匹配的 body 为 `RES_STRUCT_MISMATCH`。它的 `status` 和 `response` 把握手状态作为元数据携带，`cause` 保存原因。拦截器、`shouldRetry`，以及在重连时失败的流的 `closed`，对该响应仍收到 `HTTP_STATUS`，其 `cause` 是同一原因，因此网关 `503` 无论 body 长什么样都会被重试。声明了 `error` 会让 Client 在报告 Fault 之前把握手 body 读到结尾，因此服务端应当结束每一个非 `2xx` 响应。状态没有内容时（`304`），或 JSON 声明遇到不是 JSON 的媒体类型时，不会读取 body。被读取且永不结束的 body 会让调用一直挂起，直到调用方的 `signal` 中止，或平台切断连接。被切断的连接是不可读的 body，因此调用返回 `RES_DECODE_FAILED`，并以平台失败作为 `cause`。`attemptTimeoutMs` 不限制这次读取。没有声明 `error` 时，body 会被取消且不读取。没有 `withRetry` 时，这会结束当前操作。有它时，`502`、`503` 或 `504` 握手会像连接被拒绝一样，按第 4 节的规则重试，其他任何状态都会连同 `retryable: false` 和它的 `status` 交给 `shouldRetry`，因此除非你的函数另有表示，否则流会结束。重试耗尽或被拒绝都以 `HTTP_STATUS` 结束。下一次操作会重新选择端点，因此均衡器可能选中另一个端点。
+- **非 `2xx` 握手**：返回 `HTTP_STATUS`。声明了 `error` struct 时，`err.data` 是解码后的 body。该 body 无法解码时，结果改为解码 Fault，与 HTTP 一样：JSON 声明遇到另一种媒体类型时为 `RES_MEDIA_TYPE_INVALID`（例如网关返回的 HTML `503`），不可读或无法解析的 body 为 `RES_DECODE_FAILED`，与 struct 不匹配的 body 为 `RES_STRUCT_MISMATCH`。它的 `status` 和 `response` 把握手状态作为元数据携带，`cause` 保存原因。拦截器、`shouldRetry`，以及在重连时失败的流的 `closed`，对该响应仍收到 `HTTP_STATUS`，其 `cause` 是同一原因，因此网关 `503` 无论 body 长什么样都会被重试。声明了 `error` 会让 Client 在报告 Fault 之前把握手 body 读到结尾，因此服务端应当结束每一个非 `2xx` 响应。状态没有内容时（`304`），或 JSON 声明遇到不是 JSON 的媒体类型时，不会读取 body。被读取且永不结束的 body 会让调用一直挂起，直到调用方的 `signal` 中止，或平台切断连接。被切断的连接是不可读的 body，因此调用返回 `RES_DECODE_FAILED`，并以平台失败作为 `cause`。`attemptTimeoutMs` 不限制这次读取。没有声明 `error` 时，body 会被取消且不读取。没有 `withRetry` 时，这会结束当前操作。有它时，`502`、`503` 或 `504` 握手会像连接被拒绝一样，按第 4 节的规则重试，其他任何状态都会连同 `retryable: false` 和它的 `status` 交给 `shouldRetry`，因此除非你的函数另有表示，否则流会结束。重试耗尽或被拒绝都以 `HTTP_STATUS` 结束。下一次操作会重新选择端点，因此均衡器可能选中另一个端点。
 - **内容类型不对**：媒体类型不是 `text/event-stream` 的 `2xx` 握手返回 `RES_MEDIA_TYPE_INVALID`，包括 `204` 或 `205`。
 - **没有 body**：带 `text/event-stream` 且没有 body 的 `2xx` 握手（Node.js 和 Bun 把 `204` 或 `205` 暴露为空 body）是一条空事件流：调用成功，流立即以 `kind: "eof"` 结束，且从不重试。
 - **`startupOpen` 与 `stream.open`**：元组第三项（`startupOpen`）是首次握手响应的快照；`stream.open` 会在之后重连时实时更新。如果重连握手以非 2xx 状态结束流，迭代器会 reject，`stream.closed` 报告 `HTTP_STATUS`，而 `stream.open.response.status` 保持该状态；请检查 `stream.open` 获取实时响应状态。

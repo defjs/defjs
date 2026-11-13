@@ -53,8 +53,8 @@ export interface PickInfo {
   readonly endpoints: readonly string[];
   /** Every client endpoint, a superset of `endpoints`. Absent means `endpoints`. Do not modify. */
   readonly members?: readonly string[];
-  /** `meta` from the definition, when it has one. Never sent over the wire. */
-  readonly meta?: { [key: string]: unknown };
+  /** `meta` from the definition, when it has one: the same object for every pick of every call. Read-only; never sent with the request. */
+  readonly meta?: { readonly [key: string]: unknown };
 }
 
 /**

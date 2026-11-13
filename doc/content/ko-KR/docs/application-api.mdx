@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts`는 비즈니스 로직이지 프로그램의 최상위가 아니므로 `placeAndLoadOrder`는 로그를 남기지 않습니다. error-first 튜플 `Promise<[Error, undefined] | [null, Checkout]>`를 반환하고, 각 단계의 fault를 실패한 단계로 감쌉니다(`new Error("create order", { cause: createErr })`). Go의 `fmt.Errorf("create order: %w", err)`와 같습니다. UI 이벤트 핸들러 같은 호출자가 `if (err)`를 확인하고 어떻게 보여 줄지 결정합니다.
+
 ---
 
 ## 3. 애플리케이션 프로젝트를 위한 핵심 패턴
@@ -69,7 +71,7 @@ src/
 타임아웃이나 `AbortSignal`을 전달하기 위해 `createClient(...)`로 새 `Client`를 생성하지 마세요. 대신 공유 클라이언트에서 인라인으로 단일 호출용 클라이언트를 파생하세요:
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### 공유 오류 엔벨로프 (`ApiError`)
 
-백엔드의 표준 오류 엔벨로프를 `src/api/models/`에 한 번 선언하고(`export const ApiError = struct.object(...)`), `src/api/services/`의 모든 `defineRequest`에 `error: ApiError`를 전달하세요. 요청이 비 `2xx` 상태를 반환할 때 `if (error.code === "HTTP_STATUS")`로 타입을 좁히면 `error.data.code`, `error.data.message`, `error.data.requestId`에 강타입으로 접근할 수 있습니다.
+백엔드의 표준 오류 엔벨로프를 `src/api/models/`에 한 번 선언하고(`export const ApiError = struct.object(...)`), `src/api/services/`의 모든 `defineRequest`에 `error: ApiError`를 전달하세요. 요청이 비 `2xx` 상태를 반환할 때 `if (err)` 안에서 `if (err.code === "HTTP_STATUS")`로 타입을 좁히면 `err.data.code`, `err.data.message`, `err.data.requestId`에 강타입으로 접근할 수 있습니다.
 
 자세한 내용은 [엔지니어링 컨벤션](/ko-KR/docs/best-practices), [퍼블릭 SDK 설계](/ko-KR/docs/public-sdk), [클라이언트](/ko-KR/docs/client), [인터셉터](/ko-KR/docs/interceptors)를 참조하세요.

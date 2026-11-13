@@ -73,12 +73,12 @@ Incluso cuando escribas una [capa de API de aplicación](/es-ES/docs/application
 
 Mantén cada responsabilidad en su capa correspondiente:
 
-| Responsabilidad                                                                                      | Dónde pertenece                                                          | Por qué                                                               |
-| :--------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- | :-------------------------------------------------------------------- |
-| Enrutar parámetros del llamador hacia `path`, `query`, `headers` y `body`                            | `builder` de la operación en `services/*.ts`                             | Función pura y síncrona del `input` actual                            |
-| Contexto definido por la aplicación para interceptores (`{ operation: "orders.create" }`)            | Campo `meta` de la operación en `services/*.ts`                          | `{ [key: string]: unknown }`; solo interno, nunca se envía por la red |
-| URLs base, cabeceras de autenticación (`Authorization`, firmas, XSRF), reintentos, balanceo de carga | `createClient(...)` en `client.ts`                                       | Política de ejecución específica del entorno y de la sesión           |
-| Plazos límite por llamada, cancelación (`signal`) y callbacks de progreso de transferencia           | `client({ signal, onDownloadProgress })` en línea en el punto de llamada | Acotado a una única invocación sin mutar el cliente compartido        |
+| Responsabilidad                                                                                      | Dónde pertenece                                                          | Por qué                                                                                                                                   |
+| :--------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
+| Enrutar parámetros del llamador hacia `path`, `query`, `headers` y `body`                            | `builder` de la operación en `services/*.ts`                             | Función pura y síncrona del `input` actual                                                                                                |
+| Contexto definido por la aplicación para interceptores (`{ operation: "orders.create" }`)            | Campo `meta` de la operación en `services/*.ts`                          | `{ [key: string]: unknown }`; de solo lectura y compartido por definición; nunca se envía con la petición; se reporta como `defjs.meta.*` |
+| URLs base, cabeceras de autenticación (`Authorization`, firmas, XSRF), reintentos, balanceo de carga | `createClient(...)` en `client.ts`                                       | Política de ejecución específica del entorno y de la sesión                                                                               |
+| Plazos límite por llamada, cancelación (`signal`) y callbacks de progreso de transferencia           | `client({ signal, onDownloadProgress })` en línea en el punto de llamada | Acotado a una única invocación sin mutar el cliente compartido                                                                            |
 
 ---
 

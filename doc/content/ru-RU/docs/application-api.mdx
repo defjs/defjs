@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` — это бизнес-логика, а не верхний уровень программы, поэтому `placeAndLoadOrder` ничего не пишет в лог. Она возвращает error-first кортеж `Promise<[Error, undefined] | [null, Checkout]>` и дополняет сбой каждого шага указанием на шаг, который не удался (`new Error("create order", { cause: createErr })`), как `fmt.Errorf("create order: %w", err)` в Go. Вызывающий код, например обработчик события интерфейса, проверяет `if (err)` и решает, как показать ошибку.
+
 ---
 
 ## 3. Ключевые паттерны для прикладных проектов
@@ -69,7 +71,7 @@ src/
 Никогда не создавайте новый `Client` через `createClient(...)` только ради передачи тайм-аута или `AbortSignal`. Вместо этого создавайте производный одноразовый клиент прямо в месте вызова из общего клиента:
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### Единый конверт ошибок (`ApiError`)
 
-Объявите стандартную структуру ошибки вашего бэкенда один раз (`export const ApiError = struct.object(...)`) в `src/api/models/` и передавайте `error: ApiError` в каждый вызов `defineRequest` в `src/api/services/`. Когда запрос возвращает статус, отличный от `2xx`, сужение типа `if (error.code === "HTTP_STATUS")` даёт строго типизированный доступ к `error.data.code`, `error.data.message` и `error.data.requestId`.
+Объявите стандартную структуру ошибки вашего бэкенда один раз (`export const ApiError = struct.object(...)`) в `src/api/models/` и передавайте `error: ApiError` в каждый вызов `defineRequest` в `src/api/services/`. Когда запрос возвращает статус, отличный от `2xx`, сужение типа `if (err.code === "HTTP_STATUS")` внутри `if (err)` даёт строго типизированный доступ к `err.data.code`, `err.data.message` и `err.data.requestId`.
 
 См. также разделы [Инженерные соглашения](/ru-RU/docs/best-practices), [Проектирование публичного SDK](/ru-RU/docs/public-sdk), [Клиент](/ru-RU/docs/client) и [Перехватчики](/ru-RU/docs/interceptors).

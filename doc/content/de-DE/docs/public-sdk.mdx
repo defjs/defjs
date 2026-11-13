@@ -139,7 +139,7 @@ Teile das SDK-Paket in `src/models/` (Datenstrukturen) und `src/services/` (nach
 
 ## 4. Wie externe Entwickler dein SDK nutzen
 
-Externe Anwendungen installieren `@company/s3-sdk` zusammen mit `@defjs/core`, konfigurieren ihren eigenen `Client` mit Endpunkt und Signatur-Interceptor und rufen deine exportierten Operationen direkt als reine Funktionen auf:
+Externe Anwendungen installieren `@company/s3-sdk` zusammen mit `@defjs/core`, konfigurieren ihren eigenen `Client` mit Endpunkt und Signatur-Interceptor und rufen deine exportierten Operationen direkt als reine Funktionen auf. Das Beispiel folgt der Fehlerbehandlung im Go-Stil: `syncReport` macht drei Aufrufe, benennt deshalb jeden Fehler nach seinem Schritt (`putErr`, `listErr`, `getErr`), gibt ein Error-first-Tupel zurück und umhüllt den fehlgeschlagenen Schritt mit `new Error("put object", { cause: putErr })`, wie Gos `fmt.Errorf("put object: %w", err)`. Nur `main`, die Spitze des Programms, behandelt den Fehler, indem sie ihn protokolliert:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

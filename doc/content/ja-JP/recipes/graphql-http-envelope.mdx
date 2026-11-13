@@ -5,7 +5,7 @@ description: GraphQL を HTTP 200 の送受信とアプリケーション側の�
 
 # GraphQL HTTP エンベロープのアンラップ
 
-Defjs は、GraphQL クライアントや独自の `errorPolicy` をコアに内蔵していません。HTTP 経由の GraphQL は、`builder` が `{ query, operationName, variables }` を送信する標準的な `POST` 操作としてモデル化します。エンベロープ Struct 上で `data` を `.nullish()` としてマークすることで、`data` の欠落と `data: null` の両方を構造バリデーションで受け入れられるようにし、アプリケーションのヘルパー関数内で `errors[]` をアンラップします。
+Defjs は、GraphQL クライアントや独自の `errorPolicy` をコアに内蔵していません。HTTP 経由の GraphQL は、`builder` が `{ query, operationName, variables }` を送信する標準的な `POST` 操作としてモデル化します。エンベロープ Struct 上で `data` を `.nullish()` としてマークすることで、`data` の欠落と `data: null` の両方を構造バリデーションで受け入れられるようにし、アプリケーションのヘルパー関数内で `errors[]` をアンラップします。このヘルパーはエラーファーストのタプル `Promise<[Error, undefined] | [null, Viewer | null]>` を返すため、呼び出し側は Defjs の Fault でも GraphQL エラーでも 1 つの `err` だけを処理すれば済みます。
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -32,5 +32,5 @@ Defjs は、GraphQL クライアントや独自の `errorPolicy` をコアに内
 ada viewer unavailable viewer unavailable
 ```
 
-- HTTP の `200` は、GraphQL エンベロープが正常に届いたことのみを意味します。`errors[]` に含まれるドメインエラー（`data: null` を伴う場合を含む）は、`RES_STRUCT_MISMATCH` Fault ではなくアプリケーションレベルの実行結果として処理します。
+- HTTP の `200` は、GraphQL エンベロープが正常に届いたことのみを意味します。`errors[]` に含まれるドメインエラー（`data: null` を伴う場合を含む）は、`RES_STRUCT_MISMATCH` Fault ではなくアプリケーションレベルの実行結果として処理します。ヘルパーはそれらを自身の `Error`（メッセージを連結したもの）として返し、単一の呼び出しで発生した Defjs の Fault はそのまま返します。失敗を示すために throw したり `undefined` を返したりすることはありません。
 - プロトコル固有のエンベロープ処理をアプリケーションのヘルパー関数に残す理由については、[コアアーキテクチャ](/ja-JP/docs/design-decisions) を参照してください。

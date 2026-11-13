@@ -16,7 +16,7 @@ description: defineEventStream、request options，同事件流 handle。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼叫回傳 `[null, stream, open]` 或者 `[error, undefined, open?]`。宣告過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`signal` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `signal` 同 `retry`，progress 同 WebSocket 欄位會忽略。
+呼叫回傳 `[null, stream, open]` 或者 `[err, undefined, open?]`。宣告過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`signal` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `signal` 同 `retry`，progress 同 WebSocket 欄位會忽略。
 
 ## EventStreamExecuteOptions
 
@@ -74,7 +74,7 @@ key 係 SSE event 名稱；冇 `event:` 欄位嘅訊息名為 `message`。冇 ke
 
 ## StreamAwaitResult
 
-`[null, stream, open]` 或者 `[error, undefined, open?]`。
+`[null, stream, open]` 或者 `[err, undefined, open?]`。
 
 ## EventStreamData
 

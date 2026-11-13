@@ -81,6 +81,7 @@ export function createOpenTelemetryHttpInterceptor(
           context: call.context,
           error,
           attributes: call.attributes,
+          meta: call.meta,
           extra: { "http.request.method": call.method },
         });
         if (span) endSpanWithError(span, error);

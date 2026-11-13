@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` هو منطق أعمال وليس أعلى البرنامج، لذلك لا تسجّل `placeAndLoadOrder` شيئاً. بل تُرجع مصفوفة يكون الخطأ في أولها، `Promise<[Error, undefined] | [null, Checkout]>`، وتغلّف خطأ كل خطوة باسم الخطوة التي فشلت (`new Error("create order", { cause: createErr })`)، على غرار `fmt.Errorf("create order: %w", err)` في Go. ويفحص المستدعي، مثل معالج حدث في واجهة المستخدم، `if (err)` ويقرر كيف يعرضه.
+
 ---
 
 ## 3. أنماط أساسية لمشاريع التطبيقات
@@ -69,7 +71,7 @@ src/
 لا تنشئ عميلاً جديداً عبر `createClient(...)` لمجرد تمرير مهلة زمنية أو `AbortSignal`. بدلاً من ذلك، اشتق عميلاً لاستدعاء واحد مباشرةً من عميلك المشترك:
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### غلاف الأخطاء المشترك (`ApiError`)
 
-صرح عن غلاف الخطأ القياسي لواجهتك الخلفية مرة واحدة (`export const ApiError = struct.object(...)`) في `src/api/models/` ومرّر `error: ApiError` في كل استدعاء `defineRequest` داخل `src/api/services/`. عندما يعيد الطلب رمز حالة غير `2xx`، يمنحك تضييق النوع عبر `if (error.code === "HTTP_STATUS")` وصولاً ذا أنواع صارمة إلى `error.data.code` و`error.data.message` و`error.data.requestId`.
+صرح عن غلاف الخطأ القياسي لواجهتك الخلفية مرة واحدة (`export const ApiError = struct.object(...)`) في `src/api/models/` ومرّر `error: ApiError` في كل استدعاء `defineRequest` داخل `src/api/services/`. عندما يعيد الطلب رمز حالة غير `2xx`، يمنحك تضييق النوع عبر `if (err.code === "HTTP_STATUS")` داخل `if (err)` وصولاً ذا أنواع صارمة إلى `err.data.code` و`err.data.message` و`err.data.requestId`.
 
 راجع [الاتفاقيات الهندسية](/ar/docs/best-practices)، و[تصميم حزم SDK العامة](/ar/docs/public-sdk)، و[العميل (Client)](/ar/docs/client)، و[المعترضات (Interceptors)](/ar/docs/interceptors).

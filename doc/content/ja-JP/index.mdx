@@ -31,7 +31,7 @@ Defjs は、TypeScript SDK における 2 つの責務を明確に分離しま�
 </Tab>
 </Tabs>
 
-`getHealth(client)` を呼び出すと実際の I/O が実行され、エラーファーストのタプルが返されます。デコードされた成功結果を読み出す前に、必ず `if (error)` をチェックして処理を抜ける（return する）設計になっています。
+`getHealth(client)` を呼び出すと実際の I/O が実行され、エラーファーストのタプルが返されます。デコードされた成功結果を読み出す前に、必ず `if (err)` をチェックして処理を抜ける（return する）設計になっています。
 
 ## なぜ定義とクライアントを分離するのか？
 
@@ -52,13 +52,13 @@ Defjs は、TypeScript SDK における 2 つの責務を明確に分離しま�
 
 すべての操作は、各トランスポートのライフサイクルに合わせた 3 要素のエラーファーストタプルを返します。
 
-| トランスポート                          | エントリポイント    | タプルの形状                   | ライフサイクルの管理責任                                               |
-| --------------------------------------- | ------------------- | ------------------------------ | ---------------------------------------------------------------------- |
-| **[HTTP](/ja-JP/docs/http)**            | `defineRequest`     | `[error, data, response]`      | 実行中のリクエストは `client({ signal })` 経由でキャンセル             |
-| **[SSE](/ja-JP/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | `await using` または `stream.close()` + `await stream.closed` で解放   |
-| **[WebSocket](/ja-JP/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | `await using` または `session.close()` + `await session.closed` で解放 |
+| トランスポート                          | エントリポイント    | タプルの形状                 | ライフサイクルの管理責任                                               |
+| --------------------------------------- | ------------------- | ---------------------------- | ---------------------------------------------------------------------- |
+| **[HTTP](/ja-JP/docs/http)**            | `defineRequest`     | `[err, data, response]`      | 実行中のリクエストは `client({ signal })` 経由でキャンセル             |
+| **[SSE](/ja-JP/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | `await using` または `stream.close()` + `await stream.closed` で解放   |
+| **[WebSocket](/ja-JP/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | `await using` または `session.close()` + `await session.closed` で解放 |
 
-HTTP の失敗時、タプルは `[error, undefined, undefined]` になります。これは、レスポンスのメタデータ（`HttpMeta`）を `error` 自身がすでに保持しているためです。SSE と WebSocket の場合、失敗前に起動時のスナップショットが取得できていれば、3 番目のスロットにそのスナップショットが格納されます。
+HTTP の失敗時、タプルは `[err, undefined, undefined]` になります。これは、レスポンスのメタデータ（`HttpMeta`）を `err` 自身がすでに保持しているためです。SSE と WebSocket の場合、失敗前に起動時のスナップショットが取得できていれば、3 番目のスロットにそのスナップショットが格納されます。
 
 ## 公式パッケージ
 

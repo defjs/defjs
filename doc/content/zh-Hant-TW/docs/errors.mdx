@@ -5,7 +5,7 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 
 # 錯誤處理
 
-在 Defjs 中，請求、傳輸與解碼失敗都不會在呼叫端拋出例外。每項操作都會回傳 error-first tuple（`[error, ...]`），其中 `error` 不是 `null`，就是具型別的 `Fault`（以 `error.code` 區分的原生 `Error` 實例）。
+在 Defjs 中，請求、傳輸與解碼失敗都不會在呼叫端拋出例外。每項操作都會回傳 error-first tuple（`[err, ...]`），其中 `err` 不是 `null`，就是具型別的 `Fault`（以 `err.code` 區分的原生 `Error` 實例）。請把這個變數命名為 `err`，並像 Go 一樣在呼叫後立刻檢查。
 
 TypeScript 拒絕的呼叫是例外：它沒有規定的結果，也不是 `Fault`。實際上它通常會以平台的 `TypeError` 拒絕。
 
@@ -33,9 +33,17 @@ TypeScript 拒絕的呼叫是例外：它沒有規定的結果，也不是 `Faul
 </Tab>
 </Tabs>
 
-### 為什麼 HTTP 失敗時 `error` 會包含回應中繼資料
+### 為什麼 HTTP 失敗時 `err` 會包含回應中繼資料
 
-HTTP 失敗時，tuple 是 `[error, undefined, undefined]`。收到的回應中繼資料（`status`、`statusText`、`headers`、`url`）會直接掛在 `error.response` 上，因此只把 `error` 交給日誌或錯誤處理常式，也不會遺失脈絡。
+HTTP 失敗時，tuple 是 `[err, undefined, undefined]`。收到的回應中繼資料（`status`、`statusText`、`headers`、`url`）會直接掛在 `err.response` 上，因此只把 `err` 交給日誌或錯誤處理常式，也不會遺失脈絡。
+
+### 每個錯誤只處理一次
+
+把 tuple 當成 Go 的 `(T, error)`。呼叫後立刻檢查 `if (err)`，並在該區塊內離開函式，讓成功路徑保持不縮排；依特定 code 的分支（`err.code === "HTTP_STATUS" && err.status === 404`，或 `switch (err.code)`）放在區塊內，就像 Go 把 `errors.Is` 與 `errors.As` 放在 `if err != nil` 裡。錯誤要嘛處理（記錄、顯示、退回備援），要嘛回傳，不要兩者都做。只有程式的最上層（`main`、UI 事件處理常式、測試）才處理；其他可能失敗的函式要回傳自己的 error-first tuple，即 `Promise<[Error, undefined] | [null, T]>`，絕不用 `undefined`、`null` 或 `false` 表示失敗。只有一個 Defjs 呼叫時，原樣回傳該 fault（Go 的 `return nil, err`）。有多個呼叫時，依步驟命名每個錯誤（`putErr`、`listErr`），再用 `new Error("put object", { cause: putErr })` 包裝，對應 `fmt.Errorf("put object: %w", err)`。只有函式庫契約要求時才拋出，例如 TanStack Query 的 `queryFn`。
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. Fault 類別與封閉錯誤碼集合
 
@@ -61,7 +69,7 @@ HTTP 失敗時，tuple 是 `[error, undefined, undefined]`。收到的回應中�
 | `RES_*`       | `number` | `HttpMeta`（**不包含 `body` 欄位**）            | 無                                      | `StructError` 或剖析錯誤 |
 | 其他錯誤碼    | 無       | 若已收到標頭則為 `HttpMeta`，否則為 `undefined` | 無                                      | 底層 `Error` / 中斷原因  |
 
-## 3. 收窄聯集錯誤本文 (error.data)
+## 3. 收窄聯集錯誤本文 (err.data)
 
 單一 `error` struct 會涵蓋所有非 `2xx` 狀態碼，因此當不同錯誤狀態碼回傳不同結構的 JSON 時，請宣告聯集：
 

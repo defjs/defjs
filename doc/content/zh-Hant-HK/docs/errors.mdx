@@ -5,7 +5,7 @@ description: 由 SDK 宣告服務錯誤契約，使用方應用程式按型別�
 
 # 錯誤處理
 
-喺 Defjs 入面，請求、傳輸層同解碼失敗都唔會喺呼叫處拋出例外。每個操作都會回傳一個 error-first tuple（`[error, ...]`），其中 `error` 要麼係 `null`，要麼就係一個帶型別嘅 `Fault`（以 `error.code` 作為判別標記嘅原生 `Error` 實例）。
+喺 Defjs 入面，請求、傳輸層同解碼失敗都唔會喺呼叫處拋出例外。每個操作都會回傳一個 error-first tuple（`[err, ...]`），其中 `err` 要麼係 `null`，要麼就係一個帶型別嘅 `Fault`（以 `err.code` 作為判別標記嘅原生 `Error` 實例）。個變數要叫 `err`，而且好似 Go 咁，一呼叫完就即刻檢查。
 
 TypeScript 拒絕嘅呼叫係例外：佢冇規定嘅結果，亦都唔係 `Fault`。實際上佢通常會以平台嘅 `TypeError` reject。
 
@@ -33,9 +33,17 @@ TypeScript 拒絕嘅呼叫係例外：佢冇規定嘅結果，亦都唔係 `Faul
 </Tab>
 </Tabs>
 
-### 點解 HTTP 失敗時 `error` 會附帶回應元數據？
+### 點解 HTTP 失敗時 `err` 會附帶回應元數據？
 
-喺 HTTP 失敗時，tuple 會係 `[error, undefined, undefined]`。所有伺服器回傳嘅回應元數據（`status`、`statusText`、`headers`、`url`）都會直接掛落 `error.response`。咁樣你可以直接將 `error` 單獨傳入日誌工具或錯誤處理函式，而完全唔會遺失除錯 context。
+喺 HTTP 失敗時，tuple 會係 `[err, undefined, undefined]`。所有伺服器回傳嘅回應元數據（`status`、`statusText`、`headers`、`url`）都會直接掛落 `err.response`。咁樣你可以直接將 `err` 單獨傳入日誌工具或錯誤處理函式，而完全唔會遺失除錯 context。
+
+### 每個錯誤只處理一次
+
+將 tuple 當成 Go 嘅 `(T, error)`。一呼叫完就檢查 `if (err)`，並喺個區塊入面離開函式，咁成功路徑就唔使縮排；針對特定 code 嘅分支（`err.code === "HTTP_STATUS" && err.status === 404`，或者 `switch (err.code)`）放喺區塊入面，就好似 Go 將 `errors.Is` 同 `errors.As` 放喺 `if err != nil` 入面。錯誤要麼處理（記錄、顯示、後備方案），要麼回傳，唔好兩樣都做。只有程式嘅頂層（`main`、UI 事件處理常式、測試）先處理；其他可能失敗嘅函式要回傳自己嘅 error-first tuple，即 `Promise<[Error, undefined] | [null, T]>`，絕對唔好用 `undefined`、`null` 或者 `false` 嚟表示失敗。只有一個 Defjs 呼叫嗰陣，原樣回傳個 fault（Go 嘅 `return nil, err`）。有幾個呼叫嗰陣，就按步驟命名每個錯誤（`putErr`、`listErr`），再用 `new Error("put object", { cause: putErr })` 包裝，即係 `fmt.Errorf("put object: %w", err)` 嘅對應寫法。只有函式庫契約要求嗰陣先 throw，例如 TanStack Query 嘅 `queryFn`。
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. Fault 類別與封閉代碼集
 
@@ -61,7 +69,7 @@ TypeScript 拒絕嘅呼叫係例外：佢冇規定嘅結果，亦都唔係 `Faul
 | `RES_*`       | `number` | `HttpMeta`（**冇 `body` 欄位**）                     | 無                                        | `StructError` 或解析器錯誤  |
 | 其他代碼      | 無       | 若已收到 headers 則為 `HttpMeta`，否則為 `undefined` | 無                                        | 底層原生 `Error` / 中斷原因 |
 
-## 3. 收窄 Union 錯誤 Body（`error.data`）
+## 3. 收窄 Union 錯誤 Body（`err.data`）
 
 因為單一 `error` struct 涵蓋所有非 `2xx` 狀態碼，當唔同錯誤狀態碼回傳唔同嘅 JSON 結構時，可以使用 union 宣告：
 

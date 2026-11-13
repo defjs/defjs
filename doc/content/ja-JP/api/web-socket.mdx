@@ -16,7 +16,7 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`retry` で、HTTP の進捗フィールドは無視します。
+呼び出しは `[null, session, connection]` または `[err, undefined, connection?]` を返します。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`retry` で、HTTP の進捗フィールドは無視します。
 
 `beforeConnect`、`heartbeat`、`protocols`、`retry` は、それぞれがその呼び出しに限り、クライアントレベルのオプションを全体として置き換えます。protocols の優先順位は、派生したクライアント、`withWebSocketProtocols`、定義の `protocols` の順です。`heartbeat.timeoutMs` は確認待ちであり、リクエストの期限ではありません。
 
@@ -88,7 +88,7 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 ## SocketAwaitResult
 
-`[null, session, connection]` または `[error, undefined, connection?]` です。
+`[null, session, connection]` または `[err, undefined, connection?]` です。
 
 ## ManualSocketCloseReason
 

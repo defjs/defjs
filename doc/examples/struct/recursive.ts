@@ -13,10 +13,17 @@ const CategoryStruct: Struct<Category> = struct.object({
   },
 });
 
-const [error, tree] = struct.parse(CategoryStruct, {
-  name: "tools",
-  children: [{ name: "hammers", children: [] }],
-});
+function main() {
+  const [err, tree] = struct.parse(CategoryStruct, {
+    name: "tools",
+    children: [{ name: "hammers", children: [] }],
+  });
+  if (err) {
+    console.error(err.message);
+    return;
+  }
+  console.log(tree.children[0]?.name);
+}
 
-if (!error) console.log(tree.children[0]?.name);
+main();
 // #endregion

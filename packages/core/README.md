@@ -36,9 +36,9 @@ import { getOrder } from "./orders-sdk.ts";
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, order] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(String(error), error.code);
+  const [err, order] = await getOrder(client, { id: 1 });
+  if (err) {
+    console.error(String(err), err.code);
     return;
   }
   console.log(order.status);
@@ -47,7 +47,7 @@ async function main() {
 void main();
 ```
 
-Calling `getOrder(client, { id: 1 })` validates, builds, and sends the request. `client({ signal })` returns a `Client` value for one call and does not perform I/O. Return before reading the success value when `error` is set. Once published, import `getOrder` from your SDK package instead of the local file — see [Build and publish an SDK](https://defjs.lyz.cloud/recipes/publish-http-sdk).
+Calling `getOrder(client, { id: 1 })` validates, builds, and sends the request. `client({ signal })` returns a `Client` value for one call and does not perform I/O. Check `err` right after the call and return inside that block, before reading the success value. A function that can fail returns its own `[err, value]` tuple rather than `undefined` or `null`. Once published, import `getOrder` from your SDK package instead of the local file — see [Build and publish an SDK](https://defjs.lyz.cloud/recipes/publish-http-sdk).
 
 ## Rules that matter
 
@@ -55,7 +55,7 @@ Calling `getOrder(client, { id: 1 })` validates, builds, and sends the request. 
 - Per-call options (`signal`, `onUploadProgress`, `onDownloadProgress`, `beforeConnect`, `protocols`, `heartbeat`, `retry`) go through `client(options)`, which returns a client value for one call and performs no I/O. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline. See [Client](https://defjs.lyz.cloud/docs/client).
 - `input` declares parameters; a synchronous, pure `builder` places them on `path`, `query`, `headers`, and `body`. Every definition with `input` requires an explicit `builder`.
 - Structs validate at runtime. `output` is the 2xx body, `error` every other status; omit a side and that body is never read.
-- Failures are returned as `Fault` instances in an error-first tuple — `HTTP_STATUS`, `REQ_*`, `NET_*`, `RES_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `String(error)` gives `DefjsFault: <message>`, because every fault is named `DefjsFault`; `error.code` and the cause chain stay structured for logs.
+- Failures are returned as `Fault` instances in an error-first tuple — `HTTP_STATUS`, `REQ_*`, `NET_*`, `RES_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `String(err)` gives `DefjsFault: <message>`, because every fault is named `DefjsFault`; `err.code` and the cause chain stay structured for logs.
 - Retries are off by default. `withRetry` turns them on with one policy for HTTP, SSE, and WebSocket; a streaming request body never retries. Defaults, endpoint selection, and health filtering are described in [Load balancing](https://defjs.lyz.cloud/docs/load-balancing).
 - A timeout or cancellation does not prove the server missed a write. Keep an application idempotency contract before replaying writes.
 - The caller owns every returned SSE stream and WebSocket session. Both are `AsyncDisposable`: use `await using`, or call `close()` and await `closed`.

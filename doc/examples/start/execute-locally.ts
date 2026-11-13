@@ -28,16 +28,16 @@ const client = createClient(
 );
 
 async function main() {
-  const [error, order, response] = await getOrder(
+  const [err, order, response] = await getOrder(
     client({ signal: AbortSignal.timeout(5_000) }),
     { id: 7 },
   );
-  if (error?.code === "HTTP_STATUS" && error.status === 404) {
-    console.log(error.data.message);
-    return;
-  }
-  if (error) {
-    console.error(error.code);
+  if (err) {
+    if (err.code === "HTTP_STATUS" && err.status === 404) {
+      console.log(err.data.message);
+      return;
+    }
+    console.error(err.code);
     return;
   }
   console.log(`Loaded ${order.status} from ${response.status}`);

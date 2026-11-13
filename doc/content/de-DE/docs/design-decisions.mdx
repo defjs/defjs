@@ -74,12 +74,12 @@ Defjs wählt die Response-Seite über `response.ok`: `output` für `2xx`, `error
 | Medientyp stimmt nicht mit der deklarierten JSON-Repräsentation überein | `RES_MEDIA_TYPE_INVALID` (zuerst geprüft; der Body wird nie gelesen, und ob Inhalt vorhanden ist, macht keinen Unterschied) |
 | Bytes können nicht als deklarierte Repräsentation dekodiert werden      | `RES_DECODE_FAILED` (leere JSON-Bytes eingeschlossen)                                                                       |
 | Dekodierter Wert verletzt die `struct`-Validierung                      | `RES_STRUCT_MISMATCH`                                                                                                       |
-| Nicht-`2xx`-Status mit dekodiertem `error`-Struct                       | `HTTP_STATUS` mit typisiertem `error.data`                                                                                  |
-| Nicht-`2xx`-Status mit weggelassenem `error`                            | `HTTP_STATUS` mit `error.data: undefined`                                                                                   |
+| Nicht-`2xx`-Status mit dekodiertem `error`-Struct                       | `HTTP_STATUS` mit typisiertem `err.data`                                                                                    |
+| Nicht-`2xx`-Status mit weggelassenem `error`                            | `HTTP_STATUS` mit `err.data: undefined`                                                                                     |
 
 ### Regel 4: Ein fehlgeschlagener Decode besitzt keinen Body
 
-Ein Body existiert erst, nachdem Dekodierung und Validierung erfolgreich durchlaufen wurden. Schlägt das Dekodieren fehl, ist die `response` des Faults als `HttpMeta` typisiert (welches keine `body`-Eigenschaft besitzt), und der Parser-/Validierungsfehler wird an `fault.cause` angehängt.
+Ein Body existiert erst, nachdem Dekodierung und Validierung erfolgreich durchlaufen wurden. Schlägt das Dekodieren fehl, ist die `response` des Faults als `HttpMeta` typisiert (welches keine `body`-Eigenschaft besitzt), und der Parser-/Validierungsfehler wird an `err.cause` angehängt.
 
 ### Regel 5: Das Weglassen einer Seite schließt das Lesen aus
 
@@ -93,9 +93,9 @@ Lässt du `output` weg, werden `2xx`-Bodys niemals gelesen. Lässt du `error` we
 
 Alle drei Transporte geben ein dreiteiliges Error-first-Tupel zurück, statt an der Aufrufstelle Exceptions zu werfen:
 
-- **HTTP** → `[error, data, response]` — dekodierte Payload + `DecodedResponse<T>` (`HttpMeta`, wenn `output` weggelassen wurde).
-- **SSE** → `[error, stream, open]` — `EventStreamHandle` + anfänglicher Handshake-Snapshot.
-- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + anfänglicher Verbindungs-Snapshot.
+- **HTTP** → `[err, data, response]` — dekodierte Payload + `DecodedResponse<T>` (`HttpMeta`, wenn `output` weggelassen wurde).
+- **SSE** → `[err, stream, open]` — `EventStreamHandle` + anfänglicher Handshake-Snapshot.
+- **WebSocket** → `[err, session, connection]` — `WebSocketSession` + anfänglicher Verbindungs-Snapshot.
 
 Clients verwalten Konfiguration, keine aktiven Verbindungen. Der Aufrufer, der einen HTTP-Request, einen SSE-Stream oder eine WebSocket-Sitzung startet, ist auch für den Abbruch oder das Schließen verantwortlich (`AbortSignal` bei HTTP; `await using` oder `.close()` + `await .closed` bei SSE und WebSocket).
 

@@ -16,7 +16,7 @@ description: defineWebSocket、会话与请求选项。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-调用返回 `[null, session, connection]` 或 `[error, undefined, connection?]`。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `retry`，忽略 HTTP 进度字段。
+调用返回 `[null, session, connection]` 或 `[err, undefined, connection?]`。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `retry`，忽略 HTTP 进度字段。
 
 `beforeConnect`、`heartbeat`、`protocols` 和 `retry` 各自整体覆盖该次调用的 Client 级选项。协议优先级依次为：派生的 Client、`withWebSocketProtocols`、定义的 `protocols`。`heartbeat.timeoutMs` 是等待确认的时间，不是请求期限。
 
@@ -88,7 +88,7 @@ description: defineWebSocket、会话与请求选项。
 
 ## SocketAwaitResult
 
-`[null, session, connection]` 或 `[error, undefined, connection?]`。
+`[null, session, connection]` 或 `[err, undefined, connection?]`。
 
 ## ManualSocketCloseReason
 

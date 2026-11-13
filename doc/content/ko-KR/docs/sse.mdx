@@ -37,7 +37,7 @@ SDK는 `defineEventStream`을 사용하여 Server-Sent Events(SSE) 작업을 선
 
 ## 2. 핸드셰이크 열기 및 튜플 형태
 
-초기 HTTP 응답이 `2xx`이고 미디어 타입이 `text/event-stream`일 때 비로소 `[error, stream, startupOpen]` 튜플이 반환됩니다:
+초기 HTTP 응답이 `2xx`이고 미디어 타입이 `text/event-stream`일 때 비로소 `[err, stream, startupOpen]` 튜플이 반환됩니다:
 
 <Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
@@ -54,7 +54,7 @@ SDK는 `defineEventStream`을 사용하여 Server-Sent Events(SSE) 작업을 선
 </Tab>
 </Tabs>
 
-- **비`2xx` 핸드셰이크**: `HTTP_STATUS`를 반환합니다. `error` struct가 선언되어 있으면 `error.data`는 디코딩된 본문입니다. 그 본문을 디코딩할 수 없으면 HTTP와 같이 디코딩 결함이 결과가 됩니다. JSON 선언이 다른 미디어 타입을 만나면(예를 들어 게이트웨이의 HTML `503`) `RES_MEDIA_TYPE_INVALID`, 읽을 수 없거나 파싱할 수 없는 본문은 `RES_DECODE_FAILED`, struct와 맞지 않는 본문은 `RES_STRUCT_MISMATCH`입니다. `status`와 `response`는 핸드셰이크 상태를 메타데이터로 담고 `cause`가 이유를 갖습니다. 인터셉터, `shouldRetry`, 재연결에서 실패한 스트림의 `closed`는 그 응답에 대해 여전히 `HTTP_STATUS`를 받고, 그 `cause`도 같은 이유이므로 게이트웨이 `503`은 본문 모양과 관계없이 재시도됩니다. 선언된 `error`는 결함을 보고하기 전에 클라이언트가 핸드셰이크 본문을 끝까지 읽게 하므로, 서버는 모든 비`2xx` 응답을 끝내야 합니다. 상태에 내용이 없거나(`304`) JSON 선언이 JSON이 아닌 미디어 타입을 만나면 본문을 읽지 않습니다. 읽기 시작한 본문이 끝나지 않으면 호출자의 `signal`이 abort하거나 플랫폼이 연결을 끊을 때까지 호출이 대기합니다. 끊긴 연결은 읽을 수 없는 본문이므로 호출은 플랫폼 실패를 `cause`로 한 `RES_DECODE_FAILED`를 반환합니다. `attemptTimeoutMs`는 그 읽기를 제한하지 않습니다. 선언된 `error`가 없으면 본문은 읽지 않고 취소됩니다. `withRetry`가 없으면 현재 작업이 끝납니다. 있으면 `502`, `503`, `504` 핸드셰이크는 연결 거부와 같이 4절의 규칙으로 재시도되고, 그 밖의 상태는 `retryable: false`와 그 `status`와 함께 `shouldRetry`에 넘어가므로, 함수가 달리 말하지 않으면 스트림이 끝납니다. 소진되었거나 거절된 재시도는 `HTTP_STATUS`로 끝납니다. 다음 작업은 엔드포인트를 새로 선택하므로 밸런서가 다른 엔드포인트를 선택할 수 있습니다.
+- **비`2xx` 핸드셰이크**: `HTTP_STATUS`를 반환합니다. `error` struct가 선언되어 있으면 `err.data`는 디코딩된 본문입니다. 그 본문을 디코딩할 수 없으면 HTTP와 같이 디코딩 결함이 결과가 됩니다. JSON 선언이 다른 미디어 타입을 만나면(예를 들어 게이트웨이의 HTML `503`) `RES_MEDIA_TYPE_INVALID`, 읽을 수 없거나 파싱할 수 없는 본문은 `RES_DECODE_FAILED`, struct와 맞지 않는 본문은 `RES_STRUCT_MISMATCH`입니다. `status`와 `response`는 핸드셰이크 상태를 메타데이터로 담고 `cause`가 이유를 갖습니다. 인터셉터, `shouldRetry`, 재연결에서 실패한 스트림의 `closed`는 그 응답에 대해 여전히 `HTTP_STATUS`를 받고, 그 `cause`도 같은 이유이므로 게이트웨이 `503`은 본문 모양과 관계없이 재시도됩니다. 선언된 `error`는 결함을 보고하기 전에 클라이언트가 핸드셰이크 본문을 끝까지 읽게 하므로, 서버는 모든 비`2xx` 응답을 끝내야 합니다. 상태에 내용이 없거나(`304`) JSON 선언이 JSON이 아닌 미디어 타입을 만나면 본문을 읽지 않습니다. 읽기 시작한 본문이 끝나지 않으면 호출자의 `signal`이 abort하거나 플랫폼이 연결을 끊을 때까지 호출이 대기합니다. 끊긴 연결은 읽을 수 없는 본문이므로 호출은 플랫폼 실패를 `cause`로 한 `RES_DECODE_FAILED`를 반환합니다. `attemptTimeoutMs`는 그 읽기를 제한하지 않습니다. 선언된 `error`가 없으면 본문은 읽지 않고 취소됩니다. `withRetry`가 없으면 현재 작업이 끝납니다. 있으면 `502`, `503`, `504` 핸드셰이크는 연결 거부와 같이 4절의 규칙으로 재시도되고, 그 밖의 상태는 `retryable: false`와 그 `status`와 함께 `shouldRetry`에 넘어가므로, 함수가 달리 말하지 않으면 스트림이 끝납니다. 소진되었거나 거절된 재시도는 `HTTP_STATUS`로 끝납니다. 다음 작업은 엔드포인트를 새로 선택하므로 밸런서가 다른 엔드포인트를 선택할 수 있습니다.
 - **잘못된 콘텐츠 타입**: 미디어 타입이 `text/event-stream`이 아닌 `2xx` 핸드셰이크는 `204`나 `205`를 포함해 `RES_MEDIA_TYPE_INVALID`를 반환합니다.
 - **본문 없음**: `text/event-stream`이면서 본문이 없는 `2xx` 핸드셰이크(Node.js와 Bun은 `204`나 `205`를 null 본문으로 드러냅니다)는 빈 이벤트 스트림입니다. 호출은 성공하고 스트림은 즉시 `kind: "eof"`로 끝나며, 재시도되지 않습니다.
 - **`startupOpen` vs. `stream.open`**: 튜플의 세 번째 항목(`startupOpen`)은 첫 번째 핸드셰이크 응답의 스냅샷입니다. 반면 `stream.open`은 스트림이 나중에 재연결될 때 실시간으로 갱신됩니다. 재연결 핸드셰이크가 2xx가 아닌 상태로 스트림을 끝내면 이터레이터가 reject되고 `stream.closed`는 `HTTP_STATUS`를 보고하지만, `stream.open.response.status`는 그 상태를 유지합니다. 해당 실시간 응답 상태는 `stream.open`에서 확인하세요.

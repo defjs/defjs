@@ -5,7 +5,7 @@ description: 為你的 SDK 設計 HTTP 操作，並以應用程式掌控的設�
 
 # HTTP 操作
 
-SDK 開發者用 `defineRequest` 定義每項 HTTP 操作：HTTP 方法、路徑模板、`input` schema、同步的 `builder`，以及 `output` / `error` 回應 schema。取用端應用程式匯入該操作、傳入自己設定好的 `Client`，並處理回傳的 `[error, data, response]` tuple。
+SDK 開發者用 `defineRequest` 定義每項 HTTP 操作：HTTP 方法、路徑模板、`input` schema、同步的 `builder`，以及 `output` / `error` 回應 schema。取用端應用程式匯入該操作、傳入自己設定好的 `Client`，並處理回傳的 `[err, data, response]` tuple。
 
 ## 1. 定義操作並呼叫它
 
@@ -38,7 +38,7 @@ SDK 開發者用 `defineRequest` 定義每項 HTTP 操作：HTTP 方法、路徑
 ### SDK 設計最佳實務
 
 - **每項定義只對應一項操作**：讓每個方法、路徑與契約各自成為一份定義，應用程式才能對未使用的操作進行 Tree-shaking。
-- **攔截器需要脈絡時附加 `meta`**：`meta` 是 `{ [key: string]: unknown }`，由應用程式自行定義，例如 `{ operation: "orders.read" }`。它只會流向攔截器與負載平衡器（`request.meta`、`PickInfo.meta`）；Defjs 從不讀取、複製它，也不會透過網路傳送它。
+- **攔截器需要脈絡時附加 `meta`**：`meta` 是 `{ [key: string]: unknown }`，由應用程式自行定義，例如 `{ operation: "orders.read" }`。它會以單一唯讀物件（每個定義一個）傳到攔截器與負載平衡器（`request.meta`、`PickInfo.meta`），並由每次呼叫、每次嘗試與每個 client 共用。唯讀型別是淺層的（只作用於第一層），因此每次呼叫的狀態應放在攔截器的閉包裡，而不是 `meta` 或其巢狀物件中。具名的 `meta` 型別必須是 `type` 別名（type alias）：TypeScript 不會把 `interface` 指派給索引簽章。Defjs core 從不讀取或複製 `meta`，也不會隨請求送出；URL、標頭或本文的值則經由 `builder` 處理。`@defjs/opentelemetry-server` 會把每個鍵以 `defjs.meta.<key>` 屬性回報到 span 與失敗日誌，因此請把機密與個人資料排除在 `meta` 之外。
 - **絕不把 Client 嵌進 SDK**：只匯出定義、`struct` schema 與型別。
 
 ## 2. URL 解析與路徑參數

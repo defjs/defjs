@@ -22,9 +22,9 @@ const client = createClient(
   ),
 );
 async function main() {
-  const [error, order] = await getOrder(client, { id: 7 });
-  if (error) {
-    console.error(error.code);
+  const [err, order] = await getOrder(client, { id: 7 });
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(order.status);

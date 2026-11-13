@@ -74,12 +74,12 @@ description: كيف يجعل الفصل بين تعريفات API وتنفيذ �
 | ترويسة Media type لا تطابق تمثيل JSON المعلن   | `RES_MEDIA_TYPE_INVALID` (يُفحص أولًا؛ لا يُقرأ الجسم أبدًا، ووجود المحتوى أو غيابه لا يغيّر شيئًا) |
 | تعذر فك ترميز البايتات بالتمثيل المعلن         | `RES_DECODE_FAILED` (بما فيها بايتات JSON الفارغة)                                                  |
 | القيمة المفكوكة لا تطابق مخطط `struct`         | `RES_STRUCT_MISMATCH`                                                                               |
-| حالة غير `2xx` مع فك ترميز كائن `error` المعلن | `HTTP_STATUS` مع بيانات `error.data` محددة الأنواع                                                  |
-| حالة غير `2xx` دون الإعلان عن `error`          | `HTTP_STATUS` مع `error.data: undefined`                                                            |
+| حالة غير `2xx` مع فك ترميز كائن `error` المعلن | `HTTP_STATUS` مع بيانات `err.data` محددة الأنواع                                                    |
+| حالة غير `2xx` دون الإعلان عن `error`          | `HTTP_STATUS` مع `err.data: undefined`                                                              |
 
 ### القاعدة 4: فك الترميز الفاشل ليس له جسم استجابة
 
-لا يتوفر جسم الاستجابة إلا بعد اجتياز فك الترميز والتحقق بنجاح. وعند فشل فك الترميز، يكون نوع كائن `response` في الخطأ هو `HttpMeta` (الذي لا يحتوي على خاصية `body`)، ويُرفق خطأ المحلل/التحقق داخل `fault.cause`.
+لا يتوفر جسم الاستجابة إلا بعد اجتياز فك الترميز والتحقق بنجاح. وعند فشل فك الترميز، يكون نوع كائن `response` في الخطأ هو `HttpMeta` (الذي لا يحتوي على خاصية `body`)، ويُرفق خطأ المحلل/التحقق داخل `err.cause`.
 
 ### القاعدة 5: إغفال أحد الجانبين يعني الامتناع عن قراءته
 
@@ -93,9 +93,9 @@ description: كيف يجعل الفصل بين تعريفات API وتنفيذ �
 
 تُرجع جميع وسائل النقل الثلاث مصفوفة الخطأ أولاً بدلاً من إلقاء استثناءات (exceptions) في مكان الاستدعاء:
 
-- **HTTP** ← `[error, data, response]` — الحمولة المفكوكة + `DecodedResponse<T>` (`HttpMeta` عند إغفال `output`).
-- **SSE** ← `[error, stream, open]` — مقبض `EventStreamHandle` + لقطة مصافحة الاتصال الأولية.
-- **WebSocket** ← `[error, session, connection]` — جلسة `WebSocketSession` + لقطة الاتصال الأولية.
+- **HTTP** ← `[err, data, response]` — الحمولة المفكوكة + `DecodedResponse<T>` (`HttpMeta` عند إغفال `output`).
+- **SSE** ← `[err, stream, open]` — مقبض `EventStreamHandle` + لقطة مصافحة الاتصال الأولية.
+- **WebSocket** ← `[err, session, connection]` — جلسة `WebSocketSession` + لقطة الاتصال الأولية.
 
 تحمل كائنات Client الإعدادات ولا تحمل اتصالات نشطة. فالمستدعي الذي يبدأ طلب HTTP أو تدفق SSE أو جلسة WebSocket هو المسؤول عن إلغائها أو إغلاقها (`AbortSignal` لـ HTTP، و`await using` أو `.close()` مع `await .closed` لـ SSE وWebSocket).
 

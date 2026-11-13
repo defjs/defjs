@@ -143,7 +143,7 @@ export type { EventStreamRequestShape } from "../internal/builder_types";
  *
  * - On success: `[null, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live.
  *
- * - On failure: `[fault, undefined, open]`. `open` carries the response snapshot when the failure happened after a response arrived, for example a non-2xx handshake, and is `undefined` otherwise.
+ * - On failure: `[err, undefined, open]`. `open` carries the response snapshot when the failure happened after a response arrived, for example a non-2xx handshake, and is `undefined` otherwise.
  *
  * - `TError` is the declared `error` struct. It types the decoded error body on the fault.
  *
@@ -157,9 +157,9 @@ export type StreamAwaitResult<
   TEvent,
   TError extends AnyStruct | undefined = undefined,
 > =
-  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
+  | [err: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
   | [
-      error: Fault<TError> | HttpStatusFaultOf<undefined>,
+      err: Fault<TError> | HttpStatusFaultOf<undefined>,
       stream: undefined,
       open: EventStreamOpenInfo | undefined,
     ];

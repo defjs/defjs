@@ -31,7 +31,7 @@ Defjs separa los dos lados de un SDK de TypeScript:
 </Tab>
 </Tabs>
 
-Al llamar a `getHealth(client)` se realiza la E/S y se resuelve una tupla con el error por delante (_error-first_). Comprueba `if (error)` y sal de la función antes de leer el resultado decodificado.
+Al llamar a `getHealth(client)` se realiza la E/S y se resuelve una tupla con el error por delante (_error-first_). Comprueba `if (err)` y sal de la función antes de leer el resultado decodificado.
 
 ## ¿Por qué separar las definiciones de los clientes?
 
@@ -52,13 +52,13 @@ Al llamar a `getHealth(client)` se realiza la E/S y se resuelve una tupla con el
 
 Cada operación devuelve una tupla de tres elementos con el error en la primera posición, adaptada al ciclo de vida de su transporte:
 
-| Transporte                              | Punto de entrada    | Forma de la tupla              | Control del ciclo de vida                                                      |
-| --------------------------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------------ |
-| **[HTTP](/es-ES/docs/http)**            | `defineRequest`     | `[error, data, response]`      | Cancela el trabajo en curso mediante `client({ signal })`                      |
-| **[SSE](/es-ES/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | Libera recursos con `await using` o `stream.close()` + `await stream.closed`   |
-| **[WebSocket](/es-ES/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | Libera recursos con `await using` o `session.close()` + `await session.closed` |
+| Transporte                              | Punto de entrada    | Forma de la tupla            | Control del ciclo de vida                                                      |
+| --------------------------------------- | ------------------- | ---------------------------- | ------------------------------------------------------------------------------ |
+| **[HTTP](/es-ES/docs/http)**            | `defineRequest`     | `[err, data, response]`      | Cancela el trabajo en curso mediante `client({ signal })`                      |
+| **[SSE](/es-ES/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | Libera recursos con `await using` o `stream.close()` + `await stream.closed`   |
+| **[WebSocket](/es-ES/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | Libera recursos con `await using` o `session.close()` + `await session.closed` |
 
-Si una petición HTTP falla, la tupla es `[error, undefined, undefined]` porque `error` ya incluye los metadatos de respuesta `HttpMeta`. Para SSE y WebSocket, la tercera posición contiene la instantánea de conexión siempre que se haya capturado una antes del fallo.
+Si una petición HTTP falla, la tupla es `[err, undefined, undefined]` porque `err` ya incluye los metadatos de respuesta `HttpMeta`. Para SSE y WebSocket, la tercera posición contiene la instantánea de conexión siempre que se haya capturado una antes del fallo.
 
 ## Paquetes oficiales
 

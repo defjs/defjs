@@ -98,7 +98,7 @@ Defjs 嚴格區分**欄位是否存在**（`undefined`）與**值是否可為 nu
   examples/struct/parse-failures.ts#example
 </include>
 
-每個 `StructIssue` 包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 與 `message`。預設訊息不會寫出收到的值，只報告它的*型別*，但 path 會保留動態 record 的鍵，可能含有敏感值。`String(error)` 與 `error.prettify()` 不具備遮蔽敏感資訊的作用；寫日誌時請使用安全欄位的允許清單，並將原始的 `received` 值與自訂訊息視為敏感資料。
+每個 `StructIssue` 包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 與 `message`。預設訊息不會寫出收到的值，只報告它的*型別*，但 path 會保留動態 record 的鍵，可能含有敏感值。`String(err)` 與 `err.prettify()` 不具備遮蔽敏感資訊的作用；寫日誌時請使用安全欄位的允許清單，並將原始的 `received` 值與自訂訊息視為敏感資料。
 
 ## 6. 建構子快速參考
 

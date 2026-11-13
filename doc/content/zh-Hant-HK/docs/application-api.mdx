@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` 係業務邏輯，而唔係程式頂層，所以 `placeAndLoadOrder` 唔會寫 log。佢會回傳 error-first tuple，即 `Promise<[Error, undefined] | [null, Checkout]>`，並將每個步驟嘅 fault 連同失敗嘅步驟一齊包裝（`new Error("create order", { cause: createErr })`），就好似 Go 嘅 `fmt.Errorf("create order: %w", err)`。呼叫方（例如 UI 事件處理常式）檢查 `if (err)`，再決定點樣顯示。
+
 ---
 
 ## 3. 應用程式項目嘅關鍵模式
@@ -69,7 +71,7 @@ src/
 千祈唔好為咗傳入超時或者 `AbortSignal` 而重新呼叫 `createClient(...)` 開個新 `Client`。直接由共用嘅 client 內聯派生出單次呼叫專用嘅 client 就得：
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### 共用錯誤外層結構（`ApiError`）
 
-喺 `src/api/models/` 入面統一宣告一次後端嘅標準錯誤結構（`export const ApiError = struct.object(...)`），並喺 `src/api/services/` 嘅每個 `defineRequest` 傳入 `error: ApiError`。當請求回傳非 `2xx` 狀態碼時，只要用 `if (error.code === "HTTP_STATUS")` 收窄型別，就可以用強型別安全讀取 `error.data.code`、`error.data.message` 同 `error.data.requestId`。
+喺 `src/api/models/` 入面統一宣告一次後端嘅標準錯誤結構（`export const ApiError = struct.object(...)`），並喺 `src/api/services/` 嘅每個 `defineRequest` 傳入 `error: ApiError`。當請求回傳非 `2xx` 狀態碼時，只要喺 `if (err)` 入面用 `if (err.code === "HTTP_STATUS")` 收窄型別，就可以用強型別安全讀取 `err.data.code`、`err.data.message` 同 `err.data.requestId`。
 
 另見 [工程規範](/zh-Hant-HK/docs/best-practices)、[公開 SDK 設計](/zh-Hant-HK/docs/public-sdk)、[Client](/zh-Hant-HK/docs/client) 同 [攔截器](/zh-Hant-HK/docs/interceptors)。

@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` 是业务逻辑，不是程序顶层，所以 `placeAndLoadOrder` 不记录日志。它返回错误优先元组 `Promise<[Error, undefined] | [null, Checkout]>`，并为每一步的 Fault 补上失败步骤的上下文（`new Error("create order", { cause: createErr })`），就像 Go 的 `fmt.Errorf("create order: %w", err)`。调用方（例如 UI 事件处理函数）检查 `if (err)`，再决定如何展示。
+
 ---
 
 ## 3. 业务项目中的关键实践
@@ -69,7 +71,7 @@ src/
 需要为某个具体请求设置超时或传入 `AbortSignal` 时，不需要重新调用 `createClient(...)`，直接对共享的 `apiClient` 进行内联单次派生即可：
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### 复用统一业务错误体（`ApiError`）
 
-在 `src/api/models/` 中统一声明后端标准错误响应结构（`export const ApiError = struct.object(...)`），并在所有业务操作的 `defineRequest` 中指定 `error: ApiError`。当接口返回非 `2xx` 状态码时，只需判断 `if (error.code === "HTTP_STATUS")`，即可安全读取强类型的 `error.data.code`、`error.data.message` 与 `error.data.requestId`。
+在 `src/api/models/` 中统一声明后端标准错误响应结构（`export const ApiError = struct.object(...)`），并在所有业务操作的 `defineRequest` 中指定 `error: ApiError`。当接口返回非 `2xx` 状态码时，只需在 `if (err)` 内判断 `if (err.code === "HTTP_STATUS")`，即可安全读取强类型的 `err.data.code`、`err.data.message` 与 `err.data.requestId`。
 
 另见 [工程规范](/zh-Hans/docs/best-practices)、[公共 SDK 设计](/zh-Hans/docs/public-sdk)、[Client](/zh-Hans/docs/client) 与 [拦截器](/zh-Hans/docs/interceptors)。

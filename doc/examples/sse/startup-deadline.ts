@@ -12,20 +12,20 @@ const deployEvents = defineEventStream({
   events: { line: struct.string() },
 });
 
-async function openDuringStartup(abortAfterMs: number) {
+async function openDuringStartup(abortAfterMs: number): Promise<Error | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => {
     controller.abort(new DOMException("startup deadline", "TimeoutError"));
   }, abortAfterMs);
-  const [error, stream] = await deployEvents(
+  const [err, stream] = await deployEvents(
     client({ signal: controller.signal }),
   );
   clearTimeout(timer);
-  if (error) {
-    console.error(error.code);
-    return;
+  if (err) {
+    return err;
   }
   stream.close("opened");
   await stream.closed;
+  return null;
 }
 // #endregion
