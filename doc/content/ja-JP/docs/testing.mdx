@@ -1,15 +1,26 @@
 ---
 title: "テスト"
-description: 注入したトランスポートハンドル、タプルアサーション、決定論的なフェイクタイマーを用いて、SDK 定義とアプリケーションポリシーをオフラインでテストします。
+description: 自分のプロジェクト内で書いた Defjs のリクエスト定義、struct スキーマ、カスタムインターセプター、ビジネスロジック、リアルタイムコンシューマー、UI コンポーネントのテスト方法を解説します。
 ---
 
 # テスト
 
-Defjs は操作の定義とクライアントの実行を明確に分離しているため、実際のネットワークサーバーを起動したり内部ライブラリ関数をモックしたりすることなく、実際の SDK 操作やアプリケーションのインターセプターをオフラインでテストできます。
+`@defjs/core` はライブラリ自身のトランスポート層やコーデックをすでにテストしています。アプリケーションや SDK パッケージで Defjs を使うときに書くべきテストは、**あなた自身がプロジェクト内で書いたコード**——`src/api/request/` と `src/api/schema/` の操作定義とスキーマ、`src/api/client.ts` のカスタムインターセプター、`src/checkout.ts` の業務ヘルパー、そして React / Vue コンポーネントの振る舞いです。
 
-## 1. ローカルトランスポートハンドルの注入
+## プロジェクトの何をテストすべきか（`vi.mock` を使わない理由）
 
-`createClient(...)` で `withHTTPHandle`、`withSSEHandle`、`withWebSocketHandle` を使用すると、内部のプラットフォーム標準トランスポートを差し替えることができます。Defjs は通常通り、入力の `struct` バリデーション、`builder` による配置、URL の制限チェック、インターセプター、ステータス分岐、レスポンスの `struct` デコードといったパイプライン全体を実行します。
+エクスポートした `defineRequest`、`defineEventStream`、`defineWebSocket` 関数をスタブ化したり `vi.mock(...)` で差し替えたり**しないでください**。テストごとに `withHTTPHandle`、`withSSEHandle`、`withWebSocketHandle` を注入したテスト用 `Client` を作成すれば、ネットワークソケットを開かずに自分の操作定義と業務ロジックをインメモリで丸ごと検証できます。
+
+| プロジェクト内のレイヤー                                                 | テストで検証する対象                                                                                  | テスト用 `Client` の渡し方                                                                    |
+| :----------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
+| 操作定義とスキーマ（`src/api/request/`、`src/api/schema/`）              | `builder` のパラメータ配置（`path`, `query`, `headers`, `body`）、`.alias()`、`output`/`error`        | 本番と同じ操作をインポートし、`withHTTPHandle` を付けた `Client` を渡す                       |
+| ビジネスヘルパーとカスタムインターセプター（`checkout.ts`, `client.ts`） | 認証ヘッダーの注入、複数ステップの業務フロー、ドメインエラー変換、リトライ方針                        | `withInterceptors(...)` を付けたテスト用 `Client` を業務関数へそのまま渡す                    |
+| SSE・WebSocket コンシューマー（`src/events/`, `src/quotes/`）            | ストリームから読み取ったデータの業務変換、送信フレーム、`await using` によるクリーンアップ            | `withSSEHandle` / `withWebSocketHandle` で模擬フレームをインメモリ供給する                    |
+| React / Vue コンポーネント（`OrderCard.tsx`, `OrderView.vue`）           | ローディング表示、取得結果の描画、エラー表示、アンマウント時の `AbortController` によるキャンセル処理 | `<ClientProvider client={testClient}>` で囲む、または `createClientPlugin(testClient)` を登録 |
+
+## 1. プロジェクト内の操作定義とスキーマをテストする（`withHTTPHandle`）
+
+プロジェクトから実際の `defineRequest` をインポートし、予約ドメイン（例：`https://fixture.invalid`）と `withHTTPHandle(...)` を持つ独立したテスト用 `Client` を作って、送信される `Request` がバックエンドの仕様どおりかを検証します。`withRetry` を設定しない限りリトライは無効です。通常のユニットテスト用クライアントでは `withRetry` を省略し、`502`/`503`/`504` やネットワークエラーのテストがバックオフ待ちなしで 1 回目の試行後に即座に返るようにしてください。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -28,31 +39,85 @@ Defjs は操作の定義とクライアントの実行を明確に分離して�
 </Tab>
 </Tabs>
 
-## 2. テストのベストプラクティス
+### テスト分離・送信フォーマット検証・エラーファーストタプル
 
-### 内部状態ではなくエラーファーストタプルを検証する
+- **テストごとに `Client` を分離する**: 各 `test(...)` やテストヘルパーの中で新しく `createClient(...)` を作り、リトライ予算やハンドル状態がテスト間で漏れないようにします。
+- **実際の送信フォーマットを検証する**: `withHTTPHandle(async (input, init) => ...)` 内で `const request = new Request(input, init)` を作り、`request.method`、`request.url`、`request.headers`、`await request.text()`（または `await request.json()`）をアサートして、`builder` と `.alias()` が API 仕様どおりのワイヤ表現を出力しているか確かめます。
+- **`[err, data, response]` タプルを検証する**:
+  - `2xx` 正常系では `expect(err).toBeNull()` に続けて `if (err) throw err;` を書き、その後デコードされた `data` フィールド（`.alias()` 変換後の論理フィールドを含む）を検証します。
+  - エラー系ではまず `if (err)` でガードし、その内側で `if (err.code === "HTTP_STATUS")` に絞り込んで `err.status`、`err.data`、`err.response` を検証（デコード／事前検証エラーやラップ済みビジネス `Error` では `err.cause` を確認）し、`if (err)` ブロック内から `return` したうえで末尾に `expect.unreachable(...)` を置きます。
 
-テスト用クライアントを用いて export された SDK 操作を呼び出し、返された `[err, data, response]` タプルに対してアサーションを行います。
+## 2. ビジネスロジックとカスタムインターセプターをテストする
 
-- **`2xx` 正常系**: `expect(err).toBeNull()` を確認し、デコードされた `data` の各フィールド（`.alias()` による通信キーから論理プロパティへのマッピングを含む）を検証します。
-- **異常系**: 契約に含まれる `err?.code`、`err?.status`、`err?.data`、`err?.cause` を検証します。
+`src/checkout.ts` のような業務ヘルパーと `createHttpInterceptor` で書いたカスタムインターセプターをテストするときは、業務関数にテスト用 `Client` を渡し、テストクライアントへ `withInterceptors(bearerAuth(...))` を装着します。1 本のインメモリテストで、インターセプターの認証ヘッダー付与、`submitOrder` の `.alias()` エンコード、そして成功レスポンスや `409` 競合などのドメインエラー変換をまとめて確認できます。
 
-### 送信されるリクエストのバイト列を検証する
+<Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
+<Tab>
 
-`withHTTPHandle(async (input, init) => ...)` 関数内で `const request = new Request(input, init)` を構築し、`request.url`、`request.method`、`request.headers`、および `await request.text()`（または `await request.json()`）を調べることで、`builder` や struct エイリアスがバックエンドの期待する正確な形式でシリアライズされているかを確認できます。
+<include cwd lang="typescript">
+  examples/testing/src/checkout.ts#example
+</include>
 
-### フェイクタイマーによる決定論的な時間制御
+</Tab>
+<Tab>
 
-インターセプターのリトライバックオフ、SSE/WebSocket の再接続遅延、WebSocket のハートビートには、Vitest で `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` を使います。これらのフェイクタイマーは、ネイティブの `AbortSignal.timeout` の時計を進めません。Vitest で決定論的なリクエスト期限が必要なら、制御した `setTimeout` から `AbortController` を `TimeoutError` を理由に中止します。
+<include cwd lang="typescript">
+  examples/testing/test/checkout.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+一時的な `503` に対する `withRetry` の復旧を実時間待ちなしでテストするには、`withHTTPHandle` 内にカウンター（`let attempts = 0`）を持ち、`withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` を設定します（`submitOrder` のような `POST` 操作をリトライする場合は `methods: ["POST"]` が必要です）。インターセプターレベルの再送（`401` 応答後にインターセプター内から `next(...)` でトークン更新・再送する場合など）は `withRetry` を使わないため、状態を持つ `withHTTPHandle` カウンターだけでそのままテストできます。
+
+## 3. リアルタイムストリームの消費コードをテストする（SSE / WebSocket）
+
+プロジェクト内に `defineEventStream` や `defineWebSocket` をラップしたストリーム消費ヘルパーがある場合は、`withSSEHandle` や `withWebSocketHandle` で模擬フレームをメモリ上から流し込み、業務ロジックの出力やリソース解放を検証します。
+
+- **SSE（`withSSEHandle`）**: `ReadableStream<Uint8Array>` と `content-type: "text/event-stream"` を持つ `Response` を返します。
+- **WebSocket（`withWebSocketHandle`）**: `EventTarget` を継承して `WebSocketHandle` を実装（`static readonly OPEN = 1` を定義）した軽量スタブクラスを渡し、送信データを記録して `open`、`MessageEvent("message")`、`CloseEvent("close")` をディスパッチします。
+
+<Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sse.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/websocket.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 4. テストしやすいプロジェクト構造の作り方
+
+[アプリケーション API レイヤー](/ja-JP/docs/application-api) の構成に従うと、`vi.mock` なしで全レイヤーをきれいにテストできます。
+
+- **`src/api/request/*.ts` にグローバルクライアントを持ち込まない**: `defineRequest`・`defineEventStream`・`defineWebSocket` の定義だけをエクスポートし、本番用 `apiClient` をインポートしないことで、どのテストからもテスト用 `Client` をそのまま渡せます。
+- **業務関数は `Client`（または `DerivableClient`）を引数で受け取る**：`client` を明示的な第 1 引数（そのまま渡す場合は `client: Client`、`client({ signal })` のように呼び出し単位の派生を行う場合は `client: DerivableClient`）にして `export async function placeOrder(client: Client, input: ...)` と書くか、デフォルト値付きクライアントを末尾引数に置いて `export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)` と書きます。後者なら本番コードは `placeOrder(input)` と呼べ、テストでは `placeOrder(input, testClient)` を渡せます。`src/api/client.ts` からはカスタムインターセプターや末尾の `ClientOption` を `createClient(...)` へ転送する SSR ファクトリ（例：`createServerApiClient(token, ...options: ClientOption[])`）もエクスポートし、テストで `withHTTPHandle` を付けられるようにします。
+- **React / Vue コンポーネントには Provider / Plugin で `testClient` を注入する**:
+  - **React（`@defjs/react`）**: テスト対象コンポーネントを `<ClientProvider client={testClient}>` で囲みます（`useClient(overrideClient)` を使う構成なら引数に `testClient` を直接渡せます）。
+  - **Vue（`@defjs/vue`）**: テストでコンポーネントをマウントする際に `app.use(createClientPlugin(testClient))` を適用するか、`provide(HTTP_CLIENT, testClient)` で注入します。
+
+## 5. タイムアウトとタイマー依存の振る舞いをテストする
+
+リトライバックオフ、SSE/WebSocket の再接続待機、ハートビートなどのタイマー処理をテストするには、Vitest では `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`（Bun test では `jest.useFakeTimers()`）を使います。Vitest のフェイクタイマーはネイティブの `AbortSignal.timeout` を進めないため、Vitest で期限切れテストを再現したい場合は、制御された `setTimeout` から `AbortController` を `TimeoutError` で中断します。
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-Bun test では `jest.useFakeTimers()` と `jest.advanceTimersByTime()` を使います。Bun のフェイクタイマーは `AbortSignal.timeout` も制御します。ランナーが同じネイティブ時計を制御すると仮定しないでください。待機中の段階が始まってからタイマーを進め、経過した実時間ではなく状態遷移か試行回数を検証し、各テストのあとで本物のタイマーに戻してください。
+Bun test の `jest.useFakeTimers()` と `jest.advanceTimersByTime()` は `AbortSignal.timeout` も制御します。待機中の処理が始まってからタイマーを進め、実時間ではなく状態変化や試行回数をアサートし、`finally` で必ず本物のタイマーに戻してください。
 
 ## 関連ドキュメント
 
 - [ローカル Fetch ハンドルによるテスト](/ja-JP/recipes/test-with-handle)
-- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
-- [Client の構成](/ja-JP/docs/client)
+- [アプリケーション API レイヤー](/ja-JP/docs/application-api)
+- [公開 SDK の設計](/ja-JP/docs/public-sdk)
+- [エンジニアリング規約](/ja-JP/docs/best-practices)
+- [React 統合](/ja-JP/docs/integrations/react) · [Vue 統合](/ja-JP/docs/integrations/vue) · [Client の構成](/ja-JP/docs/client)

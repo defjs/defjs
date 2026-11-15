@@ -1,6 +1,6 @@
 # Framework Integrations (`@defjs/react`, `@defjs/vue`), OpenTelemetry (`@defjs/opentelemetry-server`), Testing, and SDK Packaging
 
-Contents: [React integration (`@defjs/react`)](#1-react-integration-defjsreact) · [Vue integration (`@defjs/vue`)](#2-vue-integration-defjsvue) · [Server-side OpenTelemetry (`@defjs/opentelemetry-server`)](#3-server-side-opentelemetry-defjsopentelemetry-server) · [Deterministic offline testing (`with*Handle`)](#4-deterministic-offline-testing-withhandle) · [In-app API layer & public SDK architecture](#5-in-app-api-layer--public-sdk-architecture) · [What Defjs intentionally does not provide](#6-what-defjs-intentionally-does-not-provide)
+Contents: [React integration (`@defjs/react`)](#1-react-integration-defjsreact) · [Vue integration (`@defjs/vue`)](#2-vue-integration-defjsvue) · [Server-side OpenTelemetry (`@defjs/opentelemetry-server`)](#3-server-side-opentelemetry-defjsopentelemetry-server) · [Testing your Defjs project (`with*Handle`)](#4-testing-your-defjs-project-withhandle) · [In-app API layer & public SDK architecture](#5-in-app-api-layer--public-sdk-architecture) · [What Defjs intentionally does not provide](#6-what-defjs-intentionally-does-not-provide)
 
 For full English guide pages on the official site (no locale prefix), fetch `https://defjs.lyz.cloud/llms.mdx/docs/integrations/react/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/integrations/vue/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/integrations/opentelemetry-server/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/testing/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/best-practices/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/application-api/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/public-sdk/content.md`, and `https://defjs.lyz.cloud/llms.mdx/recipes/publish-http-sdk/content.md`.
 
@@ -132,17 +132,11 @@ const client = createClient(withEndpoint("https://api.example.com"));
 createApp(App).use(createClientPlugin(client)).mount("#app");
 ```
 
-```vue
-<script setup lang="ts">
+```ts
+// orders.ts — keep definitions at module scope outside components
 import { defineEventStream, defineRequest, struct } from "@defjs/core";
-import { injectClient } from "@defjs/vue";
-import { onScopeDispose, ref, watch } from "vue";
 
-const props = defineProps<{ id: number }>();
-const client = injectClient();
-const status = ref("Loading...");
-
-const getOrder = defineRequest({
+export const getOrder = defineRequest({
   method: "GET",
   meta: { operation: "orders.get" },
   path: "/orders/:id",
@@ -150,6 +144,24 @@ const getOrder = defineRequest({
   builder: (input) => ({ path: input }),
   output: struct.object({ status: struct.string() }),
 });
+
+export const deployEvents = defineEventStream({
+  meta: { operation: "deployments.events" },
+  path: "/deployments/events",
+  events: { line: struct.string() },
+});
+```
+
+```vue
+<!-- OrderPanel.vue -->
+<script setup lang="ts">
+import { injectClient } from "@defjs/vue";
+import { onScopeDispose, ref, watch } from "vue";
+import { deployEvents, getOrder } from "./orders";
+
+const props = defineProps<{ id: number }>();
+const client = injectClient();
+const status = ref("Loading...");
 
 watch(
   () => props.id,
@@ -172,12 +184,6 @@ watch(
 );
 
 // For SSE or WebSocket in Vue setup, tie abort + close to onScopeDispose:
-const deployEvents = defineEventStream({
-  meta: { operation: "deployments.events" },
-  path: "/deployments/events",
-  events: { line: struct.string() },
-});
-
 const streamController = new AbortController();
 onScopeDispose(() => streamController.abort());
 
@@ -186,7 +192,7 @@ void (async () => {
     client({ signal: streamController.signal }),
   );
   if (err) {
-    console.error(err.code);
+    if (err.code !== "NET_ABORTED") console.error(err.code);
     return;
   }
   try {
@@ -242,65 +248,360 @@ export const serverClient = createClient(
 
 ---
 
-## 4. Deterministic offline testing (`with*Handle`)
+## 4. Testing your Defjs project (`with*Handle`)
 
-Never mock `defineRequest` or stub the operation function in unit tests—doing so skips input validation, `builder` placement, wire alias encoding, status dispatch, and response struct decoding. Instead, inject a local transport handle (`withHTTPHandle`, `withSSEHandle`, or `withWebSocketHandle`) on a test client:
+`@defjs/core` already tests its own transport and codec engine. Tests inside an application or SDK project exist to verify **the code the project wrote**—its `defineRequest` / `defineEventStream` / `defineWebSocket` definitions and `struct` schemas (`src/api/request/`, `src/api/schema/`), its custom interceptors (`src/api/client.ts`), its business orchestration helpers (`src/checkout.ts`), its realtime consumers, and its React/Vue components:
 
-### Best practice: testing an operation end-to-end with `withHTTPHandle`
+| Layer in your project                                                 | What your test verifies                                                                | How to wire the test `Client`                                                                |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Request definitions & schemas (`src/api/request/`, `src/api/schema/`) | `builder` placement (`path`, `query`, `headers`, `body`), `.alias()`, `output`/`error` | Import the real operation and pass a fresh `withHTTPHandle` client                           |
+| Business helpers & custom interceptors (`checkout.ts`, `client.ts`)   | Auth/header interceptors, multi-step flows, error-first tuple mapping, retries         | Pass `testClient` into your helper (with `withInterceptors(...)` mounted)                    |
+| SSE & WebSocket consumers (`src/events/`, `src/quotes/`)              | Stream/frame parsing in business logic, outgoing frames, `await using` cleanup         | Feed simulated frames in memory via `withSSEHandle` or `withWebSocketHandle`                 |
+| React / Vue components (`OrderCard.tsx`, `OrderView.vue`)             | Loading states, rendered API data, error UI, unmount `AbortController` cleanup         | Wrap with `<ClientProvider client={testClient}>` or install `createClientPlugin(testClient)` |
+
+Do **not** `vi.mock` or stub exported `defineRequest`, `defineEventStream`, or `defineWebSocket` functions in tests—doing so skips `builder` placement, `.alias()` wire encoding, interceptors, status dispatch, and `struct` decoding. Always keep `src/api/request/*.ts` free of production client singletons, accept `client: Client` (or `client: DerivableClient` when deriving per-call options like `client({ signal })`) as the first parameter—or put a defaulted `client: Client = apiClient` parameter last (`placeOrder(input, client = apiClient)`)—in business helpers so tests can inject `testClient` without mocking, keep `withRetry` omitted on ordinary unit-test clients (retries are disabled unless configured, so `502`/`503`/`504` and network-error paths return immediately after one attempt), and create a fresh `createClient(...)` per test so retry budgets and closures never leak.
+
+### 4.1 Testing project definitions, custom interceptors, and business helpers (`withHTTPHandle`)
+
+Pass a fresh `withHTTPHandle` test `Client` with any custom `createHttpInterceptor` policies mounted (`withInterceptors(bearerAuth(...))`) directly into your project's business helpers, assert outbound `new Request(input, init)` bytes and wire aliases, check `if (err)` first (narrowing `if (err.code === "HTTP_STATUS")` to inspect `err.status`, `err.data`, and `err.response`, or inspecting `err.cause` on decode/preflight faults and wrapped `Error`s), and guard success assertions with `if (err) throw err;` after `expect(err).toBeNull()`. To test `withRetry` recovery on a transient `503` without real timer waits, keep a counter (`let attempts = 0`) inside `withHTTPHandle` and configure `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` (`methods: ["POST"]` is required when retrying a `POST` operation such as `submitOrder`); interceptor-level `401` token-refresh replay (`next(...)`) does not use `withRetry` and tests directly against a stateful `withHTTPHandle` counter.
 
 ```ts
+// src/checkout.ts — project operation, custom interceptor, and business helper
 import {
-  createClient,
+  createHttpInterceptor,
   defineRequest,
   struct,
-  withEndpoint,
-  withHTTPHandle,
+  type Client,
 } from "@defjs/core";
-import { expect, test } from "vitest";
 
-const postOrder = defineRequest({
+export const submitOrder = defineRequest({
   method: "POST",
-  meta: { operation: "orders.create" },
-  path: "/orders/:region",
+  meta: { operation: "orders.submit" },
+  path: "/orders",
   input: struct.object({
-    region: struct.string(),
+    idempotencyKey: struct.string(),
     order: struct.object({
       customerName: struct.string().alias("customer_name"),
     }),
   }),
   builder: (input) => ({
-    path: { region: input.region },
+    headers: { "idempotency-key": input.idempotencyKey },
     body: input.order,
   }),
   output: struct.object({
     id: struct.number(),
     customerName: struct.string().alias("customer_name"),
   }),
-  error: struct.object({ message: struct.string() }),
+  error: struct.object({
+    message: struct.string(),
+  }),
 });
 
-test("postOrder encodes wire aliases and decodes 201 and 400 responses", async () => {
+export function bearerAuth(token: string) {
+  return createHttpInterceptor((request, next) => {
+    const headers = new Headers(request.headers);
+    if (!headers.has("authorization")) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+    return next({ ...request, headers });
+  });
+}
+
+export async function checkoutOrder(
+  client: Client,
+  input: { customerName: string; idempotencyKey: string },
+): Promise<
+  [Error, undefined] | [null, { orderId: number; customerName: string }]
+> {
+  const [err, order] = await submitOrder(client, {
+    idempotencyKey: input.idempotencyKey,
+    order: { customerName: input.customerName },
+  });
+  if (err) {
+    if (err.code === "HTTP_STATUS" && err.status === 409) {
+      return [
+        new Error(`duplicate order: ${err.data.message}`, { cause: err }),
+        undefined,
+      ];
+    }
+    return [new Error("submit order", { cause: err }), undefined];
+  }
+  return [null, { orderId: order.id, customerName: order.customerName }];
+}
+```
+
+```ts
+// test/checkout.spec.ts — isolated per-test Client verifying wire format, auth header, and domain mapping
+import {
+  createClient,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+import { bearerAuth, checkoutOrder } from "../src/checkout.ts";
+
+test("checkoutOrder attaches bearer auth, maps wire fields, and returns the order", async () => {
   const client = createClient(
     withEndpoint("https://fixture.invalid"),
+    withInterceptors(bearerAuth("test-token")),
     withHTTPHandle(async (input, init) => {
       const request = new Request(input, init);
-      expect(request.url).toBe("https://fixture.invalid/orders/eu");
+      expect(request.method).toBe("POST");
+      expect(request.url).toBe("https://fixture.invalid/orders");
+      expect(request.headers.get("authorization")).toBe("Bearer test-token");
+      expect(request.headers.get("idempotency-key")).toBe("idem-1");
       const body: unknown = await request.json();
       expect(body).toEqual({ customer_name: "Ada" });
 
-      return Response.json({ id: 9, customer_name: "Ada" }, { status: 201 });
+      return Response.json({ id: 42, customer_name: "Ada" }, { status: 201 });
     }),
   );
 
-  const [err, order, response] = await postOrder(client, {
-    region: "eu",
-    order: { customerName: "Ada" },
+  const [err, result] = await checkoutOrder(client, {
+    customerName: "Ada",
+    idempotencyKey: "idem-1",
   });
   expect(err).toBeNull();
-  expect(order).toEqual({ id: 9, customerName: "Ada" });
-  expect(response?.status).toBe(201);
+  if (err) throw err;
+  expect(result).toEqual({ orderId: 42, customerName: "Ada" });
+});
+
+test("checkoutOrder translates a 409 conflict into a domain error", async () => {
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() =>
+      Promise.resolve(
+        Response.json({ message: "Order already paid" }, { status: 409 }),
+      ),
+    ),
+  );
+
+  const [err, result] = await checkoutOrder(client, {
+    customerName: "Ada",
+    idempotencyKey: "idem-1",
+  });
+  if (err) {
+    expect(result).toBeUndefined();
+    expect(err.message).toBe("duplicate order: Order already paid");
+    return;
+  }
+  expect.unreachable("expected duplicate order error");
 });
 ```
+
+### 4.2 Testing project SSE consumers (`withSSEHandle`)
+
+Pass a `withSSEHandle` client returning a `Response` backed by a `ReadableStream<Uint8Array>` (`content-type: "text/event-stream"`) into your project's SSE consumer function and assert its output:
+
+```ts
+import {
+  createClient,
+  defineEventStream,
+  struct,
+  withEndpoint,
+  withSSEHandle,
+  type Client,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+
+const watchDeployments = defineEventStream({
+  path: "/deployments/:id/events",
+  input: struct.object({ id: struct.string() }),
+  builder: (input) => ({ path: input }),
+  events: {
+    progress: struct.object({
+      step: struct.string(),
+      percent: struct.number(),
+    }),
+  },
+});
+
+export async function collectDeploymentSteps(
+  client: Client,
+  id: string,
+): Promise<[Error, undefined] | [null, string[]]> {
+  const [err, stream] = await watchDeployments(client, { id });
+  if (err) {
+    return [new Error("watch deployments", { cause: err }), undefined];
+  }
+
+  await using ownedStream = stream;
+  const steps: string[] = [];
+  try {
+    for await (const event of ownedStream) {
+      steps.push(`${event.data.step}:${event.data.percent}%`);
+    }
+  } catch (cause) {
+    return [new Error("read deployment stream", { cause }), undefined];
+  }
+  return [null, steps];
+}
+
+test("collectDeploymentSteps reads progress events from an in-memory SSE stream", async () => {
+  const frames = [
+    'id: evt-1\nevent: progress\ndata: {"step":"build","percent":50}\n\n',
+    'id: evt-2\nevent: progress\ndata: {"step":"deploy","percent":100}\n\n',
+  ].join("");
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withSSEHandle((input) => {
+      expect(new Request(input).url).toBe(
+        "https://fixture.invalid/deployments/dep-9/events",
+      );
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(frames));
+              controller.close();
+            },
+          }),
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        ),
+      );
+    }),
+  );
+
+  const [err, steps] = await collectDeploymentSteps(client, "dep-9");
+  expect(err).toBeNull();
+  if (err) throw err;
+  expect(steps).toEqual(["build:50%", "deploy:100%"]);
+});
+```
+
+### 4.3 Testing project WebSocket consumers (`withWebSocketHandle`)
+
+Provide a minimal `EventTarget` subclass implementing `WebSocketHandle` (with `static readonly OPEN = 1`) and pass a `withWebSocketHandle` client into your project's WebSocket consumer helper:
+
+```ts
+import {
+  createClient,
+  defineWebSocket,
+  struct,
+  withEndpoint,
+  withWebSocketHandle,
+  type Client,
+  type WebSocketHandle,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+
+const liveQuotes = defineWebSocket({
+  path: "/quotes",
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+  incoming: struct.object({
+    symbol: struct.string(),
+    priceCents: struct.number().alias("price_cents"),
+  }),
+});
+
+export async function readFirstQuote(
+  client: Client,
+  symbol: string,
+): Promise<[Error, undefined] | [null, number]> {
+  const [err, session] = await liveQuotes(client);
+  if (err) {
+    return [new Error("connect quotes", { cause: err }), undefined];
+  }
+
+  await using ownedSession = session;
+  let runtimeError: unknown;
+  const unsubscribe = ownedSession.onRuntimeError((cause) => {
+    runtimeError ??= cause;
+  });
+  try {
+    ownedSession.send({ type: "subscribe", symbol });
+    for await (const quote of ownedSession.receive) {
+      if (quote.symbol === symbol) {
+        return [null, quote.priceCents];
+      }
+    }
+  } catch (cause) {
+    return [new Error("read quote", { cause }), undefined];
+  } finally {
+    unsubscribe();
+  }
+  return [
+    new Error(
+      "quote stream ended before a quote arrived",
+      runtimeError ? { cause: runtimeError } : undefined,
+    ),
+    undefined,
+  ];
+}
+
+function makeFakeQuoteSocket(sent: string[]) {
+  return class FakeQuoteSocket extends EventTarget implements WebSocketHandle {
+    static readonly OPEN = 1;
+    readonly url: string;
+    readonly protocol = "";
+    readonly extensions = "";
+    readonly bufferedAmount = 0;
+    readyState = 0;
+
+    constructor(url: string) {
+      super();
+      this.url = url;
+      queueMicrotask(() => {
+        this.readyState = FakeQuoteSocket.OPEN;
+        this.dispatchEvent(new Event("open"));
+      });
+    }
+
+    send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+      if (typeof data === "string") {
+        sent.push(data);
+        queueMicrotask(() => {
+          this.dispatchEvent(
+            new MessageEvent("message", {
+              data: JSON.stringify({ symbol: "ACME", price_cents: 1850 }),
+            }),
+          );
+        });
+      }
+    }
+
+    close(code = 1000, reason = ""): void {
+      this.readyState = 3;
+      queueMicrotask(() => {
+        this.dispatchEvent(
+          new CloseEvent("close", { code, reason, wasClean: true }),
+        );
+      });
+    }
+  };
+}
+
+test("readFirstQuote sends a subscription and returns the first quote price", async () => {
+  const sent: string[] = [];
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withWebSocketHandle(makeFakeQuoteSocket(sent)),
+  );
+
+  const [err, priceCents] = await readFirstQuote(client, "ACME");
+  expect(err).toBeNull();
+  if (err) throw err;
+  expect(priceCents).toBe(1850);
+  expect(sent).toEqual(['{"type":"subscribe","symbol":"ACME"}']);
+});
+```
+
+### 4.4 Organizing project layers & testing React / Vue components
+
+Follow three conventions so every layer in a user project tests cleanly without `vi.mock`:
+
+- **Keep `src/api/request/*.ts` client-free**: Export pure `defineRequest` / `defineEventStream` / `defineWebSocket` values only; never import `apiClient` inside definition files.
+- **Accept `Client` (or `DerivableClient`) as a parameter in business helpers**: Either pass `client` explicitly as the first parameter (`export async function placeOrder(client: Client, input: ...)` when forwarding `client`, or `client: DerivableClient` when deriving per-call options like `client({ signal })`), or put the defaulted client parameter last (`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`) so production callers write `placeOrder(input)` while unit tests pass `placeOrder(input, testClient)`. Export custom interceptors and SSR factories (`createServerApiClient(token, ...options: ClientOption[])` forwarding trailing `ClientOption` arguments to `createClient(...)`) from `src/api/client.ts` so tests can attach `withHTTPHandle`.
+- **React (`@defjs/react`)**: Wrap the component under test with `<ClientProvider client={testClient}>` (or pass `testClient` explicitly to hooks/components using `useClient(overrideClient)`).
+- **Vue (`@defjs/vue`)**: Install `app.use(createClientPlugin(testClient))` (or `provide(HTTP_CLIENT, testClient)`) when mounting components in tests.
+
+### 4.5 Deterministic time and request deadlines
+
+For retry backoff, SSE/WebSocket reconnect delays, or WebSocket heartbeats in application policies, use `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` in Vitest (`jest.useFakeTimers()` in Bun test). Vitest fake timers do **not** advance native `AbortSignal.timeout`; trigger deterministic request deadlines by aborting an `AbortController` from a controlled `setTimeout` with `new DOMException("request deadline", "TimeoutError")`. Always advance timers only after the awaited phase has started, assert state transitions or attempt counts rather than elapsed wall-clock time, and restore real timers in `finally`.
 
 ---
 
@@ -476,6 +777,7 @@ import {
   withEndpoint,
   withInterceptors,
   withRetry,
+  type DerivableClient,
 } from "@defjs/core";
 import { getObject, listObjectsV2, putObject } from "@company/s3-sdk";
 
@@ -492,11 +794,12 @@ const s3Client = createClient(
 );
 
 export async function syncReport(
+  client: DerivableClient,
   bucket: string,
   key: string,
   pdf: Blob,
 ): Promise<[Error, undefined] | [null, { count: number; size: number }]> {
-  const [putErr] = await putObject(s3Client, {
+  const [putErr] = await putObject(client, {
     bucket,
     key,
     body: pdf,
@@ -507,7 +810,7 @@ export async function syncReport(
     return [new Error("put object", { cause: putErr }), undefined];
   }
 
-  const [listErr, page] = await listObjectsV2(s3Client, {
+  const [listErr, page] = await listObjectsV2(client, {
     bucket,
     prefix: "reports/",
     maxKeys: 50,
@@ -517,7 +820,7 @@ export async function syncReport(
   }
 
   const [getErr, blob] = await getObject(
-    s3Client({ signal: AbortSignal.timeout(10_000) }),
+    client({ signal: AbortSignal.timeout(10_000) }),
     { bucket, key },
   );
   if (getErr) {
@@ -529,7 +832,7 @@ export async function syncReport(
 
 async function main() {
   const pdf = new Blob(["%PDF-1.7"], { type: "application/pdf" });
-  const [err, report] = await syncReport("reports", "q3.pdf", pdf);
+  const [err, report] = await syncReport(s3Client, "reports", "q3.pdf", pdf);
   if (err) {
     console.error(err);
     return;

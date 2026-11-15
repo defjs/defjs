@@ -9,6 +9,7 @@ const coreExports = new Set([
 const otherNames = new Set([
   "createApp",
   "createClientPlugin",
+  "createServerApiClient",
   "defineProps",
   "withOpenTelemetryServer",
 ]);
@@ -80,7 +81,7 @@ test("Defjs skill and reference files have clean Markdown, no locale slugs, and 
     );
 
     for (const slugMatch of text.matchAll(
-      /\b((?:docs|recipes|api)\/[a-z0-9-]+(?:\/[a-z0-9-]+)*?)(?:\/content\.md\b|(?![a-z0-9/-]))/g,
+      /(?<=^|[\s(`"']|https:\/\/defjs\.lyz\.cloud\/|https:\/\/defjs\.lyz\.cloud\/llms\.mdx\/|[\s("']\/)((?:docs|recipes|api)\/[a-z0-9-]+(?:\/[a-z0-9-]+)*?)(?:\/content\.md\b|(?![a-z0-9/-]|\.[a-z]))/g,
     )) {
       const slug = slugMatch[1];
       if (!slug) continue;

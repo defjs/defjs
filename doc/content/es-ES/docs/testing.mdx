@@ -1,15 +1,26 @@
 ---
 title: "Pruebas"
-description: Prueba sin conexión las definiciones de SDK y las políticas de la aplicación con handles de transporte inyectados, comprobaciones de tuplas y temporizadores deterministas.
+description: Cómo probar dentro de tu propio proyecto las definiciones de peticiones Defjs, esquemas struct, interceptores propios, funciones de negocio, consumidores en tiempo real y componentes UI.
 ---
 
 # Pruebas
 
-Dado que Defjs separa las definiciones de operaciones de la ejecución del cliente, puedes probar las definiciones reales de tu SDK y los interceptores de la aplicación sin conexión, sin necesidad de levantar un servidor de red ni falsear (_mockear_) funciones internas de la biblioteca.
+`@defjs/core` ya prueba su propio motor de transporte y codificación. Cuando usas Defjs en tu aplicación o paquete SDK, tus pruebas existen para verificar **el código que tú escribiste**: tus definiciones de operaciones y esquemas `struct` (`src/api/request/`, `src/api/schema/`), tus interceptores propios (`src/api/client.ts`), tus funciones de orquestación de negocio (`src/checkout.ts`) y tus componentes UI.
 
-## 1. Inyectar un handle de transporte local
+## Qué probar en tu proyecto — y por qué evitar `vi.mock`
 
-Utiliza `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle` en `createClient(...)` para sustituir el transporte subyacente de la plataforma. Defjs sigue ejecutando el flujo completo de la operación: validación de `input` con `struct`, mapeo en `builder`, comprobaciones de confinamiento de URL, interceptores, despacho de código de estado y decodificación de `struct` en la respuesta.
+**No** hagas stub ni uses `vi.mock(...)` sobre las funciones exportadas `defineRequest`, `defineEventStream` o `defineWebSocket`. En su lugar, crea un `Client` de prueba aislado por test con `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle`. Así compruebas de extremo a extremo tus definiciones reales y tus políticas de aplicación en memoria, sin abrir ningún socket de red:
+
+| Capa en tu proyecto                                               | Qué verifica tu prueba                                                                                 | Cómo conectar el `Client` de prueba                                                             |
+| :---------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
+| Definiciones y esquemas (`src/api/request/`, `src/api/schema/`)   | Colocación en `builder` (`path`, `query`, `headers`, `body`), `.alias()`, `output`/`error`             | Importar la operación real y pasarle un cliente `withHTTPHandle` nuevo                          |
+| Funciones de negocio e interceptores (`checkout.ts`, `client.ts`) | Cabeceras de auth, flujos multipaso, mapeo de errores de dominio y reintentos                          | Pasar `testClient` (con `withInterceptors(...)`) directamente a tu función                      |
+| Consumidores SSE y WebSocket (`src/events/`, `src/quotes/`)       | Procesamiento de tramas entrantes en tu lógica, mensajes enviados y cierre `await using`               | Inyectar tramas simuladas en memoria con `withSSEHandle` o `withWebSocketHandle`                |
+| Componentes React / Vue (`OrderCard.tsx`, `OrderView.vue`)        | Estado de carga, datos renderizados, UI de error y cancelación mediante `AbortController` al desmontar | Envolver con `<ClientProvider client={testClient}>` o instalar `createClientPlugin(testClient)` |
+
+## 1. Probar tus definiciones de peticiones y esquemas (`withHTTPHandle`)
+
+Importa las operaciones `defineRequest` reales de tu proyecto, crea un `Client` de prueba aislado con una URL base reservada (como `https://fixture.invalid`) y `withHTTPHandle(...)`, e inspecciona la `Request` saliente. Los reintentos están deshabilitados salvo que configures `withRetry`; omite `withRetry` en los clientes de prueba unitaria ordinarios para que los casos de `502`/`503`/`504` y error de red regresen de inmediato tras un solo intento sin esperar retrocesos.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -28,31 +39,85 @@ Utiliza `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle` en `createClie
 </Tab>
 </Tabs>
 
-## 2. Buenas prácticas de pruebas
+### Aislamiento, comprobación del formato de red y tupla error-first
 
-### Comprueba la tupla con error por delante, no las funciones internas
+- **Aísla un cliente por prueba**: Instancia un `createClient(...)` nuevo dentro de cada `test(...)` o helper para evitar fugas de presupuesto de reintentos o estado del handle entre pruebas.
+- **Verifica el formato de red saliente**: Dentro de `withHTTPHandle(async (input, init) => ...)`, construye `const request = new Request(input, init)` y comprueba `request.method`, `request.url`, `request.headers` y `await request.text()` (o `await request.json()`) para verificar que tu `builder` y `.alias()` coinciden con el contrato de tu backend.
+- **Comprueba la tupla `[err, data, response]`**:
+  - Para respuestas `2xx`, comprueba `expect(err).toBeNull()` seguido de `if (err) throw err;` antes de inspeccionar los campos decodificados de `data` (incluido el mapeo `.alias()`).
+  - Para fallos, comprueba primero con `if (err)`, acota dentro `if (err.code === "HTTP_STATUS")` para verificar `err.status`, `err.data` y `err.response` (o `err.cause` en fallos de decodificación/preflight y errores `Error` de negocio envueltos), sal con `return` desde `if (err)` y añade `expect.unreachable(...)` a continuación.
 
-Invoca siempre la operación exportada del SDK pasando tu cliente de prueba y comprueba la tupla devuelta `[err, data, response]`:
+## 2. Probar tus funciones de negocio e interceptores propios
 
-- Para casos `2xx`, comprueba `expect(err).toBeNull()` y verifica los campos decodificados en `data` (incluyendo la conversión de claves de red a nombres lógicos mediante `.alias()`).
-- Para casos de fallo, comprueba `err?.code`, `err?.status`, `err?.data` y `err?.cause` cuando formen parte del contrato.
+Pasa un `Client` a las funciones de orquestación de negocio de tu proyecto (`checkout.ts`) y monta tus interceptores `createHttpInterceptor` (`withInterceptors(bearerAuth(...))`) directamente en el cliente de prueba. En una sola prueba sin conexión verificas las cabeceras de autenticación añadidas por tu interceptor, la codificación JSON `.alias()` generada por `submitOrder` y cómo tu función traduce tanto éxitos como errores declarados (como un conflicto `409`):
 
-### Verifica los bytes de red en las peticiones salientes
+<Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
+<Tab>
 
-Dentro de tu función `withHTTPHandle(async (input, init) => ...)`, construye `const request = new Request(input, init)` e inspecciona `request.url`, `request.method`, `request.headers` y `await request.text()` (o `await request.json()`) para asegurarte de que tu `builder` y los alias de struct serializaron exactamente el formato que espera tu backend.
+<include cwd lang="typescript">
+  examples/testing/src/checkout.ts#example
+</include>
 
-### Controla el tiempo de forma determinista con temporizadores simulados
+</Tab>
+<Tab>
 
-Para el backoff de reintento en interceptores, las demoras de reconexión de SSE/WebSocket o los latidos de WebSocket, usa `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` en Vitest. Estos temporizadores simulados no avanzan el reloj nativo de `AbortSignal.timeout`. Para un límite de petición determinista en Vitest, aborta un `AbortController` desde un `setTimeout` controlado con una razón `TimeoutError`:
+<include cwd lang="typescript">
+  examples/testing/test/checkout.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+Para probar la recuperación de `withRetry` ante un `503` transitorio sin esperas reales, mantén un contador `let attempts = 0` dentro de `withHTTPHandle` y configura `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` (`methods: ["POST"]` es necesario al reintentar una operación `POST` como `submitOrder`). El reenvío a nivel de interceptor (como un interceptor de renovación tras `401` que vuelve a invocar `next(...)`) no usa `withRetry`: pruébalo directamente frente a un contador con estado en `withHTTPHandle`.
+
+## 3. Probar tus consumidores SSE y WebSocket
+
+Cuando tu proyecto envuelve `defineEventStream` o `defineWebSocket` en funciones consumidoras o acumuladores de estado, alimenta tramas simuladas en memoria usando `withSSEHandle` o `withWebSocketHandle` y comprueba el resultado de tu función:
+
+- **SSE (`withSSEHandle`)**: Devuelve una `Response` respaldada por un `ReadableStream<Uint8Array>` con `content-type: "text/event-stream"`.
+- **WebSocket (`withWebSocketHandle`)**: Pasa una clase mínima que extienda `EventTarget` e implemente `WebSocketHandle` (exponiendo `static readonly OPEN = 1`), registre los mensajes enviados y emita `open`, `MessageEvent("message")` y `CloseEvent("close")`.
+
+<Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sse.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/websocket.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 4. Estructurar tu proyecto para que cada capa sea fácil de probar
+
+Seguir la distribución de [Capa API de aplicación](/es-ES/docs/application-api) mantiene todas las pruebas libres de `vi.mock`:
+
+- **Mantén `src/api/request/*.ts` sin cliente**: Exporta solo valores `defineRequest`, `defineEventStream` y `defineWebSocket`. Nunca importes tu `apiClient` de producción en archivos de definición, para que cualquier prueba pueda invocar esas operaciones directamente contra un cliente `with*Handle`.
+- **Acepta `Client` (o `DerivableClient`) como parámetro en tus helpers de negocio**: pasa `client` explícitamente como primer parámetro (`export async function placeOrder(client: Client, input: ...)` si solo se reenvía, o `client: DerivableClient` si se derivan opciones por llamada como `client({ signal })`), o coloca el parámetro con valor por defecto al final (`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`) para que producción escriba `placeOrder(input)` y las pruebas pasen `placeOrder(input, testClient)`. Exporta también tus interceptores y fábricas SSR (`createServerApiClient(token, ...options: ClientOption[])` reenviando las opciones `ClientOption` finales a `createClient(...)`) desde `src/api/client.ts` para adjuntar `withHTTPHandle` en pruebas.
+- **Inyecta `testClient` en componentes React y Vue**:
+  - **React (`@defjs/react`)**: Envuelve el componente bajo prueba en `<ClientProvider client={testClient}>` (o pasa `testClient` a `useClient(overrideClient)`).
+  - **Vue (`@defjs/vue`)**: Instala `app.use(createClientPlugin(testClient))` (o usa `provide(HTTP_CLIENT, testClient)`) al montar componentes en pruebas.
+
+## 5. Probar límites de tiempo y lógica basada en temporizadores
+
+Para el backoff de reintentos, demoras de reconexión SSE/WebSocket o latidos de WebSocket en tus políticas de aplicación, usa `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` en Vitest (`jest.useFakeTimers()` en Bun test). Los temporizadores simulados de Vitest **no** avanzan el reloj nativo de `AbortSignal.timeout`; para probar un plazo límite determinista en Vitest, aborta un `AbortController` desde un `setTimeout` controlado con la razón `TimeoutError`:
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-En Bun test, usa `jest.useFakeTimers()` y `jest.advanceTimersByTime()`; los temporizadores simulados de Bun también controlan `AbortSignal.timeout`. No des por hecho que los ejecutores controlan los mismos relojes nativos. Avanza los temporizadores solo después de que haya empezado la fase esperada, comprueba transiciones de estado o recuentos de intentos en lugar del tiempo de reloj real transcurrido, y restaura los temporizadores reales después de cada prueba.
+En Bun test, `jest.useFakeTimers()` y `jest.advanceTimersByTime()` también controlan `AbortSignal.timeout`. Avanza los temporizadores solo después de que haya iniciado la fase esperada, comprueba transiciones de estado o recuentos de intentos en lugar de tiempo real transcurrido, y restaura los temporizadores reales en `finally`.
 
 ## Lecturas relacionadas
 
 - [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)
-- [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)
-- [Configuración del cliente](/es-ES/docs/client)
+- [Capa API de aplicación](/es-ES/docs/application-api)
+- [Diseño de SDK público](/es-ES/docs/public-sdk)
+- [Convenciones de ingeniería](/es-ES/docs/best-practices)
+- [Integración con React](/es-ES/docs/integrations/react) · [Integración con Vue](/es-ES/docs/integrations/vue) · [Configuración del cliente](/es-ES/docs/client)

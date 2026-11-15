@@ -1,5 +1,8 @@
 import "../testing/deadline.ts";
+import "../testing/sse.ts";
+import "../testing/test/checkout.ts";
 import "../testing/test/orders.ts";
+import "../testing/websocket.ts";
 import {
   createClient,
   withEndpoint,

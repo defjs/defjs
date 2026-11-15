@@ -39,19 +39,20 @@ Defjs separates the two sides of an SDK so operation contracts can be shared or 
 
 Agents trained on Axios, Fetch, or Zod often apply habits that break Defjs contracts. Follow the right column:
 
-| Habit from other libraries (Wrong)                                    | Defjs best practice (Right)                                                                             |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Creating `createClient(...)` inside the SDK definition file           | Export only `struct` and `define*` from SDK files; create `client` in the consuming app                 |
-| Omitting `builder` expecting `:id` to be inferred from `input`        | Always write `builder: (input) => ({ path: { id: input.id } })` whenever `input` is present             |
-| Making `builder: async (input) => ...` or reading auth tokens         | Keep `builder` synchronous and pure; read tokens inside `createHttpInterceptor`                         |
-| Mapping `.alias("wire_key")` by hand in `builder` literals            | Pass the typed struct value (`body: input.order`) so Defjs encodes wire aliases automatically           |
-| Wrapping `await getOrder(client, input)` in `try / catch`             | Destructure `const [err, data] = await getOrder(client, input); if (err) return;`                       |
-| Calling `OrderSchema.parse(raw)`                                      | Call `const [err, data] = struct.parse(OrderSchema, raw);`                                              |
-| Reusing `const timed = client({ signal: AbortSignal.timeout(5000) })` | Derive `client({ signal: AbortSignal.timeout(5000) })` inline at each call site                         |
-| Passing `useClient()` to `useState(client)` or `watch(client)`        | `DerivableClient` is a function; call `useClient()` / `injectClient()` directly and never wrap in state |
-| Naming the tuple slot `error`, or `if (!err) { ... } else { ... }`    | Name it `err`; `if (err) { return ... }` right after the call, success path stays unindented            |
-| Branching on `err?.code === ...` before `if (err)`                    | Put `if (err.code === "HTTP_STATUS" && err.status === 404)` inside the `if (err)` block                 |
-| Returning `undefined` / `null` on failure, or logging and continuing  | `return [err, undefined]`, or wrap with `new Error("put object", { cause: err })` when several calls    |
+| Habit from other libraries (Wrong)                                    | Defjs best practice (Right)                                                                                              |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Creating `createClient(...)` inside the SDK definition file           | Export only `struct` and `define*` from SDK files; create `client` in the consuming app                                  |
+| Omitting `builder` expecting `:id` to be inferred from `input`        | Always write `builder: (input) => ({ path: { id: input.id } })` whenever `input` is present                              |
+| Making `builder: async (input) => ...` or reading auth tokens         | Keep `builder` synchronous and pure; read tokens inside `createHttpInterceptor`                                          |
+| Mapping `.alias("wire_key")` by hand in `builder` literals            | Pass the typed struct value (`body: input.order`) so Defjs encodes wire aliases automatically                            |
+| Wrapping `await getOrder(client, input)` in `try / catch`             | Destructure `const [err, data] = await getOrder(client, input); if (err) return;`                                        |
+| Calling `OrderSchema.parse(raw)`                                      | Call `const [err, data] = struct.parse(OrderSchema, raw);`                                                               |
+| Reusing `const timed = client({ signal: AbortSignal.timeout(5000) })` | Derive `client({ signal: AbortSignal.timeout(5000) })` inline at each call site                                          |
+| Passing `useClient()` to `useState(client)` or `watch(client)`        | `DerivableClient` is a function; call `useClient()` / `injectClient()` directly and never wrap in state                  |
+| Naming the tuple slot `error`, or `if (!err) { ... } else { ... }`    | Name it `err`; `if (err) { return ... }` right after the call, success path stays unindented                             |
+| Branching on `err?.code === ...` before `if (err)`                    | Put `if (err.code === "HTTP_STATUS" && err.status === 404)` inside the `if (err)` block                                  |
+| Returning `undefined` / `null` on failure, or logging and continuing  | `return [err, undefined]`, or wrap with `new Error("put object", { cause: err })` when several calls                     |
+| Stubbing or `vi.mock("./sdk/orders")` on operation functions          | Keep operations real and inject `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle` on a test `createClient(...)` |
 
 ## End-to-end best practice example
 
@@ -148,4 +149,4 @@ Load only the reference file that matches your current task:
 - [ ] Retries are enabled with `withRetry`; `ReadableStream` bodies are never replayed.
 - [ ] Every opened SSE stream and WebSocket session is closed with `await using` or `finally { close(); await closed; }`.
 - [ ] React `useEffect` and Vue `watch` / `onScopeDispose` abort in-flight operations on cleanup and ignore late completions after abort.
-- [ ] Typecheck and transport-handle unit tests (`withHTTPHandle`, `withSSEHandle`, `withWebSocketHandle`) pass.
+- [ ] Typecheck and per-test isolated `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle` tests pass for your project's definitions, custom interceptors, business helpers, and React/Vue components without `vi.mock`.

@@ -1,15 +1,26 @@
 ---
 title: "測試"
-description: "用注入式傳輸層 handle 離線測試 SDK 定義同應用程式策略，配合 tuple 斷言同可控計時器。"
+description: 指導你喺自己嘅專案入面為 Defjs 請求定義、struct 結構、自訂攔截器、業務編排函式、即時串流消費邏輯同 UI 元件寫測試案例。
 ---
 
 # 測試
 
-正因為 Defjs 將操作定義同 client 執行徹底分離，你可以喺離線環境下直接測試真實嘅 SDK 定義同應用程式攔截器，完全唔需要啟動本地網絡伺服器，亦唔使 mock 函式庫內部嘅實作細節。
+`@defjs/core` 本身已經測試咗自身嘅傳輸同編解碼引擎。當你喺自己嘅應用程式或者 SDK 套件入面用 Defjs 嗰陣，寫測試案例嘅目的係驗證**你自己寫出嚟嘅專案程式碼**——包括 `src/api/request/` 同 `src/api/schema/` 嘅介面定義同資料結構、`src/api/client.ts` 嘅自訂攔截器、`src/checkout.ts` 嘅業務編排邏輯，同埋 React / Vue 元件嘅請求互動。
 
-## 1. 注入本地傳輸層 handle
+## 專案入面要測啲咩——點解唔好用 `vi.mock`
 
-喺 `createClient(...)` 上面使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 嚟替換底層嘅平台傳輸實作。Defjs 依然會跑齊完整嘅操作流程：input `struct` 驗證、`builder` 參數映射、URL 目錄邊界檢查、攔截器鏈、狀態碼分發，以及 response `struct` 解碼。
+**千祈唔好**喺專案測試入面 stub 或者 `vi.mock(...)` 匯出嘅 `defineRequest`、`defineEventStream` 或 `defineWebSocket`。正確做法係每個測試各自建立一個注入本地傳輸 handle（`withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle`）嘅測試 `Client`，令你嘅真實操作定義同業務程式碼直接喺記憶體入面跑通：
+
+| 專案程式碼分層                                             | 測試重點                                                                | 點樣駁入測試 `Client`                                                                 |
+| :--------------------------------------------------------- | :---------------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
+| 介面定義同 Schema（`src/api/request/`、`src/api/schema/`） | 手寫 `builder` 參數擺位、`.alias()` 網絡格式欄位、`output`/`error` 解碼 | 直接匯入真實操作函式，傳入掛載 `withHTTPHandle` 嘅測試 `Client`                       |
+| 業務函式同自訂攔截器（`checkout.ts`、`client.ts`）         | 認證 header 攔截器、多步業務流、業務錯誤轉換同重試策略                  | 將測試 `Client`（掛載 `withInterceptors(...)`）直接傳入業務函式                       |
+| SSE 同 WebSocket 消費邏輯（`src/events/`、`src/quotes/`）  | 業務函式對推送事件嘅消費處理、傳出訊息格式同 `await using` 釋放         | 用 `withSSEHandle` 或 `withWebSocketHandle` 喺記憶體入面餵入模擬幀                    |
+| React / Vue UI 元件（`OrderCard.tsx`、`OrderView.vue`）    | Loading 狀態、API 資料渲染、錯誤 UI 展示同卸載時 `AbortController` 取消 | 外層包 `<ClientProvider client={testClient}>` 或安裝 `createClientPlugin(testClient)` |
+
+## 1. 測試專案內嘅介面定義同 Schema（`withHTTPHandle`）
+
+從專案匯入真實嘅 `defineRequest` 操作，喺測試入面用保留網域（例如 `https://fixture.invalid`）同 `withHTTPHandle(...)` 建立測試 `Client`，核對發出嘅 `Request` 係咪符合後端規格。未配置 `withRetry` 時預設唔會重試；普通單元測試用戶端請省略 `withRetry`，令 `502`/`503`/`504` 同網絡錯誤案例喺單次嘗試後即時返回，唔使等退避延遲。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -28,31 +39,85 @@ description: "用注入式傳輸層 handle 離線測試 SDK 定義同應用程�
 </Tab>
 </Tabs>
 
-## 2. 測試最佳實踐
+### 案例隔離、報文檢查同 error-first tuple
 
-### 斷言 error-first tuple，而唔係內部私有狀態
+- **每個測試獨立建立一個 Client**：喺每個 `test(...)` 或者測試 helper 入面重新建立 `createClient(...)`，避免重試預算、端點健康狀態同有狀態閉包喺測試之間互相干擾。
+- **檢查實際發出嘅網絡報文**：喺 `withHTTPHandle(async (input, init) => ...)` 入面建立 `const request = new Request(input, init)`，斷言 `request.method`、`request.url`、`request.headers` 同 `await request.text()`（或 `await request.json()`），確保你寫嘅 `builder` 同 `.alias()` 同後端 API 文件一致。
+- **斷言 `[err, data, response]` tuple**：
+  - `2xx` 成功分支：斷言 `expect(err).toBeNull()` 並緊接 `if (err) throw err;`，再檢查解碼後嘅 `data` 欄位（包含 `.alias()` 轉換結果）。
+  - 失敗分支：先用 `if (err)` 保護，喺區塊入面收窄 `if (err.code === "HTTP_STATUS")` 斷言 `err.status`、`err.data` 同 `err.response`（解碼／預檢故障或包裝後嘅業務 `Error` 則檢查 `err.cause`），喺 `if (err)` 入面 `return` 並於結尾加上 `expect.unreachable(...)`。
 
-一定要用你嘅測試 client 呼叫匯出嘅 SDK 操作，並針對回傳嘅 `[err, data, response]` tuple 進行斷言：
+## 2. 測試專案內嘅業務函式同自訂攔截器
 
-- 對於 `2xx` 成功情況，斷言 `expect(err).toBeNull()` 並驗證解碼後嘅 `data` 欄位（包括 `.alias()` 網絡欄位到邏輯命名嘅自動轉換）。
-- 對於失敗情況，如果屬於契約一部分，請斷言 `err?.code`、`err?.status`、`err?.data` 同埋 `err?.cause`。
+測試業務編排函式（好似 `src/checkout.ts`）同自訂攔截器（`createHttpInterceptor`）嗰陣，將測試 `Client` 直接傳畀業務函式，並透過 `withInterceptors(...)` 掛上專案攔截器。單一次記憶體測試就可以同時驗證攔截器注入嘅認證 header、`submitOrder` 序列化出嚟嘅 `.alias()` 請求體，以及業務層對成功結果同錯誤狀態碼（例如 `409` 衝突轉成業務錯誤）嘅處理：
 
-### 驗證傳出請求嘅網絡原始 bytes
+<Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
+<Tab>
 
-喺 `withHTTPHandle(async (input, init) => ...)` 函式入面，建構 `const request = new Request(input, init)` 並檢查 `request.url`、`request.method`、`request.headers` 以及 `await request.text()`（或 `await request.json()`），確認你嘅 `builder` 同 struct 別名正確序列化出後端預期嘅網絡格式。
+<include cwd lang="typescript">
+  examples/testing/src/checkout.ts#example
+</include>
 
-### 用 Fake Timers 實現確定性時間控制
+</Tab>
+<Tab>
 
-攔截器重試退避、SSE/WebSocket 重連延遲或者 WebSocket 心跳，喺 Vitest 入面用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`。呢啲假計時器唔會推動原生嘅 `AbortSignal.timeout`。想喺 Vitest 入面得到確定嘅請求期限，請用受控嘅 `setTimeout`，以 `TimeoutError` 做原因中止一個 `AbortController`：
+<include cwd lang="typescript">
+  examples/testing/test/checkout.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+如果想測試暫時性 `503` 嘅 `withRetry` 重試恢復而唔等真實計時器，只要喺 `withHTTPHandle` 入面維護計數器 `let attempts = 0`，並配置 `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })`（重試 `submitOrder` 呢類 `POST` 操作時必須加上 `methods: ["POST"]`）。攔截器層面嘅重送（例如喺攔截器入面透過 `next(...)` 於 `401` 後刷新 Token 再重送）唔會用到 `withRetry`，直接配合有狀態 `withHTTPHandle` 計數器測試即可。
+
+## 3. 測試專案內嘅即時串流消費邏輯（SSE / WebSocket）
+
+如果專案入面有封裝 `defineEventStream` 或 `defineWebSocket` 嘅串流消費函式或者狀態整合邏輯，可以用 `withSSEHandle` 或 `withWebSocketHandle` 喺記憶體入面送入模擬影格，直接斷言業務消費函式嘅回傳同清理行為：
+
+- **SSE（`withSSEHandle`）**：返一個帶有 `ReadableStream<Uint8Array>` 同 `content-type: "text/event-stream"` header 嘅 `Response`。
+- **WebSocket（`withWebSocketHandle`）**：傳入繼承 `EventTarget` 並實作 `WebSocketHandle`（提供 `static readonly OPEN = 1`）嘅輕量樁 class，記錄發送內容並派發 `open`、`MessageEvent("message")` 同 `CloseEvent("close")`。
+
+<Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sse.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/websocket.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 4. 點樣組織專案程式碼，令業務層同 UI 元件都易測
+
+跟隨 [應用程式 API 層](/zh-Hant-HK/docs/application-api) 嘅分層方式組織專案，寫測試就完全唔使依賴 `vi.mock`：
+
+- **定義檔 `src/api/request/*.ts` 唔綁定全域 Client**：只匯出 `defineRequest`、`defineEventStream` 同 `defineWebSocket`，千祈唔好喺定義檔入面匯入生產 `apiClient`，令任何測試都可以直接傳測試 `Client` 入操作函式。
+- **業務函式透過參數接收 `Client`（或 `DerivableClient`）**：可以將 `client` 作為明確嘅第一個參數（直接轉發用 `client: Client`，要衍生單次選項如 `client({ signal })` 用 `client: DerivableClient`）寫成 `export async function placeOrder(client: Client, input: ...)`；或者把帶預設值嘅用戶端放喺最後一個參數（`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`），令生產環境可以寫 `placeOrder(input)`，單元測試傳入 `placeOrder(input, testClient)`。同時將自訂攔截器同 SSR 工廠（例如 `createServerApiClient(token, ...options: ClientOption[])`，將尾部 `ClientOption` 傳入 `createClient(...)`）從 `src/api/client.ts` 匯出，方便喺測試掛載 `withHTTPHandle`。
+- **React 同 Vue UI 元件透過 Provider / Plugin 換入 `testClient`**：
+  - **React（`@defjs/react`）**：測試元件時外層包住 `<ClientProvider client={testClient}>`（或者傳 `testClient` 畀支援 `useClient(overrideClient)` 嘅元件/Hook）。
+  - **Vue（`@defjs/vue`）**：掛載待測元件時安裝 `app.use(createClientPlugin(testClient))`（或者透過 `provide(HTTP_CLIENT, testClient)` 注入）。
+
+## 5. 測試專案入面嘅逾時同定時策略
+
+測試業務攔截器入面嘅退避等待、SSE/WebSocket 重連延遲或者心跳檢查時，喺 Vitest 用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`（喺 Bun test 用 `jest.useFakeTimers()`）。注意 Vitest 嘅假計時器唔會推動原生 `AbortSignal.timeout` 時鐘；想喺 Vitest 穩定觸發超時分支，請用受控 `setTimeout` 以 `TimeoutError` 為原因中止 `AbortController`：
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-喺 Bun test 入面用 `jest.useFakeTimers()` 同 `jest.advanceTimersByTime()`；Bun 嘅假計時器亦會控制 `AbortSignal.timeout`。唔好假定兩種 runner 控制同一套原生時鐘。只喺被等待嘅階段已經開始之後先推進時間，斷言狀態轉換或者嘗試次數，而唔係實際經過嘅時間，並喺每個測試之後恢復真實計時器。
+喺 Bun test 入面，`jest.useFakeTimers()` 同 `jest.advanceTimersByTime()` 會一齊控制 `AbortSignal.timeout`。請喺被等待嘅非同步階段開始之後先推進時間，斷言狀態變化或者嘗試次數（而唔係真實經過嘅時間），並喺 `finally` 還原真實計時器。
 
 ## 延伸閱讀
 
 - [使用本地 Fetch Handle 進行測試](/zh-Hant-HK/recipes/test-with-handle)
-- [建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)
-- [Client 設定](/zh-Hant-HK/docs/client)
+- [應用程式 API 層](/zh-Hant-HK/docs/application-api)
+- [公開 SDK 設計](/zh-Hant-HK/docs/public-sdk)
+- [工程規範](/zh-Hant-HK/docs/best-practices)
+- [React 整合](/zh-Hant-HK/docs/integrations/react) · [Vue 整合](/zh-Hant-HK/docs/integrations/vue) · [Client 設定](/zh-Hant-HK/docs/client)

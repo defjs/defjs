@@ -31,7 +31,11 @@ test("request deadline follows the controlled timer", async () => {
     await ready;
     await vi.advanceTimersByTimeAsync(100);
     const [err] = await pending;
-    expect(err?.code).toBe("NET_TIMEOUT");
+    if (err) {
+      expect(err.code).toBe("NET_TIMEOUT");
+      return;
+    }
+    expect.unreachable("expected NET_TIMEOUT");
   } finally {
     clearTimeout(timer);
     controller.abort();

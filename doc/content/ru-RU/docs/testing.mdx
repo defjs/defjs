@@ -1,15 +1,26 @@
 ---
 title: "Тестирование"
-description: Тестируйте определения SDK и политики приложений офлайн с подменяемыми хэндлами транспорта, проверками кортежей и детерминированными таймерами.
+description: Как писать в своём проекте тесты для определений запросов Defjs, схем struct, собственных перехватчиков, бизнес-хелперов, потребителей потоков и UI-компонентов.
 ---
 
 # Тестирование
 
-Поскольку Defjs разделяет определения операций и выполнение в клиенте, вы можете тестировать настоящие определения SDK и перехватчики приложения офлайн — без запуска сетевого сервера и без мокирования внутренних функций библиотеки.
+`@defjs/core` уже тестирует собственный транспорт и движок кодеков. Когда вы используете Defjs в своём приложении или SDK-пакете, тесты нужны для проверки **кода, который написали вы** — ваших определений запросов и схем `struct` (`src/api/request/`, `src/api/schema/`), ваших перехватчиков (`src/api/client.ts`), бизнес-логики (`src/checkout.ts`) и UI-компонентов.
 
-## 1. Внедрение локального хэндла транспорта
+## Что тестировать в проекте — и почему не нужно использовать `vi.mock`
 
-Используйте `withHTTPHandle`, `withSSEHandle` или `withWebSocketHandle` в `createClient(...)`, чтобы заменить базовый платформенный транспорт. Defjs по-прежнему выполняет полный конвейер операции: валидацию входной структуры `struct`, маппинг в `builder`, проверки ограничения URL, перехватчики, маршрутизацию статусов и декодирование структуры ответа `struct`.
+**Не** заменяйте заглушками и не мокируйте через `vi.mock(...)` экспортированные функции `defineRequest`, `defineEventStream` или `defineWebSocket`. Вместо этого создавайте изолированный тестовый `Client` на каждый тест с `withHTTPHandle`, `withSSEHandle` или `withWebSocketHandle`. Так вы сквозным образом проверяете собственные определения и политики приложения в памяти, не открывая сетевых сокетов:
+
+| Слой в вашем проекте                                        | Что проверяет тест                                                                                     | Как подключить тестовый `Client`                                                                  |
+| :---------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------ |
+| Определения и схемы (`src/api/request/`, `src/api/schema/`) | Раскладка `builder` (`path`, `query`, `headers`, `body`), `.alias()`, `output`/`error`                 | Импортировать реальную операцию и передать свежий клиент с `withHTTPHandle`                       |
+| Бизнес-хелперы и перехватчики (`checkout.ts`, `client.ts`)  | Заголовки авторизации, многошаговые сценарии, доменное отображение ошибок, повторы                     | Передать `testClient` (с `withInterceptors(...)`) прямо в бизнес-функцию                          |
+| Потребители SSE и WebSocket (`src/events/`, `src/quotes/`)  | Прикладная обработка входящих событий, исходящие сообщения, очистка `await using`                      | Подавать фреймы в памяти через `withSSEHandle` или `withWebSocketHandle`                          |
+| Компоненты React / Vue (`OrderCard.tsx`, `OrderView.vue`)   | Состояние загрузки, отрисованные данные, UI ошибок, отмена через `AbortController` при размонтировании | Обернуть в `<ClientProvider client={testClient}>` или установить `createClientPlugin(testClient)` |
+
+## 1. Тестирование определений запросов и схем (`withHTTPHandle`)
+
+Импортируйте реальные операции `defineRequest` из вашего проекта, создайте изолированный тестовый `Client` с зарезервированным базовым URL (например, `https://fixture.invalid`) и `withHTTPHandle(...)`, и проверьте исходящий `Request`. Повторы отключены, пока не настроен `withRetry`; опускайте `withRetry` в обычных тестовых клиентах, чтобы тесты для `502`/`503`/`504` и сетевых ошибок завершались сразу после одной попытки без ожидания бэкоффа.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -28,31 +39,85 @@ description: Тестируйте определения SDK и политики
 </Tab>
 </Tabs>
 
-## 2. Лучшие практики тестирования
+### Изоляция, проверка исходящего формата и error-first кортеж
 
-### Проверяйте error-first кортеж, а не внутренности библиотеки
+- **Изолируйте клиент на каждый тест**: Создавайте свежий `createClient(...)` в каждом `test(...)` или хелпере, чтобы бюджеты повторов и состояние хэндла не протекали между тестами.
+- **Проверяйте исходящий сетевой формат**: Внутри `withHTTPHandle(async (input, init) => ...)` создайте `const request = new Request(input, init)` и проверьте `request.method`, `request.url`, `request.headers`, а также `await request.text()` (или `await request.json()`), чтобы убедиться, что `builder` и `.alias()` соответствуют контракту бэкенда.
+- **Проверяйте кортеж `[err, data, response]`**:
+  - Для ответов `2xx` проверяйте `expect(err).toBeNull()`, затем сразу `if (err) throw err;` перед чтением декодированных полей `data` (включая маппинг `.alias()`).
+  - Для ошибок сначала ставьте защиту `if (err)`, внутри сужайте `if (err.code === "HTTP_STATUS")` для проверки `err.status`, `err.data` и `err.response` (а при ошибках декодирования, preflight или обёрнутых бизнес-исключениях `Error` проверяйте `err.cause`), выполняйте `return` внутри `if (err)` и ставьте `expect.unreachable(...)` после блока.
 
-Всегда вызывайте экспортированную операцию SDK с вашим тестовым клиентом и проверяйте возвращаемый кортеж `[err, data, response]`:
+## 2. Тестирование бизнес-функций и своих перехватчиков
 
-- Для успешных сценариев `2xx` проверяйте `expect(err).toBeNull()` и поля декодированного объекта `data` (включая работу маппинга `.alias()` из сетевых имён в логические).
-- Для сценариев сбоя проверяйте `err?.code`, `err?.status`, `err?.data` и `err?.cause`, если они входят в контракт.
+Передайте `Client` в бизнес-функции оркестрации (`checkout.ts`) и подключите ваши собственные `createHttpInterceptor`-хелперы (`withInterceptors(bearerAuth(...))`) к тестовому клиенту. В одном офлайн-тесте вы проверяете заголовки авторизации от перехватчика, JSON-кодирование `.alias()` в `submitOrder` и обработку как успешного результата, так и объявленных ошибок (например, `409` Conflict):
 
-### Проверяйте сырые байты исходящих запросов
+<Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
+<Tab>
 
-Внутри функции `withHTTPHandle(async (input, init) => ...)` создайте `const request = new Request(input, init)` и проверяйте `request.url`, `request.method`, `request.headers`, а также `await request.text()` (или `await request.json()`), чтобы убедиться, что `builder` и алиасы структуры сформировали ровно тот сетевой формат, который ожидает ваш бэкенд.
+<include cwd lang="typescript">
+  examples/testing/src/checkout.ts#example
+</include>
 
-### Детерминированное управление временем через фейковые таймеры
+</Tab>
+<Tab>
 
-Для задержек повтора в перехватчиках, пауз переподключения SSE/WebSocket или heartbeat WebSocket используйте `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` в Vitest. Эти фейковые таймеры не двигают нативные часы `AbortSignal.timeout`. Для детерминированного дедлайна запроса в Vitest прервите `AbortController` из управляемого `setTimeout` с причиной `TimeoutError`:
+<include cwd lang="typescript">
+  examples/testing/test/checkout.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+Чтобы протестировать восстановление через `withRetry` при временном `503` без реального ожидания таймеров, храните счётчик `let attempts = 0` внутри `withHTTPHandle` и задайте `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` (`methods: ["POST"]` требуется для повторов `POST`-операций вроде `submitOrder`). Повтор на уровне перехватчика (например, обновление токена при `401` с повторным вызовом `next(...)` внутри перехватчика) не использует `withRetry` — тестируйте его напрямую со счётчиком состояния в `withHTTPHandle`.
+
+## 3. Тестирование прикладных потребителей SSE и WebSocket
+
+Если в проекте есть функции-потребители или агрегаторы состояния поверх `defineEventStream` или `defineWebSocket`, подавайте симулированные фреймы в памяти через `withSSEHandle` или `withWebSocketHandle` и проверяйте результат бизнес-функции:
+
+- **SSE (`withSSEHandle`)**: Верните `Response` с `ReadableStream<Uint8Array>` и заголовком `content-type: "text/event-stream"`.
+- **WebSocket (`withWebSocketHandle`)**: Передайте лёгкий класс-наследник `EventTarget`, реализующий `WebSocketHandle` (`static readonly OPEN = 1`), который записывает отправленные сообщения и генерирует `open`, `MessageEvent("message")` и `CloseEvent("close")`.
+
+<Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sse.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/websocket.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 4. Как организовать проект, чтобы каждый слой было легко тестировать
+
+Схема организации из [Прикладного API-слоя](/ru-RU/docs/application-api) позволяет писать тесты полностью без `vi.mock`:
+
+- **Храните `src/api/request/*.ts` без привязки к клиенту**: Экспортируйте только `defineRequest`, `defineEventStream` и `defineWebSocket`. Никогда не импортируйте боевой `apiClient` в файлы определений, чтобы любой тест мог вызывать операции напрямую с клиентом на базе `with*Handle`.
+- **Принимайте `Client` (или `DerivableClient`) параметром в бизнес-хелперах**: передавайте `client` явно первым параметром (`export async function placeOrder(client: Client, input: ...)` при простой передаче или `client: DerivableClient`, если выводятся параметры на вызов вроде `client({ signal })`) либо выносите параметр со значением по умолчанию в конец (`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`), чтобы рабочий код вызывал `placeOrder(input)`, а тесты — `placeOrder(input, testClient)`. Экспортируйте свои перехватчики и SSR-фабрики (`createServerApiClient(token, ...options: ClientOption[])`, передающие конечные `ClientOption` в `createClient(...)`) из `src/api/client.ts`, чтобы подключать `withHTTPHandle` в тестах.
+- **Внедряйте `testClient` в компоненты React и Vue**:
+  - **React (`@defjs/react`)**: Оборачивайте тестируемый компонент в `<ClientProvider client={testClient}>` (или передавайте `testClient` в `useClient(overrideClient)`).
+  - **Vue (`@defjs/vue`)**: Устанавливайте `app.use(createClientPlugin(testClient))` (или `provide(HTTP_CLIENT, testClient)`) при монтировании компонентов в тестах.
+
+## 5. Детерминированное тестирование таймаутов и таймеров
+
+Для бэкоффа повторов, пауз переподключения SSE/WebSocket или heartbeat WebSocket в политиках приложения используйте `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` в Vitest (`jest.useFakeTimers()` в Bun test). Фейковые таймеры Vitest **не** продвигают нативные часы `AbortSignal.timeout`; чтобы детерминированно проверить дедлайн запроса в Vitest, прервите `AbortController` из управляемого `setTimeout` с причиной `TimeoutError`:
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-В Bun test используйте `jest.useFakeTimers()` и `jest.advanceTimersByTime()`; фейковые таймеры Bun также управляют `AbortSignal.timeout`. Не считайте, что раннеры управляют одними и теми же нативными часами. Сдвигайте таймеры только после старта ожидаемой фазы, проверяйте переходы состояний или счётчики попыток, а не реальное прошедшее время, и восстанавливайте настоящие таймеры после каждого теста.
+В Bun test `jest.useFakeTimers()` и `jest.advanceTimersByTime()` также управляют `AbortSignal.timeout`. Продвигайте таймеры только после начала ожидаемой фазы, проверяйте переходы состояний или счётчики попыток вместо реального времени, и восстанавливайте настоящие таймеры в `finally`.
 
 ## Связанные материалы
 
 - [Тестирование с локальным Fetch-хэндлом](/ru-RU/recipes/test-with-handle)
-- [Сборка и публикация SDK](/ru-RU/recipes/publish-http-sdk)
-- [Настройка клиента](/ru-RU/docs/client)
+- [Прикладной API-слой](/ru-RU/docs/application-api)
+- [Проектирование публичного SDK](/ru-RU/docs/public-sdk)
+- [Инженерные соглашения](/ru-RU/docs/best-practices)
+- [Интеграция с React](/ru-RU/docs/integrations/react) · [Интеграция с Vue](/ru-RU/docs/integrations/vue) · [Настройка клиента](/ru-RU/docs/client)
