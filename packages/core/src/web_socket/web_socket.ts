@@ -12,7 +12,10 @@ import { pickEndpoint } from "../balancer/runtime";
 import type { Fault, PreflightFault } from "../error";
 import { createPreflightFault } from "../error";
 import { isDefjsFault } from "../error/factory";
-import type { WebSocketSessionLike } from "../interceptor/interceptor";
+import type {
+  OperationCall,
+  WebSocketSessionLike,
+} from "../interceptor/interceptor";
 import {
   makeChain,
   resolveWebSocketInterceptors,
@@ -24,6 +27,7 @@ import {
 } from "../internal/abort";
 import { rejected } from "../internal/chain_faults";
 import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
+import { executeOperation } from "../internal/operation";
 import type { HttpRequest } from "../http/http_request";
 import type {
   BuilderField,
@@ -410,12 +414,26 @@ export function defineWebSocket<
     protocols,
   };
 
+  // The opening handshake is always a GET (RFC 6455 section 4.1).
+  const call: OperationCall = {
+    transport: "websocket",
+    method: "GET",
+    path,
+    meta,
+  };
+
   return (client: Client, input?: EndpointInput<TInput>) =>
-    runWebSocketCommand(
-      client[CLIENT].config,
-      endpoint,
-      input,
-      client[CLIENT].options,
+    executeOperation(
+      client,
+      call,
+      () =>
+        runWebSocketCommand(
+          client[CLIENT].config,
+          endpoint,
+          input,
+          client[CLIENT].options,
+        ),
+      (result) => result[1]?.close(),
     );
 }
 

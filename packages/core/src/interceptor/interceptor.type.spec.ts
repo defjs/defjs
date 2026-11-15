@@ -1,3 +1,4 @@
+import type { FaultCode } from "../error/types";
 import type { HttpRequest } from "../http/http_request";
 import type { HttpResponse } from "../http/http_response";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
@@ -14,7 +15,11 @@ import type {
   WebSocketInterceptorFn,
   WebSocketSessionLike,
 } from "./interceptor";
-import { createHttpInterceptor, type makeChain } from "./interceptor";
+import {
+  createHttpInterceptor,
+  createOperationInterceptor,
+  type makeChain,
+} from "./interceptor";
 import type { HttpInterceptor, SSEInterceptor } from "./index";
 import { basicAuthHttpInterceptor, basicAuthSSEInterceptor } from "./index";
 
@@ -200,6 +205,18 @@ createHttpInterceptor(() =>
 basicAuthSSEInterceptor(() => ({
   username: "miao",
 }));
+
+createOperationInterceptor(async (_call, next) => {
+  const result = await next();
+  const [err] = result;
+  err?.code satisfies FaultCode | undefined;
+  return result;
+});
+
+createOperationInterceptor(
+  // @ts-expect-error an operation interceptor resolves only with what next() resolved with
+  () => Promise.resolve([null, undefined, undefined]),
+);
 
 export type Cases = [
   HttpChainNextCase,

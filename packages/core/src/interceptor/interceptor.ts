@@ -1,3 +1,4 @@
+import type { AnyFault } from "../error/types";
 import type { HttpRequest } from "../http/http_request";
 import type { HttpResponse } from "../http/http_response";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
@@ -40,7 +41,8 @@ export type InterceptorFn = (
  * Tagged HTTP interceptor accepted by client interceptor options.
  *
  * Created by `createHttpInterceptor`. `kind` is the discriminant that lets
- * `withInterceptors` accept HTTP, SSE, and WebSocket interceptors in one list.
+ * `withInterceptors` accept every interceptor kind in one list; only `kind: 'http'`
+ * interceptors run for HTTP operations.
  *
  * @group interceptors
  */
@@ -113,7 +115,7 @@ export type SSEInterceptorFn = (
  * Tagged SSE interceptor for client option lists, accepted by `withInterceptors`.
  *
  * Created by `createSSEInterceptor`. The `kind` tag lets `withInterceptors`
- * accept HTTP, SSE, and WebSocket interceptors in one list; only `kind: 'sse'`
+ * accept every interceptor kind in one list; only `kind: 'sse'`
  * interceptors run for SSE operations.
  *
  * @group interceptors
@@ -201,7 +203,7 @@ export type WebSocketInterceptorFn = (
  * Tagged WebSocket interceptor for client option lists, accepted by `withInterceptors`.
  *
  * Created by `createWebSocketInterceptor`. The `kind` tag lets
- * `withInterceptors` accept HTTP, SSE, and WebSocket interceptors in one list;
+ * `withInterceptors` accept every interceptor kind in one list;
  * only `kind: 'web-socket'` interceptors run for WebSocket operations.
  *
  * @group interceptors
@@ -230,20 +232,116 @@ export function createWebSocketInterceptor(
 }
 
 // ---------------------------------------------------------------------------
+// Operation Interceptor
+// ---------------------------------------------------------------------------
+
+/**
+ * The operation call an operation interceptor wraps, described by its definition.
+ *
+ * `transport` is `'http'`, `'sse'`, or `'websocket'`. `method` is the defined method; a WebSocket operation reports
+ * `GET`, the method of its opening handshake. `path` is the defined path template, such as `/orders/:id`, before any
+ * input is placed. `meta` is the definition's `meta`, the same read-only object every call shares. The input, the
+ * request options, and the request itself are not part of it: the call has not been built when the interceptor runs.
+ *
+ * Each definition reuses one record for all of its calls.
+ *
+ * @group interceptors
+ */
+export interface OperationCall {
+  readonly transport: "http" | "sse" | "websocket";
+  readonly method: string;
+  readonly path: string;
+  readonly meta: { readonly [key: string]: unknown } | undefined;
+}
+
+/**
+ * The error-first tuple any operation resolves with, as an operation interceptor reads it.
+ *
+ * Its first element is the fault, or `null` on success. The rest is the operation's own result: the data and response
+ * for HTTP, the stream and its open information for SSE, the session and its connection for WebSocket.
+ *
+ * @group interceptors
+ */
+export type OperationResult = readonly [
+  err: AnyFault | null,
+  ...rest: unknown[],
+];
+
+/**
+ * Operation interceptor function: observes one operation call from its start to the tuple it resolves with.
+ *
+ * `next()` runs the whole call: input validation, the endpoint pick, the builder, every attempt with its interceptor
+ * chain and retries, and the response decoding. It takes no arguments, so the interceptor cannot change the call. A
+ * second call of `next()` returns the same promise and does not run the call again. The function is generic in the
+ * result, so it can only resolve with what `next()` resolved with.
+ *
+ * Code that the function runs inside `next()`, such as an OpenTelemetry `context.with`, is in effect for the whole
+ * call, including the transport interceptors. `next()` never rejects. If the function throws or rejects, its layer
+ * resolves with `EXT_INTERCEPTOR_FAILED` and the thrown value as `cause`: that is what the operation resolves with,
+ * and what `next()` resolves with in the operation interceptors registered before it. A stream or session the call
+ * had already opened is closed with that value.
+ *
+ * @group interceptors
+ */
+export type OperationInterceptorFn = <TResult extends OperationResult>(
+  call: OperationCall,
+  next: () => Promise<TResult>,
+) => Promise<TResult>;
+
+/**
+ * Tagged operation interceptor accepted by client interceptor options.
+ *
+ * Created by `createOperationInterceptor`. Operation interceptors run for every HTTP, SSE, and WebSocket operation, in
+ * registration order, outside the transport interceptors.
+ *
+ * @group interceptors
+ */
+export interface OperationInterceptor {
+  kind: "operation";
+  fn: OperationInterceptorFn;
+}
+
+/**
+ * Wraps an `OperationInterceptorFn` as a tagged `OperationInterceptor`.
+ *
+ * Returns `{ kind: 'operation', fn }`. An operation interceptor sees each operation call once, from the moment it is
+ * called until it resolves its error-first tuple, so it observes what the transport interceptors cannot: an input
+ * that fails validation (`REQ_INPUT_INVALID`), a builder or endpoint failure before any request exists
+ * (`REQ_BUILD_FAILED`), the retries of one call, and a response that fails decoding after the transport chain
+ * returned it (`HTTP_STATUS`, `RES_*`). For SSE and WebSocket the call resolves once the stream or session is open;
+ * what happens on it later is observed through its `closed`.
+ *
+ * It observes; it does not alter the call. Use a transport interceptor to change requests or responses.
+ *
+ * @param fn - Operation interceptor function.
+ * @returns An `OperationInterceptor` with `kind: 'operation'`.
+ * @group interceptors
+ * @exampleFile examples/api/create-operation-interceptor.ts#example
+ */
+export function createOperationInterceptor(
+  fn: OperationInterceptorFn,
+): OperationInterceptor {
+  return { kind: "operation", fn };
+}
+
+// ---------------------------------------------------------------------------
 // Unified type
 // ---------------------------------------------------------------------------
 
 /**
  * Any tagged interceptor accepted by client interceptor options.
  *
- * `kind` (`'http'`, `'sse'`, or `'web-socket'`) selects which operations an
+ * `kind` (`'http'`, `'sse'`, `'web-socket'`, or `'operation'`) selects which operations an
  * interceptor runs for. `withInterceptors` accepts any mix; each transport runs
- * only its own kind, in registration order.
+ * only its own kind, in registration order, and every operation runs the `'operation'` kind around it.
  *
  * @group interceptors
  */
 export type Interceptor =
-  HttpInterceptor | SSEInterceptor | WebSocketInterceptor;
+  | HttpInterceptor
+  | SSEInterceptor
+  | WebSocketInterceptor
+  | OperationInterceptor;
 
 // ---------------------------------------------------------------------------
 // Chain builders

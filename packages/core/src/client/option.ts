@@ -116,7 +116,7 @@ export function withHeaders(headers: HeadersInit): ClientOption {
 /**
  * Appends interceptors to the client interceptor chain.
  *
- * Calling it again appends more; it never replaces earlier ones. The first registered interceptor is the outermost layer. HTTP, SSE, and WebSocket interceptors can be mixed in one call. When an operation runs, only the interceptors of that transport run, in their registration order. Each `{ kind, fn }` record is copied when the option is applied. `fn` keeps its identity. Changing the original record later does not change clients already created.
+ * Calling it again appends more; it never replaces earlier ones. The first registered interceptor is the outermost layer. HTTP, SSE, WebSocket, and operation interceptors can be mixed in one call. When an operation runs, its operation interceptors wrap the whole call and only the interceptors of its transport run inside it, each in their registration order. Each `{ kind, fn }` record is copied when the option is applied. `fn` keeps its identity. Changing the original record later does not change clients already created.
  *
  * @param interceptors - Interceptors applied in registration order.
  * @returns An option that pushes onto `config.interceptors`.

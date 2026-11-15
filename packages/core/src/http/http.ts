@@ -6,6 +6,8 @@ import type { HttpProgressFn } from "./http_request";
 import type { DecodedResponse, HttpMeta } from "./http_response";
 import type { BuilderField, HttpRequestShape } from "../internal/builder_types";
 import type { OutboundBuilder } from "../internal/outbound_request";
+import type { OperationCall } from "../interceptor/interceptor";
+import { executeOperation } from "../internal/operation";
 import type { AnyStruct, Infer } from "../struct";
 import { executeHttp } from "./execute";
 
@@ -222,6 +224,10 @@ export function defineRequest<
     path,
   };
 
+  const call: OperationCall = { transport: "http", method, path, meta };
+
   return (client: Client, input?: EndpointInput<TInput>) =>
-    executeHttp<TInput, TOutput, TError>(client, endpoint, input);
+    executeOperation(client, call, () =>
+      executeHttp<TInput, TOutput, TError>(client, endpoint, input),
+    );
 }
