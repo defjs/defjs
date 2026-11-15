@@ -7,7 +7,7 @@ description: SDK의 API 정의를 수정하지 않고 애플리케이션 클라�
 
 인터셉터는 SDK 작업 정의를 수정하지 않고도 애플리케이션의 `Client`에 인증 헤더 추가, 요청 서명, 유지보수 모드 단락(short-circuit), `Retry-After` 처리 등 횡단 관심사 실행 정책을 연결할 수 있게 해줍니다.
 
-입력값 검증 및 `builder` 매핑은 인터셉터 체인이 실행되기 **전에** 수행되며, HTTP 상태 코드 분기 및 `output` / `error` struct 유효성 검증은 인터셉터 체인이 실행된 **후에** 수행됩니다.
+입력값 검증 및 `builder` 매핑은 인터셉터 체인이 실행되기 **전에** 수행되며, HTTP 상태 코드 분기 및 `output` / `error` struct 유효성 검증은 인터셉터 체인이 실행된 **후에** 수행됩니다. [작업 인터셉터](/ko-KR/docs/interceptors#operation-interceptors)는 이 모든 것을 감쌉니다.
 
 ## 1. 인터셉터 생성 및 등록하기
 
@@ -80,13 +80,28 @@ WebSocket 인터셉터는 `next(req)`를 **최대 1회만** 호출할 수 있습
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. 내장 팩토리 및 헬퍼
+## 5. 작업 호출 전체 관찰하기 [#operation-interceptors]
+
+전송 인터셉터는 한 번에 요청 하나만 봅니다. 검증에 실패한 입력은 인터셉터에 닿지 않고, 재시도마다 인터셉터가 다시 실행되며, 응답은 인터셉터가 반환된 뒤에 디코딩됩니다. `getOrder(client, input)`을 호출한 순간부터 튜플이 해결될 때까지 호출 자체를 관찰하려면 `createOperationInterceptor`를 사용하세요:
+
+<include cwd lang="typescript">
+  examples/api/create-operation-interceptor.ts#example
+</include>
+
+- **볼 수 있는 것**: `call`은 정의를 설명합니다. `transport`(`"http"`, `"sse"`, `"websocket"`), `method`, `path` 템플릿, `meta`입니다. 입력과 요청은 아직 존재하지 않으므로 담기지 않습니다. `next()`는 작업의 튜플로 해결되므로 `err`는 최종 결함입니다. `REQ_INPUT_INVALID`, `REQ_BUILD_FAILED`, `HTTP_STATUS`, `RES_STRUCT_MISMATCH` 등이 그에 해당합니다.
+- **관찰만 하고 바꾸지 않습니다**: `next()`는 인자를 받지 않고, 두 번째 `next()`는 호출을 다시 실행하지 않고 같은 Promise를 반환하며, 함수는 `next()`가 해결한 값으로만 해결할 수 있습니다. 요청과 응답은 전송 인터셉터에서 바꾸세요.
+- **순서**: 작업 인터셉터는 모든 전송 인터셉터의 바깥쪽에서 등록 순서대로 실행됩니다. OpenTelemetry의 `context.with`처럼 `next()` 주변에서 실행되는 코드는 전송 인터셉터를 포함한 호출 전체에 적용됩니다.
+- **스트림과 세션**: SSE나 WebSocket 호출은 스트림이나 세션이 열리면 해결됩니다. 그 뒤에 일어나는 일은 `closed`를 통해 관찰합니다.
+- **실패**: throw나 reject는 작업을 `EXT_INTERCEPTOR_FAILED`로 해결하고 던진 값을 `cause`로 담습니다. 호출이 이미 열어 둔 스트림이나 세션은 닫힙니다.
+
+## 6. 내장 팩토리 및 헬퍼
 
 | Export                                         | 전송 방식 | 설명                                                                          |
 | ---------------------------------------------- | --------- | ----------------------------------------------------------------------------- |
 | `createHttpInterceptor(fn)`                    | HTTP      | `(req, next) => Promise<HttpResponse<unknown>>` 래핑                          |
 | `createSSEInterceptor(fn)`                     | SSE       | `(req, next) => Promise<EventStreamHandle<unknown>>` 래핑                     |
 | `createWebSocketInterceptor(fn)`               | WebSocket | `(req, next) => Promise<WebSocketSessionLike>` 래핑                           |
+| `createOperationInterceptor(fn)`               | 모두      | 작업 호출 전체를 `(call, next) => Promise<result>`로 래핑                     |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 요청마다 호출되는 동기 자격 증명 제공자로부터 `Authorization: Basic ...` 주입 |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE       | SSE 핸드셰이크 시 `Authorization: Basic ...` 주입                             |
 

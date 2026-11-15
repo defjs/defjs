@@ -102,114 +102,89 @@ function webSocketInterceptor(config: ClientConfig): WebSocketInterceptor {
   return interceptor;
 }
 
-describe("withOpenTelemetryServer logger", () => {
+describe("withOpenTelemetryServer operation interceptor", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  test.each([false, true])(
-    "records all transports with logger-only and requireParentSpan=%s",
-    async (requireParentSpan) => {
-      const { logger, records } = createMockLogger();
+  test.each([
+    { name: "logger", options: () => ({ logger: createMockLogger().logger }) },
+    { name: "meter", options: () => ({ meter: makeMeter() }) },
+    { name: "tracer", options: () => ({ tracer: createMockTracer().tracer }) },
+  ])(
+    "installs it before the transports with only a $name and acquires no global handle",
+    ({ options }) => {
       const getTracer = vi.spyOn(trace, "getTracer");
       const getLogger = vi.spyOn(logs, "getLogger");
       const config = makeConfig();
-      withOpenTelemetryServer({ logger, requireParentSpan })(config);
-      const cause = new TypeError("offline");
-      const reject = () => Promise.reject(cause);
-
-      await expect(
-        httpInterceptor(config).fn(makeHttpRequest(), reject),
-      ).rejects.toBe(cause);
-      await expect(
-        sseInterceptor(config).fn(makeSSERequest(), reject),
-      ).rejects.toBe(cause);
-      await expect(
-        webSocketInterceptor(config).fn(makeWsRequest(), reject),
-      ).rejects.toBe(cause);
-
-      expect(records.map((record) => record.eventName)).toEqual([
-        "http.client.request.exception",
-        "defjs.client.sse.exception",
-        "defjs.client.websocket.exception",
+      withOpenTelemetryServer(options())(config);
+      expect(config.interceptors.map((item) => item.kind)).toEqual([
+        "operation",
+        "http",
+        "sse",
+        "web-socket",
       ]);
       expect(getTracer).not.toHaveBeenCalled();
       expect(getLogger).not.toHaveBeenCalled();
     },
   );
 
-  test("preserves the explicit tracer parent-span bypass for logs", async () => {
-    vi.spyOn(context, "active").mockReturnValue(ROOT_CONTEXT);
-    const { logger, records } = createMockLogger();
+  test("is not installed for propagation only", () => {
     const config = makeConfig();
-    withOpenTelemetryServer({
-      logger,
-      tracer: createMockTracer().tracer,
-      requireParentSpan: true,
-    })(config);
-    const cause = new Error("offline");
-    const reject = () => Promise.reject(cause);
-    await expect(
-      httpInterceptor(config).fn(makeHttpRequest(), reject),
-    ).rejects.toBe(cause);
-    await expect(
-      sseInterceptor(config).fn(makeSSERequest(), reject),
-    ).rejects.toBe(cause);
-    await expect(
-      webSocketInterceptor(config).fn(makeWsRequest(), reject),
-    ).rejects.toBe(cause);
-    expect(records).toEqual([]);
+    withOpenTelemetryServer({})(config);
+    expect(config.interceptors.map((item) => item.kind)).toEqual([
+      "http",
+      "sse",
+      "web-socket",
+    ]);
   });
 });
 
 describe("withOpenTelemetryServer without a tracer", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  test.each([false, true])(
-    "records every transport metric independently of requireParentSpan=%s",
-    async (requireParentSpan) => {
-      const record = vi.fn();
-      const add = vi.fn();
-      const meter = makeMeter();
-      vi.mocked(method(meter, "createHistogram")).mockReturnValue({ record });
-      vi.mocked(method(meter, "createUpDownCounter")).mockReturnValue({ add });
-      vi.spyOn(context, "active").mockReturnValue(ROOT_CONTEXT);
-      const config = makeConfig();
-      withOpenTelemetryServer({ meter, requireParentSpan })(config);
-      const response = makeHttpResponse();
-      const stream = makeSSEStream();
-      const session = makeWsSession();
+  test("records every transport metric", async () => {
+    const record = vi.fn();
+    const add = vi.fn();
+    const meter = makeMeter();
+    vi.mocked(method(meter, "createHistogram")).mockReturnValue({ record });
+    vi.mocked(method(meter, "createUpDownCounter")).mockReturnValue({ add });
+    vi.spyOn(context, "active").mockReturnValue(ROOT_CONTEXT);
+    const config = makeConfig();
+    withOpenTelemetryServer({ meter })(config);
+    const response = makeHttpResponse();
+    const stream = makeSSEStream();
+    const session = makeWsSession();
 
-      await expect(
-        httpInterceptor(config).fn(makeHttpRequest(), () =>
-          Promise.resolve(response),
-        ),
-      ).resolves.toBe(response);
-      await expect(
-        sseInterceptor(config).fn(makeSSERequest(), () =>
-          Promise.resolve(stream),
-        ),
-      ).resolves.toBe(stream);
-      await expect(
-        webSocketInterceptor(config).fn(makeWsRequest(), () =>
-          Promise.resolve(session),
-        ),
-      ).resolves.toBe(session);
-      await waitForSettledPromises();
+    await expect(
+      httpInterceptor(config).fn(makeHttpRequest(), () =>
+        Promise.resolve(response),
+      ),
+    ).resolves.toBe(response);
+    await expect(
+      sseInterceptor(config).fn(makeSSERequest(), () =>
+        Promise.resolve(stream),
+      ),
+    ).resolves.toBe(stream);
+    await expect(
+      webSocketInterceptor(config).fn(makeWsRequest(), () =>
+        Promise.resolve(session),
+      ),
+    ).resolves.toBe(session);
+    await waitForSettledPromises();
 
-      expect(record).toHaveBeenCalledTimes(5);
-      expect(record).toHaveBeenCalledWith(expect.any(Number), {
-        "http.request.method": "GET",
-        "http.response.status_code": 200,
-        "server.address": "api.example.com",
-        "server.port": 443,
-      });
-      expect(add.mock.calls).toEqual([
-        [1, { "server.address": "api.example.com", "server.port": 443 }],
-        [-1, { "server.address": "api.example.com", "server.port": 443 }],
-        [1, { "server.address": "api.example.com", "server.port": 443 }],
-        [-1, { "server.address": "api.example.com", "server.port": 443 }],
-      ]);
-    },
-  );
+    expect(record).toHaveBeenCalledTimes(5);
+    expect(record).toHaveBeenCalledWith(expect.any(Number), {
+      "http.request.method": "GET",
+      "http.response.status_code": 200,
+      "server.address": "api.example.com",
+      "server.port": 443,
+    });
+    expect(add.mock.calls).toEqual([
+      [1, { "server.address": "api.example.com", "server.port": 443 }],
+      [-1, { "server.address": "api.example.com", "server.port": 443 }],
+      [1, { "server.address": "api.example.com", "server.port": 443 }],
+      [-1, { "server.address": "api.example.com", "server.port": 443 }],
+    ]);
+  });
 
   test("accepts empty options and does not acquire a global tracer", async () => {
     const getTracer = vi.spyOn(trace, "getTracer");
@@ -361,48 +336,6 @@ describe("withOpenTelemetryServer without a tracer", () => {
     expect(next.mock.calls[0]?.[0].query).toBe(req.query);
     expect(req.query?.get("traceparent")).toBeNull();
   });
-
-  test("preserves the full requireParentSpan bypass for an explicitly supplied tracer", async () => {
-    vi.spyOn(context, "active").mockReturnValue(ROOT_CONTEXT);
-    const { tracer } = createMockTracer();
-    const meter = makeMeter();
-    const record = vi.fn();
-    const add = vi.fn();
-    vi.mocked(method(meter, "createHistogram")).mockReturnValue({ record });
-    vi.mocked(method(meter, "createUpDownCounter")).mockReturnValue({ add });
-    const propagator = makePropagator();
-    const config = makeConfig();
-    withOpenTelemetryServer({
-      tracer,
-      meter,
-      propagator,
-      requireParentSpan: true,
-    })(config);
-    const httpRequest = makeHttpRequest();
-    const sseRequest = makeSSERequest();
-    const wsRequest = makeWsRequest();
-    const httpNext = vi.fn((_req: HttpRequest) =>
-      Promise.resolve(makeHttpResponse()),
-    );
-    const sseNext = vi.fn((_req: HttpRequest) =>
-      Promise.resolve(makeSSEStream()),
-    );
-    const wsNext = vi.fn((_req: HttpRequest) =>
-      Promise.resolve(makeWsSession()),
-    );
-    await httpInterceptor(config).fn(httpRequest, httpNext);
-    await sseInterceptor(config).fn(sseRequest, sseNext);
-    await webSocketInterceptor(config).fn(wsRequest, wsNext);
-    await waitForSettledPromises();
-    expect(httpNext.mock.calls[0]?.[0]).toBe(httpRequest);
-    expect(sseNext.mock.calls[0]?.[0]).toBe(sseRequest);
-    expect(wsNext.mock.calls[0]?.[0]).toBe(wsRequest);
-    expect(method(tracer, "startSpan")).not.toHaveBeenCalled();
-    expect(method(propagator, "extract")).not.toHaveBeenCalled();
-    expect(method(propagator, "inject")).not.toHaveBeenCalled();
-    expect(record).not.toHaveBeenCalled();
-    expect(add).not.toHaveBeenCalled();
-  });
 });
 
 describe("withOpenTelemetryServer", () => {
@@ -414,6 +347,7 @@ describe("withOpenTelemetryServer", () => {
     option(config);
 
     expect(config.interceptors.map((interceptor) => interceptor.kind)).toEqual([
+      "operation",
       "http",
       "sse",
       "web-socket",
@@ -429,6 +363,7 @@ describe("withOpenTelemetryServer", () => {
     option(config);
 
     expect(config.interceptors.map((interceptor) => interceptor.kind)).toEqual([
+      "operation",
       "sse",
       "web-socket",
     ]);
@@ -443,6 +378,7 @@ describe("withOpenTelemetryServer", () => {
     option(config);
 
     expect(config.interceptors.map((interceptor) => interceptor.kind)).toEqual([
+      "operation",
       "http",
       "web-socket",
     ]);
@@ -457,6 +393,7 @@ describe("withOpenTelemetryServer", () => {
     option(config);
 
     expect(config.interceptors.map((interceptor) => interceptor.kind)).toEqual([
+      "operation",
       "http",
       "sse",
     ]);
@@ -472,7 +409,7 @@ describe("withOpenTelemetryServer", () => {
     });
     option(config);
 
-    expect(config.interceptors).toHaveLength(3);
+    expect(config.interceptors).toHaveLength(4);
     expect(config.http.handle).toBe(config.sse.handle);
   });
 
@@ -571,7 +508,7 @@ describe("withOpenTelemetryServer", () => {
       config,
     );
 
-    expect(config.interceptors).toHaveLength(3);
+    expect(config.interceptors).toHaveLength(4);
   });
 
   test("should accept custom propagator", () => {
@@ -761,6 +698,7 @@ describe("withOpenTelemetryServer transport capture", () => {
       const config = makeConfig();
       option(config);
       expect(config.interceptors.map((item) => item.kind)).toEqual([
+        "operation",
         "http",
         "sse",
         "web-socket",
@@ -917,6 +855,7 @@ describe("withOpenTelemetryServer transport capture", () => {
     option(config);
 
     expect(config.interceptors.map((item) => item.kind)).toEqual([
+      "operation",
       "sse",
       "web-socket",
     ]);
@@ -1113,23 +1052,24 @@ describe("withOpenTelemetryServer transport capture", () => {
     expect(method(meter, "createUpDownCounter")).not.toHaveBeenCalled();
     const first = makeConfig();
     option(first);
-    expect(method(meter, "createHistogram")).toHaveBeenCalledTimes(5);
+    expect(method(meter, "createHistogram")).toHaveBeenCalledTimes(6);
     expect(method(meter, "createUpDownCounter")).toHaveBeenCalledTimes(2);
     const second = makeConfig();
     option(second);
 
-    expect(received).toHaveLength(10);
-    expect(new Set(received).size).toBe(10);
+    expect(received).toHaveLength(12);
+    expect(new Set(received).size).toBe(12);
     expect(received[0]?.[0]).toBe(999);
     expect(received[0]).toContain(42);
     for (const buckets of received.slice(1)) {
       expect(buckets).toEqual(DURATION_BUCKETS);
     }
-    expect(new Set(records).size).toBe(10);
+    expect(new Set(records).size).toBe(12);
+    // The operation histogram comes first, then the HTTP one.
     await httpInterceptor(first).fn(makeHttpRequest(), () =>
       Promise.resolve(makeHttpResponse()),
     );
-    expect(records[0]).toHaveBeenCalledTimes(1);
-    expect(records[5]).not.toHaveBeenCalled();
+    expect(records[1]).toHaveBeenCalledTimes(1);
+    expect(records[7]).not.toHaveBeenCalled();
   });
 });

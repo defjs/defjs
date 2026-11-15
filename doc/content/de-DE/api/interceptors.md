@@ -5,7 +5,7 @@ description: HTTP-, SSE- und WebSocket-Interceptor-Constructors.
 
 # Interceptors
 
-Umhülle `next` für einen Transport. Registriere mit `withInterceptors`. Gemischte Listen werden nach Art gefiltert, wenn die Operation läuft.
+Umhülle `next` für einen Transport oder für einen ganzen Operationsaufruf. Registriere mit `withInterceptors`. Gemischte Listen werden nach Art gefiltert, wenn die Operation läuft.
 
 ## createHttpInterceptor()
 
@@ -29,6 +29,14 @@ Ruf `next(req)` auf (optional einen mutierten Request) oder verkürze den Ablauf
 
 Ein Wrapper oder eine Short-Circuit-Session muss denselben `[Symbol.asyncDispose]()`-Teardown weiterleiten wie ihren `close`- / `closed`-Lebenszyklus; ein fremdes, bereits aufgelöstes Promise reicht nicht.
 
+## createOperationInterceptor()
+
+<ApiSignature name="createOperationInterceptor, OperationInterceptorFn, OperationCall, OperationResult" />
+
+`next()` führt den ganzen Aufruf aus: Input-Validierung, Endpunktauswahl, den Builder, jeden Versuch mit seinen Transport-Interceptors und Retries sowie das Dekodieren der Response. Es nimmt keine Argumente und führt den Aufruf nur einmal aus, egal wie oft es aufgerufen wird. Die Funktion ist im Ergebnis generisch und löst deshalb nur mit dem auf, womit `next()` aufgelöst hat. Operations-Interceptors laufen für jeden Transport, außerhalb der Transport-Interceptors. Ein Throw oder eine Ablehnung löst die Operation mit `EXT_INTERCEPTOR_FAILED` auf, und ein Stream oder eine Session, die der Aufruf schon geöffnet hatte, wird geschlossen.
+
+<include cwd>examples/api/create-operation-interceptor.ts#example</include>
+
 ## Getaggte Typen
 
 ## Interceptor
@@ -39,7 +47,9 @@ Ein Wrapper oder eine Short-Circuit-Session muss denselben `[Symbol.asyncDispose
 
 ## WebSocketInterceptor
 
-<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor" />
+## OperationInterceptor
+
+<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor, OperationInterceptor" />
 
 ## Basic Auth
 

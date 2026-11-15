@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { MockSpan } from "../../test/mocks";
 import { createMockTracer } from "../../test/mocks";
 import {
+  describeError,
   getErrorType,
   getExceptionType,
   isCallerCancellation,
@@ -67,7 +68,7 @@ describe("trace helpers", () => {
   test("endSpanWithError with Error instance", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    endSpanWithError(span, new Error("boom"));
+    endSpanWithError(span, new Error("boom"), false);
 
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "Error" });
     expect(spans[0]?.attributes["error.type"]).toBe("Error");
@@ -78,7 +79,7 @@ describe("trace helpers", () => {
   test("endSpanWithError with non-Error value", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    endSpanWithError(span, "string error");
+    endSpanWithError(span, "string error", false);
 
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "string" });
     expect(spans[0]?.attributes["error.type"]).toBe("string");
@@ -89,7 +90,7 @@ describe("trace helpers", () => {
   test("endSpanWithError with undefined", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    endSpanWithError(span, undefined);
+    endSpanWithError(span, undefined, false);
 
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "_OTHER" });
     expect(spans[0]?.attributes["error.type"]).toBe("_OTHER");
@@ -100,11 +101,72 @@ describe("trace helpers", () => {
   test("endSpanWithError uses the fallback error type for null", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    endSpanWithError(span, null);
+    endSpanWithError(span, null, false);
 
     expect(spans[0]?.attributes["error.type"]).toBe("_OTHER");
     expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
     expect(spans[0]?.ended).toBe(true);
+  });
+
+  describe("includeErrorDiagnostics exports the error text", () => {
+    test("endSpanWithError records the message and stack and describes the status", () => {
+      const { tracer, spans } = createMockTracer();
+      const span = tracer.startSpan("test");
+      const error = new TypeError("ECONNREFUSED: Unable to connect");
+      endSpanWithError(span, error, true);
+
+      expect(spans[0]?.recordException).toHaveBeenCalledWith({
+        name: "TypeError",
+        message: "ECONNREFUSED: Unable to connect",
+        stack: error.stack,
+      });
+      expect(spans[0]?.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: "ECONNREFUSED: Unable to connect",
+      });
+      expect(spans[0]?.attributes["error.type"]).toBe("TypeError");
+    });
+
+    test("a failing span hook records the message", () => {
+      const { tracer, spans } = createMockTracer();
+      const span = tracer.startSpan("test");
+      runSpanHook(
+        span,
+        "requestHook",
+        () => {
+          throw new Error("hook broke");
+        },
+        true,
+      );
+
+      expect(spans[0]?.recordException).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Error", message: "hook broke" }),
+      );
+    });
+
+    test.each([
+      {
+        error: "plain text",
+        expected: { message: "plain text", stack: undefined },
+      },
+      { error: 42, expected: { message: "42", stack: undefined } },
+    ])("describeError turns $error into its string", ({ error, expected }) => {
+      expect(describeError(error)).toEqual(expected);
+    });
+
+    test("describeError does not let a throwing getter escape", () => {
+      const error = new Error("hidden");
+      Object.defineProperty(error, "message", {
+        get() {
+          throw new Error("getter failed");
+        },
+      });
+
+      expect(describeError(error)).toEqual({
+        message: "Unknown error",
+        stack: undefined,
+      });
+    });
   });
 
   describe("exception events carry no free-form error text", () => {
@@ -127,7 +189,7 @@ describe("trace helpers", () => {
     test("endSpanWithError records only the error type", () => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
-      endSpanWithError(span, leakyError());
+      endSpanWithError(span, leakyError(), false);
 
       expectOnlyType(spans[0], "TypeError");
     });
@@ -135,9 +197,14 @@ describe("trace helpers", () => {
     test("a failing span hook records only the error type", () => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
-      runSpanHook(span, "requestHook", () => {
-        throw leakyError();
-      });
+      runSpanHook(
+        span,
+        "requestHook",
+        () => {
+          throw leakyError();
+        },
+        false,
+      );
 
       expectOnlyType(spans[0], "TypeError");
     });
@@ -149,7 +216,7 @@ describe("trace helpers", () => {
     ])("records $name for a non-Error value", ({ thrown, name }) => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
-      endSpanWithError(span, thrown);
+      endSpanWithError(span, thrown, false);
 
       expectOnlyType(spans[0], name);
     });
@@ -159,7 +226,7 @@ describe("trace helpers", () => {
     const { tracer } = createMockTracer();
     const span = tracer.startSpan("test");
     const hook = vi.fn();
-    runSpanHook(span, "requestHook", hook);
+    runSpanHook(span, "requestHook", hook, false);
 
     expect(hook).toHaveBeenCalledTimes(1);
   });
@@ -173,7 +240,7 @@ describe("trace helpers", () => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: the table rejects with a string to prove non-Error failures are recorded
-      runSpanHook(span, "requestHook", () => Promise.reject(error));
+      runSpanHook(span, "requestHook", () => Promise.reject(error), false);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -192,7 +259,7 @@ describe("trace helpers", () => {
     const span = tracer.startSpan("test");
     const pending = new Promise<void>(() => undefined);
 
-    runSpanHook(span, "requestHook", () => pending);
+    runSpanHook(span, "requestHook", () => pending, false);
 
     expect(spans[0]?.addEvent).not.toHaveBeenCalled();
     expect(spans[0]?.recordException).not.toHaveBeenCalled();
@@ -207,8 +274,11 @@ describe("trace helpers", () => {
     spans[0]?.recordException.mockImplementation(() => {
       throw new Error("recordException failed");
     });
-    runSpanHook(span, "requestHook", () =>
-      Promise.reject(new Error("async hook failed")),
+    runSpanHook(
+      span,
+      "requestHook",
+      () => Promise.reject(new Error("async hook failed")),
+      false,
     );
     await Promise.resolve();
     await Promise.resolve();
@@ -220,10 +290,15 @@ describe("trace helpers", () => {
   test("runSpanHook records non-Error hook failures", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    runSpanHook(span, "requestHook", () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error -- the hook failure under test is a non-Error string
-      throw "boom";
-    });
+    runSpanHook(
+      span,
+      "requestHook",
+      () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the hook failure under test is a non-Error string
+        throw "boom";
+      },
+      false,
+    );
 
     expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
       "error.type": "string",
@@ -238,9 +313,14 @@ describe("trace helpers", () => {
     const error = new Error("boom");
     error.name = "";
 
-    runSpanHook(span, "requestHook", () => {
-      throw error;
-    });
+    runSpanHook(
+      span,
+      "requestHook",
+      () => {
+        throw error;
+      },
+      false,
+    );
 
     expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
       "error.type": "Error",
@@ -252,10 +332,15 @@ describe("trace helpers", () => {
   test("runSpanHook records non-string non-Error hook failures", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    runSpanHook(span, "requestHook", () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: the hook must throw a number to prove non-string, non-Error failures are typed "number"
-      throw 42;
-    });
+    runSpanHook(
+      span,
+      "requestHook",
+      () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: the hook must throw a number to prove non-string, non-Error failures are typed "number"
+        throw 42;
+      },
+      false,
+    );
 
     expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
       "error.type": "number",

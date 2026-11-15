@@ -7,6 +7,10 @@ import {
   type Client,
 } from "../client";
 import { struct } from "../struct";
+import {
+  socketMessage,
+  webSocketEndpoint,
+} from "../../test/web_socket_endpoint";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 
 describe("web socket runtime lifecycle", () => {
@@ -59,16 +63,23 @@ describe("web socket runtime lifecycle", () => {
         type: struct.literal("message"),
         count: struct.number(),
       }),
-      path: "/ws/invalid",
+      path: "/ws",
+    });
+    const ws = await webSocketEndpoint({
+      send: [],
+      end: { send: ["not-json"], code: 1000, reason: "done" },
     });
 
-    const [error, socket] = await run(useInvalidSocket);
+    const [error, socket] = await useInvalidSocket(
+      createClient(withEndpoint(ws.endpoint)),
+    );
 
     expect(error).toBeNull();
     if (!socket) {
       throw new Error("Expected socket session");
     }
 
+    await ws.end();
     const messages: unknown[] = [];
     for await (const message of socket.receive) {
       messages.push(message);
@@ -79,8 +90,12 @@ describe("web socket runtime lifecycle", () => {
   });
 
   test("should use request-level beforeConnect hook and client query serializer", async () => {
+    const ws = await webSocketEndpoint({
+      send: [socketMessage("connected", { token: "accepted" })],
+      end: { send: [], code: 1000, reason: "done" },
+    });
     const clientWithSerializer = createClient(
-      withEndpoint(inject("testServerHost")),
+      withEndpoint(ws.endpoint),
       withQuerySerializer((query) => {
         return `token=${String(query["token"])}&from=serializer`;
       }),
@@ -93,7 +108,7 @@ describe("web socket runtime lifecycle", () => {
         type: struct.literal("connected"),
         token: struct.string(),
       }),
-      path: "/ws/before-connect",
+      path: "/ws",
     });
 
     let callCount = 0;
@@ -120,9 +135,10 @@ describe("web socket runtime lifecycle", () => {
     const iterator = socket.receive[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
       done: false,
-      value: { token: "secret-0", type: "connected" },
+      value: { token: "accepted", type: "connected" },
     });
 
+    await ws.end();
     await expect(socket.closed).resolves.toMatchObject({ code: 1000 });
   });
 });

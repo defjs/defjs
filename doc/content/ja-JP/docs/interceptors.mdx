@@ -7,7 +7,7 @@ description: SDK の API 定義を変更することなく、アプリケーシ�
 
 インターセプターは、SDK の操作定義に手を加えることなく、認証ヘッダーの付与、リクエストの署名、メンテナンスモード時の短絡応答、`Retry-After` の処理といった横断的な実行ポリシーをアプリケーション側の `Client` にアタッチします。
 
-入力値の検証と `builder` による配置はインターセプターチェーンの実行 **前** に行われ、HTTP ステータスに応じた振り分けと `output` / `error` の struct バリデーションはチェーンの実行 **後** に行われます。
+入力値の検証と `builder` による配置はインターセプターチェーンの実行 **前** に行われ、HTTP ステータスに応じた振り分けと `output` / `error` の struct バリデーションはチェーンの実行 **後** に行われます。[操作インターセプター](#operation-interceptors)は、そのすべてを包みます。
 
 ## 1. インターセプターの作成と登録
 
@@ -80,13 +80,28 @@ WebSocket インターセプターが `next(req)` を呼び出せるのは **最
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. 組み込みファクトリとヘルパー
+## 5. 操作呼び出し全体の観測 [#operation-interceptors]
+
+トランスポートインターセプターが見るのは一度に 1 つのリクエストだけです。検証に失敗した入力はそこに届かず、リトライのたびに再実行され、レスポンスのデコードはそれが返ったあとに行われます。`getOrder(client, input)` が呼ばれた瞬間からタプルが解決されるまで、呼び出しそのものを観測するには `createOperationInterceptor` を使います。
+
+<include cwd lang="typescript">
+  examples/api/create-operation-interceptor.ts#example
+</include>
+
+- **見えるもの**: `call` は定義を表し、`transport`（`"http"`、`"sse"`、`"websocket"`）、`method`、`path` テンプレート、`meta` を持ちます。入力もリクエストも持ちません。どちらもまだ存在しないためです。`next()` は操作のタプルで解決されるので、`err` は最終的な Fault です。`REQ_INPUT_INVALID`、`REQ_BUILD_FAILED`、`HTTP_STATUS`、`RES_STRUCT_MISMATCH` などです。
+- **観測するだけで、変更はしない**: `next()` は引数を取らず、2 回目の `next()` は呼び出しを再実行せずに同じ promise を返し、関数は `next()` が解決した値でしか解決できません。リクエストやレスポンスの変更はトランスポートインターセプターで行ってください。
+- **順序**: 操作インターセプターはすべてのトランスポートインターセプターの外側で、登録順に実行されます。`next()` の前後で動くコード（たとえば OpenTelemetry の `context.with`）は、トランスポートインターセプターを含む呼び出し全体で有効です。
+- **ストリームとセッション**: SSE や WebSocket の呼び出しは、ストリームまたはセッションが開いた時点で解決されます。そのあとに起きることは、その `closed` を通じて観測します。
+- **失敗**: throw や reject があると、操作は `EXT_INTERCEPTOR_FAILED` で解決され、投げられた値が `cause` になります。呼び出しがすでに開いていたストリームやセッションは閉じられます。
+
+## 6. 組み込みファクトリとヘルパー
 
 | エクスポート                                   | トランスポート | 説明                                                                                     |
 | ---------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------- |
 | `createHttpInterceptor(fn)`                    | HTTP           | `(req, next) => Promise<HttpResponse<unknown>>` をラップ                                 |
 | `createSSEInterceptor(fn)`                     | SSE            | `(req, next) => Promise<EventStreamHandle<unknown>>` をラップ                            |
 | `createWebSocketInterceptor(fn)`               | WebSocket      | `(req, next) => Promise<WebSocketSessionLike>` をラップ                                  |
+| `createOperationInterceptor(fn)`               | すべて         | 操作呼び出し全体を包む `(call, next) => Promise<result>` をラップ                        |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP           | リクエストごとに呼ばれる同期の認証情報プロバイダーから `Authorization: Basic ...` を注入 |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE            | SSE ハンドシェイク時に `Authorization: Basic ...` を注入                                 |
 

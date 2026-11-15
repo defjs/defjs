@@ -7,6 +7,10 @@ import { defineEventStream } from "../sse";
 import { defineWebSocket } from "../web_socket";
 import { createClient } from "./client";
 import { withEndpoint, withInterceptors } from "./option";
+import {
+  socketMessage,
+  webSocketEndpoint,
+} from "../../test/web_socket_endpoint";
 
 describe("operation dispatch", () => {
   test("an HTTP operation runs against the client", async () => {
@@ -73,10 +77,14 @@ describe("operation dispatch", () => {
         roomId: struct.string(),
         userId: struct.number(),
       }),
-      path: "/ws/basic",
+      path: "/ws",
+    });
+    const ws = await webSocketEndpoint({
+      send: [socketMessage("joined", { roomId: "default", userId: 1 })],
+      end: { send: [], code: 1000, reason: "done" },
     });
 
-    const client = createClient(withEndpoint(inject("testServerHost")));
+    const client = createClient(withEndpoint(ws.endpoint));
 
     const [error, socket, connection] = await useChatSocket(client);
 
@@ -85,7 +93,7 @@ describe("operation dispatch", () => {
       throw new Error("Expected socket");
     }
 
-    expect(connection.url).toContain("/ws/basic");
+    expect(connection.url).toBe(`${ws.endpoint.replace(/^http/, "ws")}/ws`);
 
     const iterator = socket.receive[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
@@ -93,6 +101,7 @@ describe("operation dispatch", () => {
       value: { roomId: "default", type: "joined", userId: 1 },
     });
 
-    await expect(socket.closed).resolves.toBeDefined();
+    await ws.end();
+    await expect(socket.closed).resolves.toMatchObject({ code: 1000 });
   });
 });

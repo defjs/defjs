@@ -55,7 +55,7 @@ description: 在明确的扩展点上扩展应用自有的 Defjs Client，接入
 
 ### 2. 中间件插件（`@defjs/opentelemetry-server`）
 
-中间件插件是一个返回 [`ClientOption`](/zh-Hans/api/core/clientoption-type) 的工厂函数。当传递给 `createClient(...)` 时，它会通过 `withInterceptors` 追加 HTTP、SSE 和/或 WebSocket 拦截器：
+中间件插件是一个返回 [`ClientOption`](/zh-Hans/api/core/clientoption-type) 的工厂函数。当传递给 `createClient(...)` 时，它会通过 `withInterceptors` 追加操作拦截器，以及 HTTP、SSE 和/或 WebSocket 拦截器：
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab>

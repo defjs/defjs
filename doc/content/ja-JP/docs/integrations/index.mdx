@@ -55,7 +55,7 @@ description: SDK 定義を結合させることなく、フレームワーク注
 
 ### 2. ミドルウェアプラグイン (`@defjs/opentelemetry-server`)
 
-ミドルウェアプラグインは、[`ClientOption`](/ja-JP/api/core/clientoption-type) を返すファクトリ関数です。`createClient(...)` に渡されると、`withInterceptors` を介して HTTP、SSE、WebSocket のインターセプターを追加します。
+ミドルウェアプラグインは、[`ClientOption`](/ja-JP/api/core/clientoption-type) を返すファクトリ関数です。`createClient(...)` に渡されると、`withInterceptors` を介して操作インターセプターと HTTP、SSE、WebSocket のインターセプターを追加します。
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab>

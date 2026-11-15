@@ -8,6 +8,10 @@ export type {
   HttpInterceptorNext,
   Interceptor,
   InterceptorFn,
+  OperationCall,
+  OperationInterceptor,
+  OperationInterceptorFn,
+  OperationResult,
   SSEHandler,
   SSEInterceptor,
   SSEInterceptorFn,
@@ -18,6 +22,7 @@ export type {
 } from "./interceptor";
 export {
   createHttpInterceptor,
+  createOperationInterceptor,
   createSSEInterceptor,
   createWebSocketInterceptor,
 } from "./interceptor";

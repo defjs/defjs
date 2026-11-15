@@ -16,6 +16,7 @@ import {
 } from "../src";
 import type { Balancer, DoneInfo } from "../src";
 import { createFakeWebSocket } from "./fake_web_socket";
+import { webSocketEndpoint } from "./web_socket_endpoint";
 import { makeResponse } from "../src/http/http_response";
 afterEach(() => {
   vi.useRealTimers();
@@ -214,12 +215,10 @@ test.each(["failure", "cancel", "timeout"])(
 );
 test("WebSocket end occurs on open while the real session remains open", async () => {
   const h = recorder();
-  const client = createClient(
-    withEndpoint(inject("testServerHost")),
-    withBalancer(h.b),
-  );
+  const ws = await webSocketEndpoint({ send: [] });
+  const client = createClient(withEndpoint(ws.endpoint), withBalancer(h.b));
   const [error, session] = await defineWebSocket({
-    path: "/ws/basic",
+    path: "/ws",
     incoming: struct.unknown(),
   })(client);
   expect(error).toBeNull();
@@ -247,7 +246,7 @@ test("WebSocket constructor failure ends before done", async () => {
     withWebSocketHandle(Broken),
   );
   await defineWebSocket({
-    path: "/ws/basic",
+    path: "/ws",
     incoming: struct.unknown(),
   })(client);
   expect(h.events).toEqual(["start", "end", "done"]);

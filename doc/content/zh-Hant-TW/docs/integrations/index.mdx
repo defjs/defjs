@@ -55,7 +55,7 @@ description: 在不耦合 SDK 定義的前提下，以框架注入、伺服器�
 
 ### 2. 中介層外掛 (`@defjs/opentelemetry-server`)
 
-中介層外掛是一個回傳 [`ClientOption`](/zh-Hant-TW/api/core/clientoption-type) 的 factory 函式。傳入 `createClient(...)` 後，它會透過 `withInterceptors` 附加 HTTP、SSE 與／或 WebSocket 攔截器：
+中介層外掛是一個回傳 [`ClientOption`](/zh-Hant-TW/api/core/clientoption-type) 的 factory 函式。傳入 `createClient(...)` 後，它會透過 `withInterceptors` 附加操作攔截器，以及 HTTP、SSE 與／或 WebSocket 攔截器：
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab>

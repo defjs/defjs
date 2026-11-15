@@ -482,8 +482,11 @@ describe("span hook recording lifecycle", () => {
     span.spanContext = () => spanContext;
     span.isRecording.mockReturnValue(false);
 
-    runSpanHook(span, "requestHook", () =>
-      Promise.reject(new TypeError("private hook detail")),
+    runSpanHook(
+      span,
+      "requestHook",
+      () => Promise.reject(new TypeError("private hook detail")),
+      false,
     );
     await drainMicrotasks();
 
@@ -516,10 +519,15 @@ describe("span hook recording lifecycle", () => {
       const span = tracer.startSpan("already ended");
       span.end();
       expect(() =>
-        runSpanHook(span, "requestHook", () => {
-          // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: the table feeds non-Error values (see $type) to an already ended span
-          throw error;
-        }),
+        runSpanHook(
+          span,
+          "requestHook",
+          () => {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: the table feeds non-Error values (see $type) to an already ended span
+            throw error;
+          },
+          false,
+        ),
       ).not.toThrow();
       expect(records[0]?.events).toEqual([]);
       expect(diagnostic).toHaveBeenCalledExactlyOnceWith(hookErrorMessage, {
@@ -555,9 +563,14 @@ describe("span hook recording lifecycle", () => {
     const record = records[0];
     if (!record) throw new Error("Expected a recorded HTTP span");
     expect(() =>
-      runSpanHook(record.span, "requestHook", () => {
-        throw new Error("private hook detail");
-      }),
+      runSpanHook(
+        record.span,
+        "requestHook",
+        () => {
+          throw new Error("private hook detail");
+        },
+        false,
+      ),
     ).not.toThrow();
     expect(diagnostic).toHaveBeenCalledTimes(2);
   });

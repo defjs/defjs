@@ -14,6 +14,10 @@ import {
 import { createFakeWebSocket, openSession } from "../../test/fake_web_socket";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 import { useFakeClock } from "../../test/web_socket_support";
+import {
+  socketMessage,
+  webSocketEndpoint,
+} from "../../test/web_socket_endpoint";
 
 const ChatIncoming = struct.discriminatedUnion("type", [
   struct.object({
@@ -82,15 +86,28 @@ describe("web socket single struct messages", () => {
   test("delivers discriminated incoming frames from the socket as decoded values", async () => {
     const useChat = defineWebSocket({
       incoming: BasicIncoming,
-      path: "/ws/basic",
+      path: "/ws",
+    });
+    const ws = await webSocketEndpoint({
+      send: [socketMessage("joined", { roomId: "default", userId: 1 })],
+      end: {
+        send: [
+          socketMessage("message", { text: "welcome:default", userId: 1 }),
+        ],
+        code: 1000,
+        reason: "done",
+      },
     });
 
-    const [error, socket] = await run(useChat);
+    const [error, socket] = await useChat(
+      createClient(withEndpoint(ws.endpoint)),
+    );
     expect(error).toBeNull();
     if (!socket) {
       throw new Error("Expected socket session");
     }
 
+    await ws.end();
     const messages: unknown[] = [];
     for await (const message of socket.receive) {
       messages.push(message);
@@ -108,9 +125,19 @@ describe("web socket single struct messages", () => {
         text: struct.string(),
         type: struct.literal("message"),
       }),
-      path: "/ws/error-before-close",
+      path: "/ws",
     });
-    const [error, socket] = await run(useSocket);
+    const ws = await webSocketEndpoint({
+      send: [],
+      end: {
+        send: [socketMessage("message", { text: 123 })],
+        code: 1000,
+        reason: "done",
+      },
+    });
+    const [error, socket] = await useSocket(
+      createClient(withEndpoint(ws.endpoint)),
+    );
     expect(error).toBeNull();
     if (!socket) {
       throw new Error("Expected socket session");
@@ -120,6 +147,7 @@ describe("web socket single struct messages", () => {
     socket.onRuntimeError((runtimeError) => {
       runtimeErrors.push(runtimeError);
     });
+    await ws.end();
     const messages: unknown[] = [];
     for await (const message of socket.receive) {
       messages.push(message);

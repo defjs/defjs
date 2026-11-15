@@ -1,15 +1,14 @@
 import type { EventStreamCloseInfo, EventStreamHandle } from "@defjs/core";
 import { createSSEInterceptor } from "@defjs/core";
-import { trace } from "@opentelemetry/api";
 import { carrierSetter } from "../propagation/carrier";
 import type { ConnectionClientMetrics } from "../telemetry/metrics";
 import { resolveHttpUrl } from "../telemetry/url";
-import type { ClientCallOptions } from "./call";
-import { requiresActiveSpan, startClientCall } from "./call";
+import type { ConnectionCallOptions } from "./call";
+import { startClientCall } from "./call";
 import type { Outcome } from "./connection";
 import { observeConnection } from "./connection";
 
-export type SSEInterceptorOptions = ClientCallOptions<
+export type SSEInterceptorOptions = ConnectionCallOptions<
   EventStreamHandle<unknown>,
   ConnectionClientMetrics
 >;
@@ -34,13 +33,8 @@ export function createOpenTelemetrySSEInterceptor(
   options: SSEInterceptorOptions,
 ): ReturnType<typeof createSSEInterceptor> {
   const { propagator } = options;
-  const needsActiveSpan = requiresActiveSpan(options);
 
   return createSSEInterceptor(async (req, next) => {
-    if (needsActiveSpan && !trace.getActiveSpan()) {
-      return next(req);
-    }
-
     const call = startClientCall(
       options,
       req,

@@ -8,7 +8,7 @@ import type {
 import { DEFAULT_FETCH, ERR_FETCH_UNSUPPORTED } from "../client/config";
 import type { Fault, HttpStatusFaultOf } from "../error";
 import { createPreflightFault } from "../error";
-import type { SSEHandler } from "../interceptor/interceptor";
+import type { OperationCall, SSEHandler } from "../interceptor/interceptor";
 import type { HttpRequest } from "../http/http_request";
 import { makeChain, resolveSSEInterceptors } from "../interceptor/interceptor";
 import {
@@ -20,6 +20,7 @@ import {
 } from "../internal/abort";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
+import { executeOperation } from "../internal/operation";
 import { preflight } from "../internal/preflight";
 import { resolveRetryPolicy } from "../internal/retry";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
@@ -282,12 +283,27 @@ export function defineEventStream<
     path,
   };
 
+  const call: OperationCall = {
+    transport: "sse",
+    method: copy.method,
+    path,
+    meta,
+  };
+
+  // `async` settles the call a few turns after `openEventStream`: a handshake cancelled before headers reports the
+  // pick's `end` and `done` in those turns, before the caller sees the fault.
   return async (client: Client, input?: EndpointInput<TInput>) =>
-    openEventStream<TInput, TEvents, TError>(
-      client[CLIENT].config,
-      copy,
-      input,
-      client[CLIENT].options,
+    executeOperation(
+      client,
+      call,
+      () =>
+        openEventStream<TInput, TEvents, TError>(
+          client[CLIENT].config,
+          copy,
+          input,
+          client[CLIENT].options,
+        ),
+      (result, reason) => result[1]?.close(reason),
     );
 }
 

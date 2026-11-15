@@ -24,10 +24,18 @@ export interface ClientCallOptions<
   TMetrics,
 > extends OpenTelemetryServerTransportOptions<TResponse> {
   tracer?: Tracer;
-  logger?: Logger;
   propagator: TextMapPropagator;
   metrics?: TMetrics;
-  requireParentSpan?: boolean;
+  /** Export error text on failed spans and failure logs; `withOpenTelemetryServer` always sets it. */
+  includeErrorDiagnostics?: boolean;
+}
+
+/** SSE and WebSocket also log a connection that fails after it opened; every other failure is logged by the operation call. */
+export interface ConnectionCallOptions<
+  TResponse,
+  TMetrics,
+> extends ClientCallOptions<TResponse, TMetrics> {
+  logger?: Logger;
 }
 
 /** One outbound call as its telemetry sees it. */
@@ -38,21 +46,16 @@ export interface ClientCall {
   context: Context;
   /** `server.address` and `server.port`: what the span, metrics and logs share. */
   attributes: Attributes;
-  /** The request's `meta` as `defjs.meta.<key>` attributes, for the span and logs but not metrics. */
+  /** The request's `meta` as `defjs.meta.<key>` attributes, for the span and connection logs but not metrics. */
   meta: Attributes;
   /** The normalized `http.request.method`; as given when nothing observes the call, because nothing reads it then. */
   method: string;
 }
 
 /** The options as the shared code reads them: the response type only sets the hook's parameter and `never` accepts every transport's, and `unknown` accepts every transport's metrics. */
-type AnyClientCallOptions = ClientCallOptions<never, unknown>;
+type AnyClientCallOptions = ConnectionCallOptions<never, unknown>;
 
-const NO_ATTRIBUTES: Attributes = Object.freeze({});
-
-/** `requireParentSpan` applies only with a tracer: without one there is no span to parent. */
-export function requiresActiveSpan(options: AnyClientCallOptions): boolean {
-  return options.tracer !== undefined && options.requireParentSpan === true;
-}
+export const NO_ATTRIBUTES: Attributes = Object.freeze({});
 
 /**
  * Extracts the parent context and, with a tracer, starts the client span and runs `startSpanHook`
@@ -135,10 +138,20 @@ export function startClientCall(
     parent,
   );
   if (hookFailure) {
-    recordSpanHookError(span, "startSpanHook", hookFailure.error);
+    recordSpanHookError(
+      span,
+      "startSpanHook",
+      hookFailure.error,
+      options.includeErrorDiagnostics ?? false,
+    );
   }
   if (requestHook) {
-    runSpanHook(span, "requestHook", () => requestHook(span, req));
+    runSpanHook(
+      span,
+      "requestHook",
+      () => requestHook(span, req),
+      options.includeErrorDiagnostics ?? false,
+    );
   }
   return {
     span,
@@ -154,7 +167,9 @@ export function startClientCall(
  * values are OpenTelemetry `AnyValue`; the SDK decides which values it keeps, as it does for any
  * attribute. An empty `meta` adds nothing.
  */
-function metaAttributes(meta: { readonly [key: string]: unknown }): Attributes {
+export function metaAttributes(meta: {
+  readonly [key: string]: unknown;
+}): Attributes {
   const attributes: Attributes = {};
   for (const key of Object.keys(meta)) {
     attributes[`defjs.meta.${key}`] = meta[key];

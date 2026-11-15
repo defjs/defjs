@@ -16,6 +16,10 @@ import {
 } from "../client";
 import { struct, StructError } from "../struct";
 import {
+  socketMessage,
+  webSocketEndpoint,
+} from "../../test/web_socket_endpoint";
+import {
   defineWebSocket,
   type SocketAwaitResult,
   type WebSocketSession,
@@ -135,11 +139,17 @@ describe("web socket browser runtime", () => {
         type: struct.literal("message"),
         text: struct.string(),
       }),
-      path: "/ws/binary",
+      path: "/ws",
       protocols: ["json"],
     });
+    const ws = await webSocketEndpoint({
+      send: [{ binary: socketMessage("message", { text: "hello-binary" }) }],
+      end: { send: [], code: 1000, reason: "done" },
+    });
 
-    const [error, socket] = await run(useBinarySocket);
+    const [error, socket] = await useBinarySocket(
+      createClient(withEndpoint(ws.endpoint)),
+    );
 
     expect(error).toBeNull();
     if (!socket) {
@@ -151,6 +161,7 @@ describe("web socket browser runtime", () => {
       done: false,
       value: { text: "hello-binary", type: "message" },
     });
+    await ws.end();
 
     // Wait in the body: teardown dispose only allows one second for the close event.
     await expect(socket.closed).resolves.toMatchObject({
@@ -165,10 +176,20 @@ describe("web socket browser runtime", () => {
         type: struct.literal("message"),
         text: struct.string(),
       }),
-      path: "/ws/error-before-close",
+      path: "/ws",
+    });
+    const ws = await webSocketEndpoint({
+      send: [],
+      end: {
+        send: [socketMessage("message", { text: 123 })],
+        code: 1000,
+        reason: "done",
+      },
     });
 
-    const [error, socket] = await run(useInvalidSocket);
+    const [error, socket] = await useInvalidSocket(
+      createClient(withEndpoint(ws.endpoint)),
+    );
 
     expect(error).toBeNull();
     if (!socket) {
@@ -179,6 +200,7 @@ describe("web socket browser runtime", () => {
     const unsubscribe = socket.onRuntimeError((error: unknown) => {
       runtimeError = error;
     });
+    await ws.end();
 
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,

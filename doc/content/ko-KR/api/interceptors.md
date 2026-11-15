@@ -5,7 +5,7 @@ description: HTTP, SSE, WebSocket 인터셉터 생성자예요.
 
 # 인터셉터
 
-전송 하나에서 `next`를 감싸요. `withInterceptors`로 등록해요. 혼합 목록은 작업이 실행될 때 종류별로 걸러져요.
+전송 하나, 또는 작업 호출 전체에서 `next`를 감싸요. `withInterceptors`로 등록해요. 혼합 목록은 작업이 실행될 때 종류별로 걸러져요.
 
 ## createHttpInterceptor()
 
@@ -29,6 +29,14 @@ description: HTTP, SSE, WebSocket 인터셉터 생성자예요.
 
 래퍼나 단락 세션은 `close` / `closed` 수명 주기와 같은 `[Symbol.asyncDispose]()` 정리를 전달해야 해요. 관계없는 resolve된 Promise를 반환하는 것만으로는 부족해요.
 
+## createOperationInterceptor()
+
+<ApiSignature name="createOperationInterceptor, OperationInterceptorFn, OperationCall, OperationResult" />
+
+`next()`는 호출 전체를 실행해요. 입력 검증, 엔드포인트 선택, 빌더, 전송 인터셉터와 재시도를 포함한 모든 시도, 응답 디코딩까지예요. 인자는 받지 않고, 몇 번 호출해도 호출을 한 번만 실행해요. 함수는 결과에 대해 제네릭이라서 `next()`가 resolve한 값으로만 resolve할 수 있어요. 작업 인터셉터는 모든 전송에서 실행되고, 전송 인터셉터의 바깥쪽에서 실행돼요. throw나 reject는 작업을 `EXT_INTERCEPTOR_FAILED`로 resolve하고, 호출이 이미 열어 둔 스트림이나 세션은 닫아요.
+
+<include cwd>examples/api/create-operation-interceptor.ts#example</include>
+
 ## 태그가 있는 타입
 
 ## Interceptor
@@ -39,7 +47,9 @@ description: HTTP, SSE, WebSocket 인터셉터 생성자예요.
 
 ## WebSocketInterceptor
 
-<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor" />
+## OperationInterceptor
+
+<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor, OperationInterceptor" />
 
 ## 기본 인증
 

@@ -5,7 +5,7 @@ description: withOpenTelemetryServer と、トランスポートごとのオプ�
 
 # OpenTelemetry server
 
-ミドルウェアプラグインです。アウトバウンドの HTTP / SSE / WebSocket 計装を、コアのインターセプターとして追加します。このパッケージは OpenTelemetry SDK を初期化せず、インバウンドのサーバー計装でもありません。
+ミドルウェアプラグインです。すべての操作呼び出しと、その HTTP / SSE / WebSocket トランスポートのアウトバウンド計装を、コアのインターセプターとして追加します。このパッケージは OpenTelemetry SDK を初期化せず、インバウンドのサーバー計装でもありません。
 
 [OpenTelemetry server ガイド](/ja-JP/docs/integrations/opentelemetry-server) を見てください。
 
@@ -13,13 +13,15 @@ description: withOpenTelemetryServer と、トランスポートごとのオプ�
 
 <ApiSignature name="withOpenTelemetryServer" />
 
-有効なトランスポートごとにインターセプターを、HTTP、SSE、WebSocket の順に 1 本ずつ足します。`createClient` の時点で適用してください。`options` は必須です。伝播だけでインターセプターを入れたいときは `{}` を渡します。
+`tracer`、`meter`、`logger` のいずれかが渡されたときは操作インターセプターを足し、続けて有効なトランスポートごとにインターセプターを、HTTP、SSE、WebSocket の順に 1 本ずつ足します。`createClient` の時点で、クライアントごとに 1 回だけ適用してください。`options` は必須です。伝播だけでトランスポートのインターセプターを入れたいときは `{}` を渡します。
 
 <include cwd>examples/api/with-opentelemetry-server.ts#example</include>
 
 `tracer`、`meter`、`logger` はいずれも任意です。`propagator` を省略すると W3C Trace Context + Baggage が使われます。
 
-`tracer` を省略すると、プラグインはローカルスパンを作成せず、`trace.getTracer(...)`、`startSpanHook`、`requestHook`、`responseHook` も呼びません。渡した `meter` と `logger` は独立して動作します。抽出した親コンテキストは引き続き伝播し、WebSocket の `queryPropagation` はデフォルトで `false` です。tracer がある場合、`requireParentSpan: true` はアクティブな親スパンがなければログを含む全計装をスキップします。tracer がなければメトリクスもログも妨げません。
+すべての操作呼び出しは、呼び出しからタプルまで観測されます。名前が `defjs.operation.name`（`GET /orders/:id` など）の `INTERNAL` 操作スパン（失敗時は `error.type` に Fault コードが入ります）、`defjs.client.operation.duration` のサンプル 1 件、失敗時の `WARN` ログ 1 件です。HTTP の各試行と SSE や WebSocket の各接続には、その下に `CLIENT` のトランスポートスパンが付きます。アクティブな親スパンがない呼び出しは独自のトレースを開始し、何を残すかは SDK のサンプラーが決めます。
+
+`tracer` を省略すると、プラグインはローカルスパンを作成せず、`trace.getTracer(...)`、`startSpanHook`、`requestHook`、`responseHook` も呼びません。渡した `meter` と `logger` は独立して動作します。抽出した親コンテキストは引き続き伝播し、WebSocket の `queryPropagation` はデフォルトで `false` です。
 
 HTTP、SSE、WebSocket はデフォルトでオンです。トランスポートに `{ enabled: false }` を渡すとスキップします。
 
@@ -27,16 +29,16 @@ HTTP、SSE、WebSocket はデフォルトでオンです。トランスポート
 
 <ApiSignature name="OpenTelemetryServerOptions" />
 
-| フィールド          | デフォルト値                | 効果                                                                                                       |
-| ------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `tracer`            | なし                        | 省略するとローカルスパンもスパンフックもありません。                                                       |
-| `meter`             | なし                        | 省略するとこのパッケージのメトリクスは記録されません。                                                     |
-| `logger`            | なし                        | `@opentelemetry/api-logs` の `Logger` です。省略すると診断の LogRecord は出力されません。                  |
-| `propagator`        | W3C Trace Context + Baggage | 親コンテキストを抽出し、送信側のコンテキストを注入します。                                                 |
-| `requireParentSpan` | `false`                     | `tracer` があるとき、アクティブな親スパンがなければ計装をスキップします。`tracer` がなければ無視されます。 |
-| `http`              | `{}`                        | HTTP トランスポートのオプションです。                                                                      |
-| `sse`               | `{}`                        | SSE トランスポートのオプションです。                                                                       |
-| `webSocket`         | `{}`                        | WebSocket トランスポートのオプションです。                                                                 |
+| フィールド                | デフォルト値                | 効果                                                                                      |
+| ------------------------- | --------------------------- | ----------------------------------------------------------------------------------------- |
+| `tracer`                  | なし                        | 省略するとローカルスパンもスパンフックもありません。                                      |
+| `meter`                   | なし                        | 省略するとこのパッケージのメトリクスは記録されません。                                    |
+| `logger`                  | なし                        | `@opentelemetry/api-logs` の `Logger` です。省略すると診断の LogRecord は出力されません。 |
+| `propagator`              | W3C Trace Context + Baggage | 親コンテキストを抽出し、送信側のコンテキストを注入します。                                |
+| `includeErrorDiagnostics` | `false`                     | 失敗したスパン、`exception` イベント、失敗ログにエラーメッセージとスタックを出力します。  |
+| `http`                    | `{}`                        | HTTP トランスポートのオプションです。                                                     |
+| `sse`                     | `{}`                        | SSE トランスポートのオプションです。                                                      |
+| `webSocket`               | `{}`                        | WebSocket トランスポートのオプションです。                                                |
 
 ## OpenTelemetryServerTransportOptions
 
@@ -48,11 +50,11 @@ HTTP、SSE、WebSocket はデフォルトでオンです。トランスポート
 
 <ApiSignature name="OpenTelemetryServerTransportOptions, OpenTelemetryServerHttpOptions, OpenTelemetryServerSSEOptions, OpenTelemetryServerWebSocketOptions" />
 
-`enabled` のデフォルトは `true` で、トランスポートをオフにするのは `enabled: false` だけです。
+`enabled` のデフォルトは `true` で、トランスポートをオフにするのは `enabled: false` だけで、そのトランスポートの呼び出しに対する操作テレメトリもあわせてオフになります。
 
 スパンフックは `tracer` が渡された場合にのみ呼び出されます。`startSpanHook` は、自分の HTTP、SSE、または WebSocket トランスポートについて、スパン作成前に同期実行されます。その属性は組み込み属性のあとに適用されるので、アプリケーションは `url.full` や別の初期値を上書きできます。throw すると Defjs は組み込み属性でスパンを作り、リクエストを続けます。`requestHook` と `responseHook` はスパン作成後に実行されます。どちらも await されず、throw や reject が操作をブロックしたり失敗させたりすることはありません。
 
-`span.isRecording()` が true の間、hook failure は `defjs.otel.hook.error` と `exception` イベントとして記録されます。`exception` イベントが持つのは `exception.type`（クラス名であり、Defjs の Fault コードではありません）だけで、`exception.message` も `exception.stacktrace` も持ちません。ランタイムのエラー文には完全なリクエスト URL やレスポンスボディの断片が含まれ得るためです。同じ規則は、トランスポートが失敗したときに記録される `exception` イベントにも適用されます。記録しないスパン（終了済みまたはサンプリング対象外）の場合、エラーは `diag.error` を通じて OpenTelemetry 診断 logger に送られます。受け取るには、アプリケーション側で `@opentelemetry/api` の `diag.setLogger(...)` を設定する必要があり、デフォルトでは自動出力されません。このパッケージは SDK を初期化せず、この診断も独立した SDK `LogRecord` ではありません。
+フックが形作るのはトランスポートスパンで、操作スパンにフックはありません。`span.isRecording()` が true の間、hook failure は `defjs.otel.hook.error` と `exception` イベントとして記録されます。`exception` イベントが持つのは `exception.type`（クラス名であり、Defjs の Fault コードではありません）だけで、`includeErrorDiagnostics` がオンでない限り `exception.message` も `exception.stacktrace` も持ちません。ランタイムのエラー文には完全なリクエスト URL やレスポンスボディの断片が含まれ得るためです。同じ規則は、トランスポートが失敗したときに記録される `exception` イベントにも適用されます。記録しないスパン（終了済みまたはサンプリング対象外）の場合、エラーは `diag.error` を通じて OpenTelemetry 診断 logger に送られます。受け取るには、アプリケーション側で `@opentelemetry/api` の `diag.setLogger(...)` を設定する必要があり、デフォルトでは自動出力されません。このパッケージは SDK を初期化せず、この診断も独立した SDK `LogRecord` ではありません。
 
 `responseHook` は、トランスポートが返したものを受け取ります。HTTP では `HttpResponse`、SSE では開始に成功したあとのストリームハンドル、WebSocket では開いたあとのセッションです。第 3 引数は元のリクエストです。
 
@@ -66,16 +68,15 @@ HTTP、SSE、WebSocket はデフォルトでオンです。トランスポート
 
 ## Logger 診断
 
-トップレベルの `logger?: Logger` は `@opentelemetry/api-logs` のインターフェイスを受け取り、アプリケーション Logger は受け取りません。省略も単独での使用も可能です。Defjs はグローバル logger を取得せず、プロバイダーも所有しません。リクエストまたは論理的な接続ごとに、`WARN` の LogRecord（severity number 13）を最大 1 件だけ出力します。メッセージは固定で、属性は `server.address` と `server.port`（わかる場合）、`defjs.phase`、`exception.type`、定義の `meta` 由来の `defjs.meta.*` 属性、HTTP ではさらに `http.request.method`、SSE ストリームがエラーで終わる場合は `defjs.sse.fault.code`、WebSocket の close 情報に数値の code がある場合は `websocket.close.code` です。
+トップレベルの `logger?: Logger` は `@opentelemetry/api-logs` のインターフェイスを受け取り、アプリケーション Logger は受け取りません。省略も単独での使用も可能です。Defjs はグローバル logger を取得せず、プロバイダーも所有しません。失敗した操作呼び出しごとに `WARN` の LogRecord（severity number 13）を 1 件、開いたあとに失敗した SSE ストリームまたは WebSocket セッションごとにも 1 件出力します。メッセージはいずれも固定です。
 
-| 結果                                                                      | イベント                                                          | `defjs.phase` |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |
-| HTTP の `next()` が reject（キャンセルと公開される `HTTP_STATUS` は除く） | `http.client.request.exception`                                   | `request`     |
-| SSE または WebSocket の接続に失敗                                         | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
-| SSE または WebSocket がエラーで終了（reject された `closed` を含む）      | 同じトランスポートのイベント                                      | `connection`  |
+| 結果                                                                                     | イベント                                                          | 属性                                                                                                                    |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 操作呼び出しが `NET_ABORTED` 以外の Fault で解決される                                   | `defjs.client.operation.exception`                                | `defjs.operation.name`、`error.type`（Fault コード）、`exception.type`、`defjs.meta.*`                                  |
+| SSE ストリームまたは WebSocket セッションがエラーで終了（reject された `closed` を含む） | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `server.address`、`server.port`、`exception.type`、`defjs.meta.*`、`defjs.sse.fault.code` または `websocket.close.code` |
 
-通常の status のレスポンス（宣言した `error` ボディがデコードできる 4xx/5xx を含む）、成功、正常終了、EOF、呼び出し側によるキャンセルでは LogRecord を出力しません。HTTP の期限 abort が 1 回ログに出るのは、タイムアウトによる reject が OTel インターセプターの `next()` / トランスポート境界に届いた場合だけです（理由が `TimeoutError` の abort、たとえば `AbortSignal.timeout()` は、キャンセルではなくタイムアウトとして扱われます）。入力のパース、ビルド、`next()` の後のアプリケーションインターセプターの処理、チェーン後のボディ変換で、操作の呼び出しだけが期限を観測した場合、LogRecord は出力されません。操作の呼び出しを観測してください。HTTP ハンドラー境界内で宣言した `output` / `error` のボディ読み取りが失敗すると、どの表現でもログに出ます。メディアタイプと `JSON.parse` の失敗がログに出るのは JSON 表現だけで、HTTP status は問いません。JSON 以外のテキスト、blob、バイト列は、メディアタイプが JSON でないというだけでは失敗になりません。宣言していないボディは読まれないので、ログに出ることはありません。struct の検証、204 のような宣言したボディの欠如、そのあとの `HTTP_STATUS` への変換はインターセプターの後に起きるので、ログに出ません。2xx 以外の SSE ハンドシェイクは常に 1 回ログに出ます。サーバーからの WebSocket の close フレームは、code にかかわらずログに出ません。close フレームのない突然の切断（1006）は、どのランタイムでもセッションがエラーで終わり、1 回ログに出ます。
+成功、あとの試行で回復したリトライ済みの試行、正常終了、EOF、code にかかわらずサーバーからの WebSocket の close フレーム、呼び出し元によるキャンセルでは LogRecord を出力しません。close フレームのない WebSocket の突然の切断（1006）は、どのランタイムでもセッションがエラーで終わり、1 回ログに出ます。操作のレコードは、操作スパンのコンテキストとともに出力されます。
 
-`exception.type` は、インターセプターが観測したもののクラス名であり、Defjs の Fault コードではありません。たとえば `BodyFailure`（HTTP ボディ）、`EventStreamFatalError`（非 2xx ステータス以外の理由で失敗した SSE ハンドシェイク。たとえば応答が `text/event-stream` でない場合）、`DefjsFault`（WebSocket の開始、および非 2xx ステータスの SSE ハンドシェイク）、`TypeError`（ネットワーク障害）、`Error`（タイムアウト）です。フィルター、exporter、flush、shutdown はアプリケーションが管理します。
+`includeErrorDiagnostics: true` のときは、すべてのレコードが `exception.message` と `exception.stacktrace` も持ちます。操作呼び出しでは、Fault の `message` と `stack` です。cause チェーンとエラーの enumerable なフィールドは出力されませんが、メッセージ自体はフィルタされません。Fault のメッセージはその cause のメッセージであることが多く、プラットフォームのエラー文はリクエスト URL を引用することがあります。フィルター、exporter、flush、shutdown はアプリケーションが管理します。
 
 ログの完全な例とサードパーティ連携の例は [OpenTelemetry ガイド](/ja-JP/docs/integrations/opentelemetry-server#logs-and-third-party-loggers) を参照してください。

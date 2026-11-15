@@ -7,7 +7,7 @@ description: طبّق سياسات المصادقة والنقل على عميل
 
 تُرفق المعترضات سياسات تنفيذ عرضية مشتركة — مثل ترويسات المصادقة، وتوقيع الطلبات، وقواطع دوائر الصيانة، ومعالجة `Retry-After` — بعميل التطبيق `Client` دون أي تعديل على تعريفات عمليات SDK.
 
-يتم التحقق من صحة المدخلات وتطبيق دالة `builder` **قبل** دخول سلسلة المعترضات؛ بينما يتم توزيع حالات استجابة HTTP والتحقق من بنيتي `output` و`error` **بعد** الخروج من السلسلة.
+يتم التحقق من صحة المدخلات وتطبيق دالة `builder` **قبل** دخول سلسلة المعترضات؛ بينما يتم توزيع حالات استجابة HTTP والتحقق من بنيتي `output` و`error` **بعد** الخروج من السلسلة. ويغلّف [معترض العملية](#operation-interceptors) هذا كله.
 
 ## 1. إنشاء معترض وتسجيله
 
@@ -80,13 +80,28 @@ description: طبّق سياسات المصادقة والنقل على عميل
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. دوال المصنع والدوال المساعدة المدمجة
+## 5. رصد استدعاء العملية كاملًا [#operation-interceptors]
+
+يرى معترض النقل طلبًا واحدًا في كل مرة: المدخل الذي يفشل في التحقق لا يصل إليه، وتشغّله كل إعادة محاولة من جديد، وتُفك استجابته بعد عودته. لرصد الاستدعاء نفسه، من لحظة استدعاء `getOrder(client, input)` حتى تُحل مصفوفة نتيجته، استخدم `createOperationInterceptor`:
+
+<include cwd lang="typescript">
+  examples/api/create-operation-interceptor.ts#example
+</include>
+
+- **ما يراه**: يصف `call` التعريف: `transport` (`"http"` أو `"sse"` أو `"websocket"`) و`method` وقالب `path` و`meta`. ولا يحمل المدخل ولا الطلب، لأن أيًّا منهما غير موجود بعد. يُحل `next()` بمصفوفة نتيجة العملية، فيكون `err` هو الخطأ النهائي: `REQ_INPUT_INVALID` أو `REQ_BUILD_FAILED` أو `HTTP_STATUS` أو `RES_STRUCT_MISMATCH` وغيرها.
+- **يرصد ولا يغيّر**: لا يأخذ `next()` وسائط، واستدعاؤه ثانيةً يعيد الوعد نفسه دون تشغيل الاستدعاء من جديد، ولا تستطيع الدالة أن تُحل إلا بما أُحل به `next()`. غيّر الطلبات والاستجابات في معترض نقل.
+- **الترتيب**: تعمل معترضات العملية خارج كل معترضات النقل، بترتيب التسجيل. والشيفرة التي تعمل حول `next()`، مثل `context.with` في OpenTelemetry، تكون سارية على الاستدعاء كله، بما فيه معترضات النقل.
+- **التدفقات والجلسات**: يُحل استدعاء SSE أو WebSocket بمجرد فتح التدفق أو الجلسة؛ وما يحدث عليهما لاحقًا يُرصد عبر `closed` الخاص بهما.
+- **الإخفاقات**: يؤدي الإلقاء أو الرفض إلى حل العملية بـ `EXT_INTERCEPTOR_FAILED` مع القيمة المُلقاة في `cause`. ويُغلق أي تدفق أو جلسة كان الاستدعاء قد فتحها.
+
+## 6. دوال المصنع والدوال المساعدة المدمجة
 
 | التصدير                                        | وسيلة النقل | الوصف                                                                                 |
 | ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------- |
 | `createHttpInterceptor(fn)`                    | HTTP        | تغلف `(req, next) => Promise<HttpResponse<unknown>>`                                  |
 | `createSSEInterceptor(fn)`                     | SSE         | تغلف `(req, next) => Promise<EventStreamHandle<unknown>>`                             |
 | `createWebSocketInterceptor(fn)`               | WebSocket   | تغلف `(req, next) => Promise<WebSocketSessionLike>`                                   |
+| `createOperationInterceptor(fn)`               | الكل        | تغلف `(call, next) => Promise<result>` حول استدعاء العملية كاملًا                     |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP        | تحقن الترويسة `Authorization: Basic ...` من موفر بيانات اعتماد تزامني يُستدعى لكل طلب |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE         | تحقن الترويسة `Authorization: Basic ...` في مصافحات تدفق SSE                          |
 

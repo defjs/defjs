@@ -45,18 +45,53 @@ export function endSpanWithResponse(span: Span, status: number): void {
   span.end();
 }
 
-// The runtime's error text (Node's fetch message with the full URL, a JSON parse error with a body
+// The runtime's error text (a fetch message with the full URL, a JSON parse error with a body
 // fragment) and its stack can carry credentials, query values or body content, so the exception
-// event keeps only `exception.type`, the same field the diagnostic logs emit.
-function recordSpanException(span: Span, error: unknown): void {
-  span.recordException({ name: getExceptionType(error) });
+// event keeps only `exception.type` unless the application turned on `includeErrorDiagnostics`.
+function recordSpanException(
+  span: Span,
+  error: unknown,
+  includeErrorDiagnostics: boolean,
+): void {
+  const name = getExceptionType(error);
+  if (!includeErrorDiagnostics) {
+    span.recordException({ name });
+    return;
+  }
+  const { message, stack } = describeError(error);
+  span.recordException({ name, message, stack });
 }
 
-export function endSpanWithError(span: Span, error: unknown): void {
-  recordSpanException(span, error);
+export function endSpanWithError(
+  span: Span,
+  error: unknown,
+  includeErrorDiagnostics: boolean,
+): void {
+  recordSpanException(span, error, includeErrorDiagnostics);
   span.setAttribute("error.type", getErrorType(error));
-  span.setStatus({ code: SpanStatusCode.ERROR });
+  span.setStatus(
+    includeErrorDiagnostics
+      ? { code: SpanStatusCode.ERROR, message: describeError(error).message }
+      : { code: SpanStatusCode.ERROR },
+  );
   span.end();
+}
+
+/**
+ * The message and stack of a failure, read once. A failure the call returns or rethrows may carry a throwing getter,
+ * and reading telemetry facts must not replace that failure.
+ */
+export function describeError(error: unknown): {
+  message: string;
+  stack: string | undefined;
+} {
+  try {
+    return error instanceof Error
+      ? { message: error.message, stack: error.stack }
+      : { message: String(error), stack: undefined };
+  } catch {
+    return { message: "Unknown error", stack: undefined };
+  }
 }
 
 /** Caller cancellation is not a failure: the span records `<transport>.aborted` and keeps its status unset. */
@@ -92,14 +127,15 @@ export function runSpanHook(
   span: Span,
   hookName: string,
   hook: () => Promise<void> | void,
+  includeErrorDiagnostics: boolean,
 ): void {
   try {
     const result = hook();
     void Promise.resolve(result).catch((error) =>
-      recordSpanHookError(span, hookName, error),
+      recordSpanHookError(span, hookName, error, includeErrorDiagnostics),
     );
   } catch (error) {
-    recordSpanHookError(span, hookName, error);
+    recordSpanHookError(span, hookName, error, includeErrorDiagnostics);
   }
 }
 
@@ -107,6 +143,7 @@ export function recordSpanHookError(
   span: Span,
   hookName: string,
   error: unknown,
+  includeErrorDiagnostics: boolean,
 ): void {
   if (!span.isRecording()) {
     try {
@@ -134,7 +171,7 @@ export function recordSpanHookError(
     // Telemetry hooks must not affect transport execution.
   }
   try {
-    recordSpanException(span, error);
+    recordSpanException(span, error, includeErrorDiagnostics);
   } catch {
     // Telemetry hooks must not affect transport execution.
   }

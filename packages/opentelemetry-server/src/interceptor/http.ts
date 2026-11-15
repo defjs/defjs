@@ -1,9 +1,8 @@
 import type { HttpResponse } from "@defjs/core";
 import { createHttpInterceptor } from "@defjs/core";
 import type { Attributes } from "@opentelemetry/api";
-import { context, trace } from "@opentelemetry/api";
+import { context } from "@opentelemetry/api";
 import { carrierSetter } from "../propagation/carrier";
-import { emitClientException } from "../telemetry/logs";
 import type { HttpClientMetrics } from "../telemetry/metrics";
 import { durationSeconds } from "../telemetry/metrics";
 import {
@@ -17,7 +16,7 @@ import {
 } from "../telemetry/trace";
 import { resolveHttpUrl } from "../telemetry/url";
 import type { ClientCall, ClientCallOptions } from "./call";
-import { requiresActiveSpan, startClientCall } from "./call";
+import { startClientCall } from "./call";
 
 export type HttpInterceptorOptions = ClientCallOptions<
   HttpResponse<unknown>,
@@ -42,14 +41,14 @@ function responseMetricAttributes(
 export function createOpenTelemetryHttpInterceptor(
   options: HttpInterceptorOptions,
 ): ReturnType<typeof createHttpInterceptor> {
-  const { logger, propagator, metrics, responseHook } = options;
-  const needsActiveSpan = requiresActiveSpan(options);
+  const {
+    propagator,
+    metrics,
+    responseHook,
+    includeErrorDiagnostics = false,
+  } = options;
 
   return createHttpInterceptor(async (req, next) => {
-    if (needsActiveSpan && !trace.getActiveSpan()) {
-      return next(req);
-    }
-
     const call = startClientCall(options, req, resolveHttpUrl, req.method);
     const { span } = call;
     const headers = new Headers(req.headers);
@@ -67,7 +66,7 @@ export function createOpenTelemetryHttpInterceptor(
     } catch (error) {
       const durationS = durationSeconds(startTime);
 
-      // Caller cancellation is not a failure: no log, no error status, no `error.type`.
+      // Caller cancellation is not a failure: no error status, no `error.type`.
       if (isCallerCancellation(req.signal, error)) {
         if (span) endSpanAborted(span, "http");
         metrics?.requestDuration.record(durationS, {
@@ -75,16 +74,7 @@ export function createOpenTelemetryHttpInterceptor(
           "http.request.method": call.method,
         });
       } else {
-        emitClientException(logger, {
-          transport: "http",
-          phase: "request",
-          context: call.context,
-          error,
-          attributes: call.attributes,
-          meta: call.meta,
-          extra: { "http.request.method": call.method },
-        });
-        if (span) endSpanWithError(span, error);
+        if (span) endSpanWithError(span, error, includeErrorDiagnostics);
         metrics?.requestDuration.record(durationS, {
           ...call.attributes,
           "http.request.method": call.method,
@@ -98,8 +88,11 @@ export function createOpenTelemetryHttpInterceptor(
 
     if (span) {
       if (responseHook) {
-        runSpanHook(span, "responseHook", () =>
-          responseHook(span, response, req),
+        runSpanHook(
+          span,
+          "responseHook",
+          () => responseHook(span, response, req),
+          includeErrorDiagnostics,
         );
       }
       endSpanWithResponse(span, response.status);

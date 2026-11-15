@@ -1,11 +1,7 @@
-import {
-  createNetworkFault,
-  createUndecodedHttpStatusFault,
-  ERR_TIMEOUT,
-} from "@defjs/core";
+import { createNetworkFault, ERR_TIMEOUT } from "@defjs/core";
 import { diag, ROOT_CONTEXT } from "@opentelemetry/api";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createMockLogger, makeHttpResponse } from "../../test/mocks";
+import { createMockLogger } from "../../test/mocks";
 import { emitClientException } from "./logs";
 
 describe("client exception logs", () => {
@@ -13,38 +9,33 @@ describe("client exception logs", () => {
 
   test.each([
     {
-      transport: "http",
-      eventName: "http.client.request.exception",
-      body: "HTTP client request failed",
-      extras: { "http.request.method": "GET" },
+      kind: "operation",
+      eventName: "defjs.client.operation.exception",
+      body: "Defjs operation failed",
     },
     {
-      transport: "sse",
+      kind: "sse",
       eventName: "defjs.client.sse.exception",
       body: "SSE client connection failed",
-      extras: { "defjs.sse.fault.code": "NET_UNREACHABLE" },
     },
     {
-      transport: "websocket",
+      kind: "websocket",
       eventName: "defjs.client.websocket.exception",
       body: "WebSocket client connection failed",
-      extras: { "websocket.close.code": 1006 },
     },
   ] as const)(
-    "emits a safe correlated WARN for $transport",
-    ({ transport, eventName, body, extras }) => {
+    "emits a correlated WARN without error text for $kind",
+    ({ kind, eventName, body }) => {
       const { logger, records } = createMockLogger();
       emitClientException(logger, {
-        transport,
-        phase: "connect",
+        kind,
         context: ROOT_CONTEXT,
         error: new TypeError("password=secret"),
         attributes: {
+          "defjs.meta.operation": "orders.create",
           "server.address": "api.example.com",
-          "server.port": 8443,
         },
-        meta: { "defjs.meta.operation": "orders.create" },
-        extra: extras,
+        includeErrorDiagnostics: false,
       });
       expect(records).toEqual([
         {
@@ -56,10 +47,7 @@ describe("client exception logs", () => {
           attributes: {
             "defjs.meta.operation": "orders.create",
             "server.address": "api.example.com",
-            "server.port": 8443,
-            "defjs.phase": "connect",
             "exception.type": "TypeError",
-            ...extras,
           },
         },
       ]);
@@ -76,51 +64,55 @@ describe("client exception logs", () => {
     [null, "_OTHER"],
     [undefined, "_OTHER"],
     [{ details: "secret" }, "object"],
-  ])(
-    "retains non-cancellation diagnostics without serializing their cause: %s",
-    (error, type) => {
-      const { logger, records } = createMockLogger();
-      emitClientException(logger, {
-        context: ROOT_CONTEXT,
-        error,
-        phase: "request",
-        attributes: {},
-        meta: {},
-        transport: "http",
-      });
-      expect(records).toHaveLength(1);
-      expect(records[0]?.attributes?.["exception.type"]).toBe(type);
-      expect(records[0]?.severityNumber).toBe(13);
-      expect(JSON.stringify(records)).not.toContain("private-string");
-      expect(JSON.stringify(records)).not.toContain("secret");
-    },
-  );
-
-  test("omits an artificial HTTP status exception but retains a failed SSE handshake", () => {
+  ])("records only the exception type of %s by default", (error, type) => {
     const { logger, records } = createMockLogger();
-    const error = createUndecodedHttpStatusFault({
-      ...makeHttpResponse(),
-      status: 503,
-    });
     emitClientException(logger, {
+      kind: "operation",
       context: ROOT_CONTEXT,
       error,
-      phase: "request",
       attributes: {},
-      meta: {},
-      transport: "http",
-    });
-    expect(records).toEqual([]);
-    emitClientException(logger, {
-      context: ROOT_CONTEXT,
-      error,
-      phase: "connect",
-      attributes: {},
-      meta: {},
-      transport: "sse",
+      includeErrorDiagnostics: false,
     });
     expect(records).toHaveLength(1);
-    expect(records[0]?.attributes?.["exception.type"]).toBe("DefjsFault");
+    expect(records[0]?.attributes).toEqual({ "exception.type": type });
+    expect(JSON.stringify(records)).not.toContain("private-string");
+    expect(JSON.stringify(records)).not.toContain("secret");
+  });
+
+  test("includeErrorDiagnostics adds the message and the stack, never the cause or enumerable fields", () => {
+    const { logger, records } = createMockLogger();
+    const cause = Object.assign(new TypeError("ECONNREFUSED"), {
+      path: "https://api.example.com/?sign=SECRET",
+    });
+    const fault = createNetworkFault(cause);
+    emitClientException(logger, {
+      kind: "operation",
+      context: ROOT_CONTEXT,
+      error: fault,
+      attributes: {},
+      includeErrorDiagnostics: true,
+    });
+    expect(records[0]?.attributes).toEqual({
+      "exception.type": "DefjsFault",
+      "exception.message": "ECONNREFUSED",
+      "exception.stacktrace": fault.stack,
+    });
+    expect(JSON.stringify(records)).not.toContain("SECRET");
+  });
+
+  test("includeErrorDiagnostics records the string of a value that is not an Error", () => {
+    const { logger, records } = createMockLogger();
+    emitClientException(logger, {
+      kind: "sse",
+      context: ROOT_CONTEXT,
+      error: "stream broke",
+      attributes: {},
+      includeErrorDiagnostics: true,
+    });
+    expect(records[0]?.attributes).toEqual({
+      "exception.type": "string",
+      "exception.message": "stream broke",
+    });
   });
 
   test("does not read error attributes without a logger", () => {
@@ -132,18 +124,17 @@ describe("client exception logs", () => {
     });
     expect(() =>
       emitClientException(undefined, {
+        kind: "operation",
         context: ROOT_CONTEXT,
         error,
-        phase: "request",
         attributes: {},
-        meta: {},
-        transport: "http",
+        includeErrorDiagnostics: true,
       }),
     ).not.toThrow();
     expect(readName).not.toHaveBeenCalled();
   });
 
-  test.each(["emit", "name", "code", "diag"] as const)(
+  test.each(["emit", "name", "diag"] as const)(
     "isolates %s failures from callers",
     (failure) => {
       const { logger } = createMockLogger();
@@ -151,7 +142,7 @@ describe("client exception logs", () => {
         if (failure === "diag") throw new Error("diagnostics failed");
       });
       const error = new Error("original private failure");
-      if (failure === "name" || failure === "code") {
+      if (failure === "name") {
         Object.defineProperty(error, failure, {
           get() {
             throw new Error("private getter failure");
@@ -164,12 +155,11 @@ describe("client exception logs", () => {
       }
       expect(() =>
         emitClientException(logger, {
+          kind: "websocket",
           context: ROOT_CONTEXT,
           error,
-          phase: "connection",
           attributes: {},
-          meta: {},
-          transport: "http",
+          includeErrorDiagnostics: false,
         }),
       ).not.toThrow();
       expect(report).toHaveBeenCalledExactlyOnceWith(

@@ -5,7 +5,7 @@ description: Constructores de interceptor HTTP, SSE y WebSocket.
 
 # Interceptores
 
-Envuelve `next` para un transporte. Regístralos con `withInterceptors`. Las listas mixtas se filtran por tipo cuando se ejecuta la operación.
+Envuelve `next` para un transporte, o para una llamada de operación completa. Regístralos con `withInterceptors`. Las listas mixtas se filtran por tipo cuando se ejecuta la operación.
 
 ## createHttpInterceptor()
 
@@ -29,6 +29,14 @@ Llama a `next(req)` (opcionalmente con una solicitud modificada) o cortocircuita
 
 Un wrapper o una sesión de cortocircuito debe reenviar el mismo teardown de `[Symbol.asyncDispose]()` que su ciclo de vida `close` / `closed`; devolver una promesa resuelta ajena no basta.
 
+## createOperationInterceptor()
+
+<ApiSignature name="createOperationInterceptor, OperationInterceptorFn, OperationCall, OperationResult" />
+
+`next()` ejecuta la llamada completa: validación de la entrada, elección del endpoint, `builder`, cada intento con sus interceptores de transporte y reintentos, y la decodificación de la respuesta. No recibe argumentos y ejecuta la llamada una sola vez, por muchas veces que se invoque. La función es genérica en el resultado, así que solo se resuelve con lo que devolvió `next()`. Los interceptores de operación se ejecutan para todos los transportes, por fuera de los interceptores de transporte. Un throw o un rechazo resuelve la operación con `EXT_INTERCEPTOR_FAILED`, y se cierra el stream o la sesión que la llamada ya hubiera abierto.
+
+<include cwd>examples/api/create-operation-interceptor.ts#example</include>
+
 ## Tipos etiquetados
 
 ## Interceptor
@@ -39,7 +47,9 @@ Un wrapper o una sesión de cortocircuito debe reenviar el mismo teardown de `[S
 
 ## WebSocketInterceptor
 
-<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor" />
+## OperationInterceptor
+
+<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor, OperationInterceptor" />
 
 ## Basic auth
 

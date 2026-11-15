@@ -5,7 +5,7 @@ description: HTTP、SSE 與 WebSocket 攔截器的建構函式。
 
 # Interceptors
 
-為單一傳輸包住 `next`。以 `withInterceptors` 註冊。混合的清單會在操作執行時依 kind 篩選。
+為單一傳輸或整次操作呼叫包住 `next`。以 `withInterceptors` 註冊。混合的清單會在操作執行時依 kind 篩選。
 
 ## createHttpInterceptor()
 
@@ -29,6 +29,14 @@ description: HTTP、SSE 與 WebSocket 攔截器的建構函式。
 
 wrapper 或短路用的工作階段，必須轉發與其 `close`／`closed` 生命週期相同的 `[Symbol.asyncDispose]()` teardown；回傳一個無關的已解析 promise 並不足夠。
 
+## createOperationInterceptor()
+
+<ApiSignature name="createOperationInterceptor, OperationInterceptorFn, OperationCall, OperationResult" />
+
+`next()` 會執行整次呼叫：輸入驗證、端點挑選、builder、每次嘗試（連同其傳輸攔截器與重試），以及回應解碼。它不接受引數，不論呼叫幾次都只會執行一次呼叫。這個函式對結果是泛型的，因此只能以 `next()` 解析出的值來解析。操作攔截器對每種傳輸都會執行，位於傳輸攔截器之外。拋出例外或 rejection 會讓操作以 `EXT_INTERCEPTOR_FAILED` 解析，呼叫已開啟的串流或工作階段會被關閉。
+
+<include cwd>examples/api/create-operation-interceptor.ts#example</include>
+
 ## 帶 kind 的型別
 
 ## Interceptor
@@ -39,7 +47,9 @@ wrapper 或短路用的工作階段，必須轉發與其 `close`／`closed` 生�
 
 ## WebSocketInterceptor
 
-<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor" />
+## OperationInterceptor
+
+<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor, OperationInterceptor" />
 
 ## 基本認證
 

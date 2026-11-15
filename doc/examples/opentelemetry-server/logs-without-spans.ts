@@ -35,10 +35,8 @@ async function main() {
       meta: { operation: "orders.read" },
     });
     const [err] = await readOrders(client);
-    if (err) {
-      console.error(err.code);
-      return;
-    }
+    // The plugin has already logged the failure once, with err.code as error.type.
+    if (err) return;
   } finally {
     await provider.shutdown();
   }

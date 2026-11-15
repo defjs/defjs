@@ -39,20 +39,25 @@ function open(url: string): {
   });
   socket.addEventListener("message", (event) => {
     if (typeof event.data === "string") messages.push(event.data);
+    if (event.data instanceof ArrayBuffer) {
+      messages.push(new TextDecoder().decode(event.data));
+    }
   });
   return { socket, messages, closed, opened };
 }
 
-test("ws scenario sends the messages in order, then closes with closeWith", async () => {
+test("ws scenario sends on open, then the end frames and close only when the test acts", async () => {
   const f = fixture(inject("testServerHost"), inject("fixtureToken"));
   const base = await f.endpoint("sock", "ws", {
-    send: ["a", "b"],
-    closeWith: { code: 4001, reason: "bye" },
+    send: ["a", { binary: "b" }],
+    end: { send: ["c"], code: 4001, reason: "bye" },
   });
   const connection = open(base.replace(/^http/, "ws") + "/ws");
+  connection.socket.binaryType = "arraybuffer";
   await connection.opened;
+  await f.act("sock", "end");
   const closed = await connection.closed;
-  expect(connection.messages).toEqual(["a", "b"]);
+  expect(connection.messages).toEqual(["a", "b", "c"]);
   expect(closed.code).toBe(4001);
   expect(closed.reason).toBe("bye");
 });

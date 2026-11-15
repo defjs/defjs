@@ -5,7 +5,7 @@ description: withOpenTelemetryServer and per-transport options.
 
 # OpenTelemetry server
 
-A middleware plugin: outbound HTTP / SSE / WebSocket instrumentation as core interceptors. This package does not initialize an OpenTelemetry SDK, and it is not inbound server instrumentation.
+A middleware plugin: outbound instrumentation of every operation call and of its HTTP / SSE / WebSocket transport, as core interceptors. This package does not initialize an OpenTelemetry SDK, and it is not inbound server instrumentation.
 
 See the [OpenTelemetry server guide](/docs/integrations/opentelemetry-server).
 
@@ -13,13 +13,15 @@ See the [OpenTelemetry server guide](/docs/integrations/opentelemetry-server).
 
 <ApiSignature name="withOpenTelemetryServer" />
 
-Appends one interceptor per enabled transport, in the order HTTP, SSE, WebSocket. Apply it at `createClient` time. `options` is required; pass `{}` to install the interceptors with propagation only.
+Appends an operation interceptor when a `tracer`, `meter`, or `logger` is supplied, then one interceptor per enabled transport, in the order HTTP, SSE, WebSocket. Apply it at `createClient` time, once per client. `options` is required; pass `{}` to install the transport interceptors with propagation only.
 
 <include cwd>examples/api/with-opentelemetry-server.ts#example</include>
 
 `tracer`, `meter`, and `logger` are each optional. No `propagator` → W3C Trace Context + Baggage.
 
-Without `tracer`, the plugin creates no local spans, never calls `trace.getTracer(...)`, and skips `startSpanHook`, `requestHook`, and `responseHook`. Supplied `meter` and `logger` instances work independently. Propagation still forwards the extracted parent context; WebSocket `queryPropagation` remains `false` by default. With a tracer, `requireParentSpan: true` bypasses all instrumentation, including logs, when no active parent exists; without a tracer it blocks neither metrics nor logs.
+Every operation call is observed from the call to its tuple: an `INTERNAL` operation span named `defjs.operation.name` (such as `GET /orders/:id`) with `error.type` set to the fault code on failure, one `defjs.client.operation.duration` sample, and one `WARN` log when it fails. Each HTTP attempt and each SSE or WebSocket connection gets a `CLIENT` transport span under it. A call without an active parent span starts a trace of its own; the SDK's sampler decides what is kept.
+
+Without `tracer`, the plugin creates no local spans, never calls `trace.getTracer(...)`, and skips `startSpanHook`, `requestHook`, and `responseHook`. Supplied `meter` and `logger` instances work independently. Propagation still forwards the extracted parent context; WebSocket `queryPropagation` remains `false` by default.
 
 HTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a transport to skip it.
 
@@ -27,16 +29,16 @@ HTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a trans
 
 <ApiSignature name="OpenTelemetryServerOptions" />
 
-| Field               | Default                     | Effect                                                                                                   |
-| ------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `tracer`            | none                        | Without it there are no local spans and no span hooks.                                                   |
-| `meter`             | none                        | Without it no package metrics are recorded.                                                              |
-| `logger`            | none                        | A `Logger` from `@opentelemetry/api-logs`. Without it no diagnostic LogRecords are emitted.              |
-| `propagator`        | W3C Trace Context + Baggage | Extracts the parent context and injects the outgoing context.                                            |
-| `requireParentSpan` | `false`                     | With a `tracer`, bypass instrumentation when there is no active parent span. Ignored without a `tracer`. |
-| `http`              | `{}`                        | HTTP transport options.                                                                                  |
-| `sse`               | `{}`                        | SSE transport options.                                                                                   |
-| `webSocket`         | `{}`                        | WebSocket transport options.                                                                             |
+| Field                     | Default                     | Effect                                                                                      |
+| ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------- |
+| `tracer`                  | none                        | Without it there are no local spans and no span hooks.                                      |
+| `meter`                   | none                        | Without it no package metrics are recorded.                                                 |
+| `logger`                  | none                        | A `Logger` from `@opentelemetry/api-logs`. Without it no diagnostic LogRecords are emitted. |
+| `propagator`              | W3C Trace Context + Baggage | Extracts the parent context and injects the outgoing context.                               |
+| `includeErrorDiagnostics` | `false`                     | Export error messages and stacks on failed spans, `exception` events, and failure logs.     |
+| `http`                    | `{}`                        | HTTP transport options.                                                                     |
+| `sse`                     | `{}`                        | SSE transport options.                                                                      |
+| `webSocket`               | `{}`                        | WebSocket transport options.                                                                |
 
 ## OpenTelemetryServerTransportOptions
 
@@ -48,11 +50,11 @@ HTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a trans
 
 <ApiSignature name="OpenTelemetryServerTransportOptions, OpenTelemetryServerHttpOptions, OpenTelemetryServerSSEOptions, OpenTelemetryServerWebSocketOptions" />
 
-`enabled` defaults to `true`; only `enabled: false` turns a transport off.
+`enabled` defaults to `true`; only `enabled: false` turns a transport off, together with the operation telemetry of its calls.
 
 Span hooks run only when a `tracer` is supplied. `startSpanHook` runs synchronously before span creation for its own HTTP, SSE, or WebSocket transport. Its attributes are applied after built-in attributes, so the application may override `url.full` or another initial value. If it throws, Defjs creates the span with built-in attributes and continues the request; `requestHook` and `responseHook` run after span creation. Neither is awaited: a throw or rejection never blocks or fails the operation.
 
-While `span.isRecording()` is true, hook failures record `defjs.otel.hook.error` and `exception` events. The `exception` event carries only `exception.type` (the class name, not a Defjs fault code), never `exception.message` or `exception.stacktrace`, because runtime error text can include the full request URL or a response body fragment; the same rule applies to the `exception` event recorded when a transport fails. For non-recording spans (ended or unsampled), failures go to the OpenTelemetry diagnostic logger through `diag.error`. Applications must configure `diag.setLogger(...)` from `@opentelemetry/api` to receive them; there is no automatic output by default. The package does not initialize the SDK, and this diagnostic is not a separate SDK `LogRecord`.
+Hooks shape the transport span; the operation span has none. While `span.isRecording()` is true, hook failures record `defjs.otel.hook.error` and `exception` events. The `exception` event carries only `exception.type` (the class name, not a Defjs fault code), and neither `exception.message` nor `exception.stacktrace` unless `includeErrorDiagnostics` is on, because runtime error text can include the full request URL or a response body fragment; the same rule applies to the `exception` event recorded when a transport fails. For non-recording spans (ended or unsampled), failures go to the OpenTelemetry diagnostic logger through `diag.error`. Applications must configure `diag.setLogger(...)` from `@opentelemetry/api` to receive them; there is no automatic output by default. The package does not initialize the SDK, and this diagnostic is not a separate SDK `LogRecord`.
 
 `responseHook` receives what the transport returned: the `HttpResponse` for HTTP, the stream handle for SSE once startup succeeded, and the session for WebSocket once it opened. Its third argument is the original request.
 
@@ -66,16 +68,15 @@ By default, `url.full` resolves only `request.endpoint` against optional `reques
 
 ## Logger diagnostics
 
-The top-level `logger?: Logger` option uses `@opentelemetry/api-logs`, not an application logger. It is optional and may be used alone. Defjs never obtains a global logger or owns its provider. It emits at most one `WARN` LogRecord (severity number 13) per request or logical connection, with a fixed message and the attributes `server.address` and `server.port` (when known), `defjs.phase`, `exception.type`, the `defjs.meta.*` attributes from the definition's `meta`, plus `http.request.method` for HTTP, `defjs.sse.fault.code` when an SSE stream ends in error, and `websocket.close.code` when the WebSocket close information has a numeric code:
+The top-level `logger?: Logger` option uses `@opentelemetry/api-logs`, not an application logger. It is optional and may be used alone. Defjs never obtains a global logger or owns its provider. It emits one `WARN` LogRecord (severity number 13) per failed operation call, and one per SSE stream or WebSocket session that fails after it opened, each with a fixed message:
 
-| Outcome                                                                | Event                                                             | `defjs.phase` |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |
-| HTTP `next()` rejects, excluding cancellation and public `HTTP_STATUS` | `http.client.request.exception`                                   | `request`     |
-| SSE or WebSocket connection fails                                      | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
-| SSE or WebSocket ends in error, including a rejected `closed`          | same transport event                                              | `connection`  |
+| Outcome                                                                         | Event                                                             | Attributes                                                                                                          |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| An operation call resolves with a fault other than `NET_ABORTED`                | `defjs.client.operation.exception`                                | `defjs.operation.name`, `error.type` (the fault code), `exception.type`, `defjs.meta.*`                             |
+| An SSE stream or WebSocket session ends in error, including a rejected `closed` | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `server.address`, `server.port`, `exception.type`, `defjs.meta.*`, `defjs.sse.fault.code` or `websocket.close.code` |
 
-Responses with an ordinary status (including 4xx/5xx whose declared `error` body decodes), success, normal closure, EOF, and caller cancellation produce no LogRecord. An HTTP deadline abort logs once only if a timeout rejection reaches the OTel interceptor's `next()` / transport boundary (an abort whose reason is a `TimeoutError`, such as `AbortSignal.timeout()`, counts as a timeout, not a cancellation). If only the operation call observes the deadline during input parsing, building, application-interceptor work after `next()`, or post-chain body conversion, no LogRecord is emitted; observe the operation call. Declared `output` / `error` body read failures inside the HTTP handler boundary log for every representation; media-type and `JSON.parse` failures log only for JSON representations, at any HTTP status. Non-JSON text, blobs, and bytes are not failures merely because their media type is not JSON. A body that is not declared is never read and cannot log. Struct validation, an absent declared body such as a 204, and the later `HTTP_STATUS` conversion happen after the interceptor and do not log. A non-2xx SSE handshake always logs once; a WebSocket close frame from the server never logs, whatever its code. An abrupt drop without a close frame (1006) ends the session in error and logs once, on every runtime.
+Success, a retried attempt that a later attempt recovers, normal closure, EOF, a WebSocket close frame from the server whatever its code, and caller cancellation produce no LogRecord. An abrupt WebSocket drop without a close frame (1006) ends the session in error and logs once, on every runtime. The operation record is emitted with the operation span's context.
 
-`exception.type` is the class name of what the interceptor observed, not a Defjs fault code: for example `BodyFailure` (HTTP body), `EventStreamFatalError` (an SSE handshake that fails for a reason other than a non-2xx status, such as a response that is not `text/event-stream`), `DefjsFault` (WebSocket startup, and an SSE handshake with a non-2xx status), `TypeError` (network failure), or `Error` (timeout). Applications own filtering, exporters, flush and shutdown.
+With `includeErrorDiagnostics: true`, every record also carries `exception.message` and `exception.stacktrace`; for an operation call they are the fault's `message` and `stack`. The cause chain and the enumerable fields of an error are never exported, but the message is not filtered: a fault's message is often its cause's, and platform error text can quote the request URL. Applications own filtering, exporters, flush and shutdown.
 
 See the full logging and third-party integration examples in the [OpenTelemetry guide](/docs/integrations/opentelemetry-server#logs-and-third-party-loggers).

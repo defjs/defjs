@@ -42,7 +42,7 @@ description: 在取用端應用程式中獨立設定如何呼叫匯入的 SDK �
 
 - 選項的套用順序由**左至右**。
 - 單值設定函式（`withEndpoint`、`withHeaders`、`withQuerySerializer`、`withCredentials`，以及來自 `@defjs/core/xsrf` 的 `withXSRF`）會**覆蓋**先前的設定值。
-- `withInterceptors(...items)` 會將攔截器**附加**至既有清單尾端，並在操作執行時依傳輸協定（`http`、`sse`、`web-socket`）自動過濾。
+- `withInterceptors(...items)` 會將攔截器**附加**至既有清單尾端。操作執行時，`operation` 攔截器包住整次呼叫，其中只執行對應傳輸協定（`http`、`sse`、`web-socket`）的攔截器。
 
 ## 2. 衍生單次呼叫 Client (`client(options)`)
 
@@ -109,7 +109,7 @@ description: 在取用端應用程式中獨立設定如何呼叫匯入的 SDK �
 | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `withEndpoint(...urls)`                                                            | 設定一個或多個候選基礎網址（會覆蓋先前的清單）。                                                                                                                                                                                             |
 | `withHeaders(HeadersInit)`                                                         | 為 HTTP 與 SSE 設定靜態預設標頭（會被 builder 標頭覆蓋）。                                                                                                                                                                                   |
-| `withInterceptors(...items)`                                                       | 以洋蔥模型順序附加 HTTP、SSE 與 WebSocket 攔截器。                                                                                                                                                                                           |
+| `withInterceptors(...items)`                                                       | 以洋蔥模型順序附加 HTTP、SSE、WebSocket 與操作攔截器。                                                                                                                                                                                       |
 | `withQuerySerializer(fn)`                                                          | 將已套用別名的 Query 物件序列化為 Query 字串。                                                                                                                                                                                               |
 | `withCredentials(boolean)`                                                         | 當設為 `true` 時，為 HTTP 與 SSE 請求設定 Fetch 的 `credentials: "include"`。                                                                                                                                                                |
 | `withXSRF(options?)`                                                               | 來自 `@defjs/core/xsrf`。在瀏覽器中，於同源的變更型 HTTP 請求中，把 XSRF Cookie 複製到標頭。呼叫 `withXSRF()` 時，若缺少 `location` 或 `document`（包含 Worker）會丟出錯誤。同構程式只在瀏覽器裡加上這個選項。令牌來自別處時，用攔截器設定。 |

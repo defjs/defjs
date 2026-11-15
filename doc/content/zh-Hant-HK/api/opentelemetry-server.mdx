@@ -5,7 +5,7 @@ description: withOpenTelemetryServer 同各傳輸層選項。
 
 # OpenTelemetry server
 
-一個中介層外掛：以 core 攔截器形式提供對外發出嘅 HTTP / SSE / WebSocket instrumentation。呢個 package 唔會初始化 OpenTelemetry SDK，亦唔係傳入伺服器請求嘅 instrumentation。
+一個中介層外掛：以 core 攔截器形式，對外發出嘅每次操作呼叫同其 HTTP / SSE / WebSocket 傳輸層提供 instrumentation。呢個 package 唔會初始化 OpenTelemetry SDK，亦唔係傳入伺服器請求嘅 instrumentation。
 
 見 [OpenTelemetry 伺服器端指南](/zh-Hant-HK/docs/integrations/opentelemetry-server)。
 
@@ -13,13 +13,15 @@ description: withOpenTelemetryServer 同各傳輸層選項。
 
 <ApiSignature name="withOpenTelemetryServer" />
 
-為每個啟用咗嘅傳輸層追加一個攔截器，次序係 HTTP、SSE、WebSocket。喺 `createClient` 時套用。`options` 必填；如果只想安裝攔截器做 propagation，就傳 `{}`。
+提供 `tracer`、`meter` 或 `logger` 時追加一個操作攔截器，然後為每個啟用咗嘅傳輸層追加一個攔截器，次序係 HTTP、SSE、WebSocket。喺 `createClient` 時套用，每個 client 一次。`options` 必填；如果只想安裝傳輸層攔截器做 propagation，就傳 `{}`。
 
 <include cwd>examples/api/with-opentelemetry-server.ts#example</include>
 
 `tracer`、`meter` 同 `logger` 各自可選。唔傳 `propagator` → W3C Trace Context + Baggage。
 
-省略 `tracer` 時，外掛唔會建立本地 span，亦唔會呼叫 `trace.getTracer(...)`，並且略過 `startSpanHook`、`requestHook` 同 `responseHook`。傳入嘅 `meter` 同 `logger` 會獨立運作。propagation 仍然會轉發擷取到嘅 parent context；WebSocket 嘅 `queryPropagation` 預設仍然係 `false`。有 tracer 時，`requireParentSpan: true` 會喺冇活躍 parent 嘅情況下略過所有 instrumentation，包括 logs；冇 tracer 時，佢既唔會阻止 metrics，亦唔會阻止 logs。
+每次操作呼叫由呼叫開始直至 tuple 都會被觀察：一個 `INTERNAL` 操作 span，名稱係 `defjs.operation.name`（例如 `GET /orders/:id`），失敗時 `error.type` 設為 fault code；一個 `defjs.client.operation.duration` 樣本；失敗時一條 `WARN` 日誌。每次 HTTP 嘗試同每條 SSE 或 WebSocket 連線，喺佢底下各有一個 `CLIENT` 傳輸 span。冇活躍 parent span 嘅呼叫會自己開始一條 trace；保留邊啲由 SDK 嘅 sampler 決定。
+
+省略 `tracer` 時，外掛唔會建立本地 span，亦唔會呼叫 `trace.getTracer(...)`，並且略過 `startSpanHook`、`requestHook` 同 `responseHook`。傳入嘅 `meter` 同 `logger` 會獨立運作。propagation 仍然會轉發擷取到嘅 parent context；WebSocket 嘅 `queryPropagation` 預設仍然係 `false`。
 
 HTTP、SSE 同 WebSocket 預設全部開啟。喺某個傳輸層傳 `{ enabled: false }` 就會略過佢。
 
@@ -27,16 +29,16 @@ HTTP、SSE 同 WebSocket 預設全部開啟。喺某個傳輸層傳 `{ enabled: 
 
 <ApiSignature name="OpenTelemetryServerOptions" />
 
-| 欄位                | 預設                        | 效果                                                                                    |
-| ------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
-| `tracer`            | 冇                          | 冇佢就冇本地 span，亦冇 span hook。                                                     |
-| `meter`             | 冇                          | 冇佢就唔會記錄呢個 package 嘅 metrics。                                                 |
-| `logger`            | 冇                          | 來自 `@opentelemetry/api-logs` 嘅 `Logger`。冇佢就唔會發出診斷 LogRecord。              |
-| `propagator`        | W3C Trace Context + Baggage | 擷取 parent context，並注入對外發出嘅 context。                                         |
-| `requireParentSpan` | `false`                     | 有 `tracer` 時，如果冇活躍 parent span 就略過 instrumentation。冇 `tracer` 時會被忽略。 |
-| `http`              | `{}`                        | HTTP 傳輸層選項。                                                                       |
-| `sse`               | `{}`                        | SSE 傳輸層選項。                                                                        |
-| `webSocket`         | `{}`                        | WebSocket 傳輸層選項。                                                                  |
+| 欄位                      | 預設                        | 效果                                                                       |
+| ------------------------- | --------------------------- | -------------------------------------------------------------------------- |
+| `tracer`                  | 冇                          | 冇佢就冇本地 span，亦冇 span hook。                                        |
+| `meter`                   | 冇                          | 冇佢就唔會記錄呢個 package 嘅 metrics。                                    |
+| `logger`                  | 冇                          | 來自 `@opentelemetry/api-logs` 嘅 `Logger`。冇佢就唔會發出診斷 LogRecord。 |
+| `propagator`              | W3C Trace Context + Baggage | 擷取 parent context，並注入對外發出嘅 context。                            |
+| `includeErrorDiagnostics` | `false`                     | 喺失敗嘅 span、`exception` event 同失敗日誌上匯出錯誤訊息同 stack。        |
+| `http`                    | `{}`                        | HTTP 傳輸層選項。                                                          |
+| `sse`                     | `{}`                        | SSE 傳輸層選項。                                                           |
+| `webSocket`               | `{}`                        | WebSocket 傳輸層選項。                                                     |
 
 ## OpenTelemetryServerTransportOptions
 
@@ -48,11 +50,11 @@ HTTP、SSE 同 WebSocket 預設全部開啟。喺某個傳輸層傳 `{ enabled: 
 
 <ApiSignature name="OpenTelemetryServerTransportOptions, OpenTelemetryServerHttpOptions, OpenTelemetryServerSSEOptions, OpenTelemetryServerWebSocketOptions" />
 
-`enabled` 預設係 `true`；只有 `enabled: false` 先會關閉某個傳輸層。
+`enabled` 預設係 `true`；只有 `enabled: false` 先會關閉某個傳輸層，連帶其呼叫嘅操作遙測一齊關閉。
 
 span hook 只會喺有傳入 `tracer` 時執行。`startSpanHook` 會喺所屬 HTTP、SSE 或 WebSocket 傳輸層建立 span 之前同步執行。佢回傳嘅屬性會喺內建屬性之後套用，所以應用程式可以覆蓋 `url.full` 或者其他初始值。如果佢 throw，Defjs 會用內建屬性建立 span，然後繼續處理 request；`requestHook` 同 `responseHook` 會喺 span 建立之後執行。兩者都唔會被 await：throw 或者 rejection 唔會阻擋或者令操作失敗。
 
-當 `span.isRecording()` 係 true，hook 失敗會記錄 `defjs.otel.hook.error` 同 `exception` event。`exception` event 只帶 `exception.type`（class 名稱，唔係 Defjs fault code），絕唔會帶 `exception.message` 或 `exception.stacktrace`，因為 runtime 錯誤文字可能包含完整 request URL 或 response body 片段；傳輸層失敗時記錄嘅 `exception` event 都跟同一條規則。span 唔再 recording（已結束或者未採樣）時，失敗會經 `diag.error` 交畀 OpenTelemetry diagnostic logger。應用程式必須設定 `@opentelemetry/api` 嘅 `diag.setLogger(...)` 先接收到；預設唔會自動輸出。呢個 package 唔會初始化 SDK，呢類診斷亦唔係獨立嘅 SDK `LogRecord`。
+Hook 只塑造傳輸 span；操作 span 冇 hook。當 `span.isRecording()` 係 true，hook 失敗會記錄 `defjs.otel.hook.error` 同 `exception` event。`exception` event 只帶 `exception.type`（class 名稱，唔係 Defjs fault code），除非開啟 `includeErrorDiagnostics`，否則唔會帶 `exception.message` 或 `exception.stacktrace`，因為 runtime 錯誤文字可能包含完整 request URL 或 response body 片段；傳輸層失敗時記錄嘅 `exception` event 都跟同一條規則。span 唔再 recording（已結束或者未採樣）時，失敗會經 `diag.error` 交畀 OpenTelemetry diagnostic logger。應用程式必須設定 `@opentelemetry/api` 嘅 `diag.setLogger(...)` 先接收到；預設唔會自動輸出。呢個 package 唔會初始化 SDK，呢類診斷亦唔係獨立嘅 SDK `LogRecord`。
 
 `responseHook` 收到傳輸層回傳嘅內容：HTTP 係 `HttpResponse`，SSE 係啟動成功之後嘅事件流 handle，WebSocket 係開啟成功之後嘅 session。第三個參數係原本嘅 request。
 
@@ -66,16 +68,15 @@ span hook 只會喺有傳入 `tracer` 時執行。`startSpanHook` 會喺所屬 H
 
 ## Logger 診斷
 
-頂層 `logger?: Logger` 選項用嘅係 `@opentelemetry/api-logs`，而唔係應用程式嘅 logger。佢係可選嘅，亦可以單獨使用。Defjs 永遠唔會攞全域 logger，亦唔擁有佢嘅 provider。每個 request 或者邏輯連線最多發出一個 `WARN` LogRecord（severity number 13），訊息固定，屬性包括 `server.address` 同 `server.port`（已知時）、`defjs.phase`、`exception.type`、來自定義 `meta` 嘅 `defjs.meta.*` 屬性，HTTP 另外有 `http.request.method`，SSE 串流以 error 結束時有 `defjs.sse.fault.code`，WebSocket close 資料帶數字錯誤碼時有 `websocket.close.code`：
+頂層 `logger?: Logger` 選項用嘅係 `@opentelemetry/api-logs`，而唔係應用程式嘅 logger。佢係可選嘅，亦可以單獨使用。Defjs 永遠唔會攞全域 logger，亦唔擁有佢嘅 provider。每次失敗嘅操作呼叫發出一個 `WARN` LogRecord（severity number 13），每條喺開啟之後先失敗嘅 SSE 串流或 WebSocket session 亦發出一個，訊息都係固定嘅：
 
-| 結果                                                    | Event                                                             | `defjs.phase` |
-| ------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |
-| HTTP `next()` reject，不包括取消同公開嘅 `HTTP_STATUS`  | `http.client.request.exception`                                   | `request`     |
-| SSE 或 WebSocket 連線失敗                               | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
-| SSE 或 WebSocket 以 error 結束，包括 `closed` 被 reject | 同一個傳輸層 event                                                | `connection`  |
+| 結果                                                                | Event                                                             | 屬性                                                                                                                |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 操作呼叫以 `NET_ABORTED` 以外嘅 fault 結算                          | `defjs.client.operation.exception`                                | `defjs.operation.name`、`error.type`（fault code）、`exception.type`、`defjs.meta.*`                                |
+| SSE 串流或 WebSocket session 以 error 結束，包括 `closed` 被 reject | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `server.address`、`server.port`、`exception.type`、`defjs.meta.*`、`defjs.sse.fault.code` 或 `websocket.close.code` |
 
-一般狀態碼嘅 response（包括已宣告嘅 `error` body 可以解碼嘅 4xx/5xx）、成功、正常關閉、EOF 同 caller 取消，都唔會產生 LogRecord。只有 timeout rejection 到達 OTel 攔截器嘅 `next()` / 傳輸層邊界，HTTP 截止期限 abort 先會記錄一次（reason 係 `TimeoutError` 嘅 abort，例如 `AbortSignal.timeout()`，算係 timeout，唔係取消）。如果只有操作呼叫喺 input 解析、建構、應用程式攔截器喺 `next()` 之後嘅工作，或者鏈之後嘅 body 轉換期間觀察到截止期限，就唔會發出 LogRecord；應該觀察該次操作呼叫。HTTP handler 邊界內，已宣告嘅 `output` / `error` body 讀取失敗，所有表示形式都會記錄；media-type 同 `JSON.parse` 失敗就只會喺 JSON 表示形式記錄，與 HTTP 狀態碼無關。非 JSON 文字、blob 同 bytes 唔會單純因為 media type 唔係 JSON 就當失敗。冇宣告嘅 body 永遠唔會被讀取，所以唔會記錄。Struct 驗證、已宣告嘅 body 缺失（例如 204），以及之後嘅 `HTTP_STATUS` 轉換，都發生喺攔截器之後，所以唔會記錄。非 2xx 嘅 SSE handshake 一定會記錄一次；伺服器傳嚟嘅 WebSocket close frame 永遠唔會記錄，無論錯誤碼係乜。冇 close frame 嘅突然斷線（1006）喺每個 runtime 都會令 session 以 error 結束並記錄一次。
+成功、由後續嘗試救返嘅重試嘗試、正常關閉、EOF、伺服器傳嚟嘅 WebSocket close frame（無論錯誤碼係乜）同 caller 取消，都唔會產生 LogRecord。冇 close frame 嘅 WebSocket 突然斷線（1006）喺每個 runtime 都會令 session 以 error 結束並記錄一次。操作記錄會連同操作 span 嘅 context 一齊發出。
 
-`exception.type` 係攔截器觀察到嘅對象嘅 class 名稱，而唔係 Defjs 錯誤碼：例如 `BodyFailure`（HTTP body）、`EventStreamFatalError`（SSE handshake 因非 2xx 狀態以外嘅原因失敗，例如回應唔係 `text/event-stream`）、`DefjsFault`（WebSocket 啟動，以及返回非 2xx 狀態嘅 SSE handshake）、`TypeError`（網絡失敗）或者 `Error`（timeout）。過濾、exporter、flush 同 shutdown 由應用程式負責。
+開啟 `includeErrorDiagnostics: true` 後，每條記錄仲會帶 `exception.message` 同 `exception.stacktrace`；對操作呼叫嚟講，佢哋係 fault 嘅 `message` 同 `stack`。cause 鏈同 error 嘅可枚舉欄位永遠唔會匯出，但訊息本身唔會被過濾：fault 嘅訊息通常就係佢 cause 嘅訊息，而平台錯誤文字可能引用 request URL。過濾、exporter、flush 同 shutdown 由應用程式負責。
 
 完整嘅日誌同第三方整合範例，請見 [OpenTelemetry 指南](/zh-Hant-HK/docs/integrations/opentelemetry-server#logs-and-third-party-loggers)。

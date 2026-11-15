@@ -55,7 +55,7 @@ description: Расширяйте клиент Defjs в приложении с 
 
 ### 2. Middleware-плагины (`@defjs/opentelemetry-server`)
 
-Middleware-плагин представляет собой фабрику, возвращающую [`ClientOption`](/ru-RU/api/core/clientoption-type). При передаче в `createClient(...)` он добавляет перехватчики HTTP, SSE и/или WebSocket через `withInterceptors`:
+Middleware-плагин представляет собой фабрику, возвращающую [`ClientOption`](/ru-RU/api/core/clientoption-type). При передаче в `createClient(...)` он добавляет перехватчики операций, HTTP, SSE и/или WebSocket через `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab>

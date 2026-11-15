@@ -58,14 +58,9 @@ let mockPropagator: ReturnType<typeof createMockWsPropagator>;
 describe("WebSocket client diagnostic logs", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  test.each([
-    { cause: new Error("offline"), count: 1 },
-    { cause: ERR_TIMEOUT, count: 1 },
-    { cause: ERR_ABORTED, count: 0 },
-    { cause: createNetworkFault(ERR_ABORTED), count: 0 },
-  ])(
-    "classifies startup failure $cause with $count diagnostics",
-    async ({ cause, count }) => {
+  test.each([new Error("offline"), ERR_TIMEOUT, ERR_ABORTED])(
+    "leaves a startup failure to the operation log: %s",
+    async (cause) => {
       const { logger, records } = createMockLogger();
       const interceptor = createOpenTelemetryWebSocketInterceptor({
         logger,
@@ -74,13 +69,7 @@ describe("WebSocket client diagnostic logs", () => {
       await expect(
         interceptor.fn(makeWsRequest(), () => Promise.reject(cause)),
       ).rejects.toBe(cause);
-      expect(records).toHaveLength(count);
-      if (count)
-        expect(records[0]).toMatchObject({
-          eventName: "defjs.client.websocket.exception",
-          severityNumber: 13,
-          attributes: { "defjs.phase": "connect" },
-        });
+      expect(records).toEqual([]);
     },
   );
 
@@ -131,10 +120,8 @@ describe("WebSocket client diagnostic logs", () => {
         throw new Error("Expected a log record with explicit context");
       expect(record).toMatchObject({
         severityNumber: 13,
-        attributes: {
-          "defjs.phase": "connection",
-          "exception.type": "TypeError",
-        },
+        eventName: "defjs.client.websocket.exception",
+        attributes: { "exception.type": "TypeError" },
       });
       expect(record.attributes?.["websocket.close.code"]).toBe(
         rejected ? undefined : 1006,
@@ -239,7 +226,6 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       const interceptor = createOpenTelemetryWebSocketInterceptor({
         propagator: mockPropagator,
         metrics,
-        requireParentSpan: true,
       });
       await expect(
         interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session)),
@@ -895,21 +881,6 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       }),
     );
     expect(metrics.active.add).not.toHaveBeenCalled();
-  });
-
-  test("should skip span creation when requireParentSpan and no active span", async () => {
-    const { tracer, spans } = createMockTracer();
-    const interceptor = createOpenTelemetryWebSocketInterceptor({
-      tracer,
-      propagator: mockPropagator,
-      requireParentSpan: true,
-    });
-
-    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
-    await interceptor.fn(makeWsRequest(), next);
-
-    expect(spans).toHaveLength(0);
-    expect(next).toHaveBeenCalledTimes(1);
   });
 
   test("should leave existing query state unchanged when queryPropagation is omitted", async () => {

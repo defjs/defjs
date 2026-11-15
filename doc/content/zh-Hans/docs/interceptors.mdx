@@ -7,7 +7,7 @@ description: 在 Client 上统一挂载鉴权、日志、限流退避和异常�
 
 拦截器让你把认证请求头、签名校验、维护期间直接拦截或 `Retry-After` 等待这类公共逻辑统一挂在应用的 `Client` 上，而不用去改任何一条接口定义。
 
-**执行顺序位置**：入参校验和 `builder` 拼装请求发生在拦截器**之前**；HTTP 状态码分流和 `output` / `error` 的 `struct` 解码发生在拦截器**之后**。
+**执行顺序位置**：入参校验和 `builder` 拼装请求发生在拦截器**之前**；HTTP 状态码分流和 `output` / `error` 的 `struct` 解码发生在拦截器**之后**。[操作拦截器](/zh-Hans/docs/interceptors#operation-interceptors)则包裹以上全部。
 
 ## 1. 创建与挂载拦截器
 
@@ -82,13 +82,28 @@ WebSocket 拦截器里 **`next(req)` 最多只能调用一次**。如果你想�
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. 内置工厂与工具函数速查
+## 5. 观察整次操作调用 [#operation-interceptors]
+
+传输拦截器一次只看到一个请求：校验失败的输入到不了它，每次重试都会再运行它，响应在它返回之后才解码。想观察调用本身，也就是从 `getOrder(client, input)` 被调用到它的元组 resolve 为止，请用 `createOperationInterceptor`：
+
+<include cwd lang="typescript">
+  examples/api/create-operation-interceptor.ts#example
+</include>
+
+- **能看到什么**：`call` 描述定义：`transport`（`"http"`、`"sse"` 或 `"websocket"`）、`method`、`path` 模板和 `meta`。它不带输入或请求，因为那时两者都还不存在。`next()` 以操作的元组 resolve，所以 `err` 就是最终的 Fault：`REQ_INPUT_INVALID`、`REQ_BUILD_FAILED`、`HTTP_STATUS`、`RES_STRUCT_MISMATCH` 等等。
+- **只观察，不修改**：`next()` 不接收参数，第二次调用 `next()` 返回同一个 promise，不会再次运行调用，函数也只能以 `next()` resolve 的值来 resolve。要修改请求和响应，请用传输拦截器。
+- **顺序**：操作拦截器按注册顺序运行，位于所有传输拦截器之外。围绕 `next()` 运行的代码，例如 OpenTelemetry 的 `context.with`，对整次调用都有效，包括其中的传输拦截器。
+- **流与会话**：SSE 或 WebSocket 调用在流或会话打开后即 resolve；之后在其上发生的事情通过它的 `closed` 观察。
+- **失败**：抛出或 reject 会让操作以 `EXT_INTERCEPTOR_FAILED` resolve，抛出的值作为 `cause`。调用已打开的流或会话会被关闭。
+
+## 6. 内置工厂与工具函数速查
 
 | 导出函数                                       | 适用协议  | 作用说明                                                                     |
 | ---------------------------------------------- | --------- | ---------------------------------------------------------------------------- |
 | `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>`                         |
 | `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>`                    |
 | `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>`                          |
+| `createOperationInterceptor(fn)`               | 全部      | 围绕整次操作调用包装 `(call, next) => Promise<result>`                       |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 接收同步凭据函数（每次请求调一次），自动加 `Authorization: Basic ...` 请求头 |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 发起握手请求时自动加 `Authorization: Basic ...` 请求头                |
 
