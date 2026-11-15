@@ -7,7 +7,9 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 
 `@defjs/opentelemetry-server` 在服务端应用的 Client 上为出站 HTTP、SSE 和 WebSocket 操作插桩，同时让 SDK 定义完全独立于 OpenTelemetry。
 
-`withOpenTelemetryServer(options)` 返回一个 `@defjs/core` 的 [`ClientOption`](/zh-Hans/api/core/clientoption-type)，为每种启用的传输（HTTP、SSE、WebSocket）追加一个拦截器。它**不会**初始化 OpenTelemetry SDK，也**不会**对入站服务端请求插桩。
+`withOpenTelemetryServer(options)` 返回一个 `@defjs/core` 的 [`ClientOption`](/zh-Hans/api/core/clientoption-type)，追加一个[操作拦截器](/zh-Hans/docs/interceptors#operation-interceptors)，并为每种启用的传输（HTTP、SSE、WebSocket）追加一个拦截器。它**不会**初始化 OpenTelemetry SDK，也**不会**对入站服务端请求插桩。
+
+只需应用一次，应用到所有调用都经过的那个 Client 上。之后每次调用，例如 `getOrder(client, input)`，都会从被调用起一直观察到它的元组 resolve，输入校验和响应解码都包含在内，因此调用处不必自己记录失败。
 
 ---
 
@@ -19,13 +21,14 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
   examples/opentelemetry-server/basic-setup.ts#example
 </include>
 
-- **定义上的 `meta`**：`request.meta` 的每个自有可枚举键都会成为 Span 和失败日志上的 `defjs.meta.<key>` 属性，值保持原样。OpenTelemetry SDK 会按其属性规则保留或丢弃每个值，并且只通过 `diag` 报告被丢弃的值。`meta` 缺失或为空时不添加任何内容。指标从不携带 `meta`，因此其属性集保持有界。`startSpanHook(request)` 返回的属性最后应用，并且只能替换 Span 上的 `defjs.meta.*` 值；失败日志保留 `meta` 中的值。这些值会随你的遥测数据离开进程，因此请勿把密钥和个人数据放进 `meta`。
-- **Span 命名**：Span 名称就是 HTTP 方法、`SSE` 或 `WebSocket`。Span 名称里的 HTTP 方法是规范化后的 `http.request.method`；该值为 `_OTHER` 时用 `HTTP`。
+- **定义上的 `meta`**：`request.meta` 的每个自有可枚举键都会成为操作 Span、传输 Span 和失败日志上的 `defjs.meta.<key>` 属性，值保持原样。OpenTelemetry SDK 会按其属性规则保留或丢弃每个值，并且只通过 `diag` 报告被丢弃的值。`meta` 缺失或为空时不添加任何内容。指标从不携带 `meta`，因此其属性集保持有界。`startSpanHook(request)` 返回的属性最后应用，并且只能替换 Span 上的 `defjs.meta.*` 值；失败日志保留 `meta` 中的值。这些值会随你的遥测数据离开进程，因此请勿把密钥和个人数据放进 `meta`。
+- **Span 命名**：操作 Span 以 `defjs.operation.name` 命名：HTTP 方法、`SSE` 或 `WebSocket`，后接定义的路径模板，例如 `GET /orders/:id`。传输 Span 只以 HTTP 方法、`SSE` 或 `WebSocket` 命名。Span 名称里的 HTTP 方法是规范化后的 `http.request.method`；该值为 `_OTHER` 时用 `HTTP`。
 - **独立信号**：`tracer`、`meter` 和 `logger` 都可选，且彼此独立：
   - 省略 `tracer` 会禁用本地 Span 创建与 Span Hook，但仍会记录指标、日志并传播出站上下文。
   - 省略 `meter` 会禁用该包的指标。
   - 省略 `propagator` 会使用内置的 W3C Trace Context + W3C Baggage 组合传播器。
-  - 在配置了 `tracer` 的前提下，设置 `requireParentSpan: true` 会在当前不存在活跃父 Span 时跳过 Span 创建、链路传播、Hooks、指标与日志记录；而若未传入 `tracer`，则 `requireParentSpan` 不会阻断指标与日志的生成。
+- **父 Span**：在活跃 Span 内发起的调用，例如正在处理的请求的服务端 Span，会加入该 trace。没有活跃 Span 时发起的调用（来自定时器、后台任务或启动代码）会像所有 OpenTelemetry Span 一样开启自己的 trace。没有选项可以对这类调用跳过遥测；请用 SDK 的采样器决定保留哪些 trace。进程内的父子关系需要 OpenTelemetry SDK 在服务端运行时注册的上下文管理器。
+- **错误文本**：`includeErrorDiagnostics: true` 会导出错误消息和堆栈。默认关闭；见[错误文本](#error-text)。
 
 ---
 
@@ -33,7 +36,7 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 
 在 `http`、`sse` 和 `webSocket` 中配置每种传输的开关（`{ enabled: false }`）与 Span Hook（`startSpanHook`、`requestHook`、`responseHook`）。如果下游服务期望在 WebSocket 握手 query 字符串中收到 trace context，可显式开启 `queryPropagation: true`：
 
-<Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
+<Tabs items={["app/hooks.ts", "app/ws-propagation.ts"]}>
   <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
@@ -46,45 +49,51 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
     </include>
 
   </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/active-span.ts#example
-    </include>
-
-  </Tab>
 </Tabs>
 
 ### Hook 契约规则
 
 - `startSpanHook(request): Attributes` 在创建 Span 前同步运行；返回的属性最后应用，可覆盖内置属性（例如对 `url.full` 脱敏）。
 - `requestHook(span, request)` 与 `responseHook(span, responseOrHandle, request)` 接收已创建的 Span，可以是同步或异步函数。传输流水线**不会** await 它们；HTTP Span 在 `responseHook` 的同步部分返回后立即结束。
-- Hook 失败绝不会中止 Client 调用。`span.isRecording()` 为 true 时，Hook 错误会在 Span 上记录 `defjs.otel.hook.error` 与 `exception` 事件（`exception` 事件与传输失败时记录的那条一样，只携带 `exception.type`，从不携带 `exception.message` 或 `exception.stacktrace`）；未记录中的 Span 则通过 `@opentelemetry/api` 的 `diag.error` 报告（`hook.name`、`error.type`、`traceId`、`spanId`）。
+- Hook 接收的是传输 Span。操作 Span 没有 Hook；想让它携带的内容，请放进定义的 `meta`。
+- Hook 失败绝不会中止 Client 调用。`span.isRecording()` 为 true 时，Hook 错误会在 Span 上记录 `defjs.otel.hook.error` 与 `exception` 事件（`exception` 事件与传输失败时记录的那条一样，只携带 `exception.type`，除非开启 `includeErrorDiagnostics`）；未记录中的 Span 则通过 `@opentelemetry/api` 的 `diag.error` 报告（`hook.name`、`error.type`、`traceId`、`spanId`）。
 - `withOpenTelemetryServer` 在创建时快照 `http`、`sse` 和 `webSocket` 选项块。传入 `{ enabled: false }` 会禁用该传输，且不读取其 Hook。
 
 ---
 
-## 3. HTTP、SSE 与 WebSocket 的遥测语义
+## 3. 操作、HTTP、SSE 与 WebSocket 的遥测语义
 
-插件在拦截器链内部度量传输生命周期：
+### 操作 Span
 
-- **HTTP**：Span 在 HTTP 拦截器中开始，在 `HttpResponse` 返回时结束。声明的 `output` / `error` body 会在处理函数边界**内部**读取（并校验和解析 JSON）。body 读取失败或 JSON 媒体类型/解析失败会通过拦截器 reject（`error.type: "BodyFailure"`），把 Span 标记为 `ERROR`，在指标中记录 `BodyFailure`，并输出一条 `WARN` 日志。请求在发出前被拒绝（无效方法、带凭据的 URL、平台拒绝的请求头值，或抛出的 `finalizeHeaders` hook）也会通过拦截器 reject，带上平台的错误或 hook 自己的错误，因此 `error.type` 是该错误的类（通常是 `TypeError`）。状态码 `400+` 会把 Span 标记为 `ERROR`，并以状态码字符串作为 `error.type`。调用方取消不算失败：Span 以 `http.aborted` 事件结束，状态保持未设置，不记录异常，也没有 `error.type`。超时仍然是失败，`error.type: "timeout"`。 struct 校验（`RES_STRUCT_MISMATCH`）和 `HTTP_STATUS` 元组转换发生在拦截器链之后，不会改变已结束的传输 Span。
+每次操作调用有一个 `INTERNAL` 类型的操作 Span。它在调用开始时开始，在元组 resolve 时结束，因此覆盖输入校验、端点选择、`builder`、每次尝试（含其拦截器和重试等待）以及响应解码。它携带 `defjs.operation.name` 和 `defjs.meta.*` 属性。
+
+- **成功**：状态保持未设置。
+- **失败**：状态为 `ERROR`，`error.type` 是 Fault 代码，例如 `REQ_INPUT_INVALID`、`REQ_BUILD_FAILED`、`NET_UNREACHABLE`、`NET_TIMEOUT`、`HTTP_STATUS`、`RES_STRUCT_MISMATCH` 或 `EXT_INTERCEPTOR_FAILED`。
+- **调用方取消**（`NET_ABORTED`）：状态保持未设置，没有 `error.type`，Span 记录 `http.aborted`、`sse.aborted` 或 `websocket.aborted`。
+- **SSE 与 WebSocket**：调用在流或会话打开后 resolve，所以操作 Span 只覆盖启动阶段。连接本身由下面的传输 Span 观察。
+
+调用的传输 Span 是它的子 Span。校验失败的输入，或抛出异常的 builder，只有操作 Span，没有传输 Span。2xx 响应的 body 与 `output` 不匹配时，传输 Span 的状态保持未设置，而其上的操作 Span 以 `RES_STRUCT_MISMATCH` 的 `ERROR` 结束。
+
+### 传输 Span
+
+插件在拦截器链内部度量传输生命周期，每次 HTTP 尝试、每个 SSE 或 WebSocket 连接对应一个 `CLIENT` Span：
+
+- **HTTP**：Span 在 HTTP 拦截器中开始，在 `HttpResponse` 返回时结束。声明的 `output` / `error` body 会在处理函数边界**内部**读取（并校验和解析 JSON）。body 读取失败或 JSON 媒体类型/解析失败会通过拦截器 reject（`error.type: "BodyFailure"`），把 Span 标记为 `ERROR`，在指标中记录 `BodyFailure`。请求在发出前被拒绝（无效方法、带凭据的 URL、平台拒绝的请求头值，或抛出的 `finalizeHeaders` hook）也会通过拦截器 reject，带上平台的错误或 hook 自己的错误，因此 `error.type` 是该错误的类（通常是 `TypeError`）。状态码 `400+` 会把 Span 标记为 `ERROR`，并以状态码字符串作为 `error.type`。调用方取消不算失败：Span 以 `http.aborted` 事件结束，状态保持未设置，不记录异常，也没有 `error.type`。超时仍然是失败，`error.type: "timeout"`。 struct 校验（`RES_STRUCT_MISMATCH`）和 `HTTP_STATUS` 元组转换发生在拦截器链之后；由操作 Span 报告它们。
 - **SSE**：一条逻辑流（包括自动重连）产生一个 Span，保持打开到 `stream.closed` 结算。记录的事件：`sse.connected`，随后是 `sse.closed`、`sse.aborted`（`stream.close()`，或对已打开的流或握手的非超时调用方中止；Span 状态保持未设置）或 `sse.error`（以 `ERROR` 结束，包括超时形态的调用方中止）。Span 属性 `url.full`、`server.address` 和 `server.port` 描述的是首次连接；重连到另一个端点不会改变它们。
-- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 结算。记录事件：`websocket.connected`、`websocket.closed`、`websocket.aborted`、`websocket.error`。服务端发来的关闭帧（不论 code 为何）都记录 `websocket.closed` 并结束 Span，不设置其状态；调用方中止（针对已打开的会话或连接过程中）以 `websocket.aborted` 结束 Span，不设置其状态，也不生成日志，但取消原因是 `TimeoutError` 时例外，此时以 `ERROR` 和 `error.type: "timeout"` 结束 Span，生成一条 `WARN`，已打开的会话还会记录 `websocket.error`。没有关闭帧的突然断开（`1006`）在每个运行时上都以 `ERROR` 结束并记录一条日志。与 SSE 一样，`url.full`、`server.address` 和 `server.port` 描述首次连接，重连到另一个端点时不会改变。`url.full` 使用连接 URL 的 `ws:` 或 `wss:` 形式。
+- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 结算。记录事件：`websocket.connected`、`websocket.closed`、`websocket.aborted`、`websocket.error`。服务端发来的关闭帧（不论 code 为何）都记录 `websocket.closed` 并结束 Span，不设置其状态；调用方中止（针对已打开的会话或连接过程中）以 `websocket.aborted` 结束 Span，不设置其状态，但取消原因是 `TimeoutError` 时例外，此时以 `ERROR` 和 `error.type: "timeout"` 结束 Span，已打开的会话还会记录 `websocket.error`。没有关闭帧的突然断开（`1006`）在每个运行时上都以 `ERROR` 结束。与 SSE 一样，`url.full`、`server.address` 和 `server.port` 描述首次连接，重连到另一个端点时不会改变。`url.full` 使用连接 URL 的 `ws:` 或 `wss:` 形式。
 
-三种传输遵循同一条规则。调用方取消（不是超时的中止）不算失败：Span 状态保持未设置，不记录异常，也没有 `error.type`，并获得事件 `http.aborted`、`sse.aborted` 或 `websocket.aborted`。耗时指标仍会记录，但不带 `error.type`，连接指标带有 `defjs.result: "aborted"`。不生成日志。超时（`ERR_TIMEOUT` 或 `TimeoutError`，包括 `AbortSignal.timeout()` 的原因）仍然是失败：Span 以 `ERROR` 结束，`error.type` 为 `timeout`。
+三种传输遵循同一条规则。调用方取消（不是超时的中止）不算失败：Span 状态保持未设置，不记录异常，也没有 `error.type`，并获得事件 `http.aborted`、`sse.aborted` 或 `websocket.aborted`。耗时指标仍会记录，但不带 `error.type`，连接指标带有 `defjs.result: "aborted"`。不生成日志。超时（`ERR_TIMEOUT` 或 `TimeoutError`，包括 `AbortSignal.timeout()` 的原因）仍然是失败：传输 Span 以 `ERROR` 和 `error.type: "timeout"` 结束，操作 Span 以 `ERROR` 和 `error.type: "NET_TIMEOUT"` 结束。
 
-拦截器链的其余部分和传输本身在客户端 span 处于活动状态下运行，因此那里的 `trace.getActiveSpan()` 返回该 span，它们创建的 span（例如 Fetch 自动插桩产生的 span）是它的子 span。未注册上下文管理器时，没有任何变化。
+整次调用在操作 Span 处于活动状态下运行，拦截器链的其余部分和传输本身则在传输 Span 处于活动状态下运行，因此那里的 `trace.getActiveSpan()` 返回它，它们创建的 span（例如 Fetch 自动插桩产生的 span）是它的子 span。未注册上下文管理器时，进程内的 span 不会建立父子关系。
 
-`server.address` 是解析后 URL 的主机；IPv6 字面量保留方括号，与 `URL.hostname` 和 `Host` 请求头一样。`server.port` 是显式端口，URL 没有端口时则是 scheme 的默认值：`http:` 和 `ws:` 为 80，`https:` 和 `wss:` 为 443。每个 Span 还带有 `http.request.method`：HTTP 和 SSE 是请求方法，WebSocket 是 `GET`（打开握手的方法）。不属于 RFC 9110 方法、`PATCH` 或 `QUERY` 的方法记录为 `_OTHER`，给定的方法放在 `http.request.method_original` 里。Fetch 以大写发送的方法（`DELETE`、`GET`、`HEAD`、`OPTIONS`、`POST`、`PUT`）按大写记录，两者不同时给定的方法保留在 `http.request.method_original` 里。`http.client.request.duration` 指标和 HTTP 日志记录带有同一个规范化后的 `http.request.method`。
+`server.address` 是解析后 URL 的主机；IPv6 字面量保留方括号，与 `URL.hostname` 和 `Host` 请求头一样。`server.port` 是显式端口，URL 没有端口时则是 scheme 的默认值：`http:` 和 `ws:` 为 80，`https:` 和 `wss:` 为 443。每个传输 Span 还带有 `http.request.method`：HTTP 和 SSE 是请求方法，WebSocket 是 `GET`（打开握手的方法）。不属于 RFC 9110 方法、`PATCH` 或 `QUERY` 的方法记录为 `_OTHER`，给定的方法放在 `http.request.method_original` 里。Fetch 以大写发送的方法（`DELETE`、`GET`、`HEAD`、`OPTIONS`、`POST`、`PUT`）按大写记录，两者不同时给定的方法保留在 `http.request.method_original` 里。`http.client.request.duration` 指标带有同一个规范化后的 `http.request.method`。
 
 ### 重试与重连边界
 
-以下是当前拦截器观测到的行为，并非独立的负载均衡器遥测 API：
-
-- 每次 `withRetry` HTTP 尝试都有自己的 Client Span 和耗时样本，因为每一次重试都会重新运行拦截器链。存在活跃应用父 Span 时，各次尝试是该父 Span 的兄弟节点；否则重试不会自动归入同一条 trace。Core 不创建逻辑调用父 Span。
+- 每次 `withRetry` HTTP 尝试都有自己的传输 Span 和耗时样本，因为每一次重试都会重新运行拦截器链。各次尝试是该调用操作 Span 之下的兄弟节点，由操作 Span 一次性记录调用的结果：第二次尝试才成功的调用，其操作 Span 状态保持未设置，其下有一个失败和一个成功的 HTTP Span。
 - HTTP 尝试的 URL 标识该次尝试的端点，但不输出尝试次数、重试原因、预算余额/耗尽或逐出/恢复属性。
 - SSE 和 WebSocket 的重试（`withRetry`）在传输内部重连，不会重新运行拦截器。它们在重连过程中保留同一个逻辑会话 Span，不会为每条物理连接分别创建 Span。即使发生故障转移，Span 的 URL 和指标属性仍保留初始端点。重连不会再次输出 `connected` 事件。活跃指标统计的是等待 `closed` 的逻辑会话，而不是当前选中副本上的 socket。
-- HTTP 503 得到 `error.type: "503"`，连接被拒绝得到 `"TypeError"`，期限到期得到 `"timeout"`；调用方取消没有 `error.type`。期限到期和取消分别返回 `NET_TIMEOUT` 和 `NET_ABORTED`；这些 Defjs 元组错误码并不是独立的 HTTP 遥测属性。对于已打开的 WebSocket，默认取消以 `websocket.aborted` 结束，不记录警告；以 `TimeoutError` 为取消原因时，则以 `websocket.error`、`error.type: "timeout"` 和一条警告结束。其他错误类名是对传输/运行时的观测，不能代替检查元组或关闭结果。
+- 在传输 Span 上，HTTP 503 得到 `error.type: "503"`，连接被拒绝得到 `"TypeError"`，期限到期得到 `"timeout"`；调用方取消没有 `error.type`。在操作 Span 上，同样的调用分别以 `HTTP_STATUS`、`NET_UNREACHABLE` 和 `NET_TIMEOUT` 结束，即元组中 Fault 的错误码。
 
 ### 导出的指标列表
 
@@ -92,6 +101,7 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 
 | 指标名称                                     | 业务含义                                         |
 | -------------------------------------------- | ------------------------------------------------ |
+| `defjs.client.operation.duration`            | 操作调用耗时，从调用到其元组                     |
 | `http.client.request.duration`               | HTTP 单次尝试耗时（秒）                          |
 | `defjs.client.sse.connect.duration`          | 截至返回 SSE 句柄的耗时                          |
 | `defjs.client.sse.connection.duration`       | 从获得句柄到流最终 `stream.closed` 的总时长      |
@@ -100,7 +110,7 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 | `defjs.client.websocket.connection.duration` | 从获得会话到最终 `session.closed` 的总时长       |
 | `defjs.client.websocket.active_connections`  | 当前活跃、`closed` 尚未结算的逻辑 WebSocket 会话 |
 
-SSE 和 WebSocket 的连接建立耗时与连接持续时长样本带有 `defjs.result`：`success`、`error`（带 `error.type`），或表示调用方取消的 `aborted`。
+`defjs.client.operation.duration` 带有 `defjs.operation.name`，调用失败时还带有设为 Fault 代码的 `error.type`，因此它统计每一次调用，包括从未到达传输层的调用。SSE 和 WebSocket 的连接建立耗时与连接持续时长样本带有 `defjs.result`：`success`、`error`（带 `error.type`），或表示调用方取消的 `aborted`。
 
 ---
 
@@ -114,18 +124,27 @@ SSE 和 WebSocket 的连接建立耗时与连接持续时长样本带有 `defjs.
 
 ### Defjs 诊断契约
 
-每个请求或逻辑连接最多发出一条终态 `WARN`（严重级别 `13`）`LogRecord`：
+每个失败的操作调用发出一条 `WARN`（严重级别 `13`）`LogRecord`，每个打开后失败的 SSE 流或 WebSocket 会话也发出一条。被后续尝试恢复的重试尝试不记录日志：
 
-| 观察到的物理传输结果                                                                                                                     | 生成的 Defjs LogRecord 诊断日志                                                                                       |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| HTTP OTel `next()` 被 reject 拒绝（底层网络故障、观测到的超时或已声明的响应体读取失败），排除非超时的主动取消与公开的 `HTTP_STATUS` 故障 | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`                                    |
-| 普通的 HTTP 响应（包括已声明 `error` body 能解码或没有声明 body 的 4xx/5xx，或 status 为 `0`）                                           | 不生成日志                                                                                                            |
-| 声明的 `output` / `error` body 读取失败，或声明的 JSON 表示形式媒体类型不是 JSON，或 `JSON.parse` 失败                                   | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`，`exception.type: "BodyFailure"`   |
-| SSE 或 WebSocket 握手建连失败（包括 SSE 非 2xx 状态码）                                                                                  | 生成一条 `WARN` 日志，事件名为 `defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，phase 为 `connect` |
-| SSE 或 WebSocket 终态错误或 `closed` 被 reject（包括没有关闭帧的 `1006` 断开、心跳超时）                                                 | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
-| 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动发起的非超时取消                                        | 不生成日志                                                                                                            |
+| 观察到的结果                                                                      | 生成的 Defjs LogRecord                                                          |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 操作调用以 `NET_ABORTED` 之外的 Fault resolve，任意传输                           | 一条 `WARN`，`defjs.client.operation.exception`，`error.type` 为 Fault 代码     |
+| SSE 流或 WebSocket 会话打开后以错误结束（包括没有关闭帧的 `1006` 断开、心跳超时） | 一条 `WARN`，`defjs.client.sse.exception` 或 `defjs.client.websocket.exception` |
+| 成功、消息交互、EOF、服务端发来的 WebSocket 关闭帧（包括 `1011`），或调用方取消   | 不生成日志                                                                      |
 
-诊断记录固定消息、`exception.type`（平台/传输层类名，如 `BodyFailure`、`EventStreamFatalError`（响应不是 `text/event-stream` 的 SSE 握手）、`DefjsFault`（包括返回非 2xx 的 SSE 握手）、`TypeError` 或 `Error`）、phase、服务端地址/端口、协议字段和 `defjs.meta.*` 属性，其值与应用放入 `meta` 的内容完全一致。Defjs 不会添加原始 URL、query 字符串、请求头、body 或错误堆栈。Span 的 `exception` 事件遵循同一规则，只携带 `exception.type`；`url.full` 会把端点中的 userinfo 替换为 `REDACTED:REDACTED`，并把语义约定默认敏感查询键（例如 `sig` 和 `X-Amz-Signature`）的值替换为 `REDACTED`。
+操作记录携带 `defjs.operation.name`、`error.type`、`exception.type`（`DefjsFault`）和 `defjs.meta.*` 属性，并与操作 Span 关联。连接记录携带 `server.address`、`server.port`、`exception.type`（失败的类名，例如 `TypeError` 或 `DefjsFault`）、SSE 流以错误结束时的 `defjs.sse.fault.code`、关闭信息带数值代码时的 `websocket.close.code`，以及 `defjs.meta.*` 属性，其值与应用放入 `meta` 的内容完全一致。
+
+### 错误文本 [#error-text]
+
+默认情况下 Defjs 不导出任何错误文本：没有消息，没有堆栈，没有原始 URL、query 字符串、请求头或 body。Span 的 `exception` 事件只携带 `exception.type`，`url.full` 会把端点中的 userinfo 替换为 `REDACTED:REDACTED`，并把语义约定默认敏感查询键（例如 `sig` 和 `X-Amz-Signature`）的值替换为 `REDACTED`。
+
+`includeErrorDiagnostics: true` 会导出它们：
+
+- 失败的 Span 以错误消息作为状态描述：操作 Span 用 Fault 的 `message`，传输 Span 用观察到的错误的消息。
+- `exception` 事件携带 `exception.message` 和 `exception.stacktrace`。
+- 失败日志携带 `exception.message` 和 `exception.stacktrace`：对于操作调用，是 Fault 的 `message` 和 `stack`。
+
+错误的 cause 链和可枚举字段从不导出。消息本身不会被过滤：Fault 的消息往往就是其 cause 的消息，平台错误文本也可能引用请求 URL。在 Node.js 上，带凭据的 URL 引发的 `TypeError` 会引用完整 URL，包括凭据和 query，并成为 `REQ_BUILD_FAILED` Fault 的消息。仅当你的遥测数据可以容纳这些文本时才开启该选项；若不能，请在 SDK 的 span 或 log processor 中脱敏。
 
 ---
 

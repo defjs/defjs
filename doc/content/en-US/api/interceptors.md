@@ -5,7 +5,7 @@ description: HTTP, SSE, and WebSocket interceptor constructors.
 
 # Interceptors
 
-Wrap `next` for one transport. Register with `withInterceptors`. Mixed lists are filtered by kind when the operation runs.
+Wrap `next` for one transport, or for a whole operation call. Register with `withInterceptors`. Mixed lists are filtered by kind when the operation runs.
 
 ## createHttpInterceptor()
 
@@ -29,6 +29,14 @@ Call `next(req)` (optionally a mutated request) or short-circuit with `makeRespo
 
 A wrapper or short-circuit session must forward the same `[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle; returning an unrelated resolved promise is not sufficient.
 
+## createOperationInterceptor()
+
+<ApiSignature name="createOperationInterceptor, OperationInterceptorFn, OperationCall, OperationResult" />
+
+`next()` runs the whole call: input validation, the endpoint pick, the builder, every attempt with its transport interceptors and retries, and the response decoding. It takes no arguments and runs the call once, however often it is called. The function is generic in the result, so it resolves only with what `next()` resolved with. Operation interceptors run for every transport, outside the transport interceptors. A throw or rejection resolves the operation with `EXT_INTERCEPTOR_FAILED`, and a stream or session the call had already opened is closed.
+
+<include cwd>examples/api/create-operation-interceptor.ts#example</include>
+
 ## Tagged types
 
 ## Interceptor
@@ -39,7 +47,9 @@ A wrapper or short-circuit session must forward the same `[Symbol.asyncDispose](
 
 ## WebSocketInterceptor
 
-<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor" />
+## OperationInterceptor
+
+<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor, OperationInterceptor" />
 
 ## Basic auth
 

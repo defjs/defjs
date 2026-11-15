@@ -862,6 +862,34 @@
   },
   {
     "package": "@defjs/core",
+    "name": "OperationCall",
+    "kind": "type",
+    "slug": "core/operationcall-type",
+    "description": "The operation call an operation interceptor wraps, described by its definition."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OperationInterceptor",
+    "kind": "type",
+    "slug": "core/operationinterceptor-type",
+    "description": "Tagged operation interceptor accepted by client interceptor options."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OperationInterceptorFn",
+    "kind": "type",
+    "slug": "core/operationinterceptorfn-type",
+    "description": "Operation interceptor function: observes one operation call from its start to the tuple it resolves with."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OperationResult",
+    "kind": "type",
+    "slug": "core/operationresult-type",
+    "description": "The error-first tuple any operation resolves with, as an operation interceptor reads it."
+  },
+  {
+    "package": "@defjs/core",
     "name": "SSEHandler",
     "kind": "type",
     "slug": "core/ssehandler-type",
@@ -929,6 +957,13 @@
     "kind": "function",
     "slug": "core/createhttpinterceptor",
     "description": "Wraps an InterceptorFn as a tagged HttpInterceptor."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createOperationInterceptor",
+    "kind": "function",
+    "slug": "core/createoperationinterceptor",
+    "description": "Wraps an OperationInterceptorFn as a tagged OperationInterceptor."
   },
   {
     "package": "@defjs/core",
@@ -1376,6 +1411,6 @@
     "name": "withOpenTelemetryServer",
     "kind": "function",
     "slug": "opentelemetry-server/withopentelemetryserver",
-    "description": "Client option that installs outbound OpenTelemetry interceptors for HTTP, SSE, and WebSocket."
+    "description": "Client option that installs outbound OpenTelemetry interceptors for every operation call and for HTTP, SSE, and WebSocket."
   }
 ]

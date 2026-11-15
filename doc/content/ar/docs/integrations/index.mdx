@@ -55,7 +55,7 @@ description: وسّع عميل Defjs المملوك للتطبيق بحقن أط
 
 ### 2. إضافات البرمجيات الوسيطة (`@defjs/opentelemetry-server`)
 
-إضافة البرمجيات الوسيطة هي دالة مصنع تُرجع خيار عميل [`ClientOption`](/ar/api/core/clientoption-type). وعند تمريرها إلى `createClient(...)`، تقوم بإلحاق معترضات HTTP وSSE و/أو WebSocket عبر `withInterceptors`:
+إضافة البرمجيات الوسيطة هي دالة مصنع تُرجع خيار عميل [`ClientOption`](/ar/api/core/clientoption-type). وعند تمريرها إلى `createClient(...)`، تقوم بإلحاق معترض العمليات ومعترضات HTTP وSSE و/أو WebSocket عبر `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab>

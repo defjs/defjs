@@ -7,7 +7,9 @@ description: API 定義をテレメトリ設定から完全に独立させたま
 
 `@defjs/opentelemetry-server` は、SDK 定義を OpenTelemetry から完全に独立させたまま、サーバーアプリケーションのクライアントにおけるアウトバウンド HTTP、SSE、WebSocket 操作を計装します。
 
-`withOpenTelemetryServer(options)` は、有効化されたトランスポート（HTTP、SSE、WebSocket）ごとに 1 つのインターセプターを追加する `@defjs/core` の [`ClientOption`](/ja-JP/api/core/clientoption-type) を返します。このパッケージ自体は OpenTelemetry SDK の初期化を行わず、サーバーのインバウンドリクエストを計装することもありません。
+`withOpenTelemetryServer(options)` は、[操作インターセプター](/ja-JP/docs/interceptors#operation-interceptors)と、有効化されたトランスポート（HTTP、SSE、WebSocket）ごとに 1 つのインターセプターを追加する `@defjs/core` の [`ClientOption`](/ja-JP/api/core/clientoption-type) を返します。このパッケージ自体は OpenTelemetry SDK の初期化を行わず、サーバーのインバウンドリクエストを計装することもありません。
+
+1 回だけ、すべての呼び出しが通るクライアントに適用してください。`getOrder(client, input)` のような各呼び出しは、呼ばれた瞬間からタプルが解決されるまで観測されます。入力の検証とレスポンスのデコードも含むので、呼び出し側で失敗を自分でログに出す必要はありません。
 
 ---
 
@@ -19,13 +21,14 @@ description: API 定義をテレメトリ設定から完全に独立させたま
   examples/opentelemetry-server/basic-setup.ts#example
 </include>
 
-- **定義の `meta`**: `request.meta` の own enumerable なキーはそれぞれ、値をそのままにして、スパンおよび失敗ログの `defjs.meta.<key>` 属性になります。各値を保持するか破棄するかは、OpenTelemetry SDK の属性ルールに従い、破棄された値は `diag` を通してのみ報告されます。`meta` が存在しない場合や空の場合は何も追加されません。メトリクスには `meta` を付けないため、属性セットは有限に保たれます。`startSpanHook(request)` が返す属性は最後に適用され、スパン上の `defjs.meta.*` の値だけを置き換えることができます。失敗ログは `meta` の値を保持します。これらの値はテレメトリとともにプロセスの外に出るため、シークレットや個人情報は `meta` に含めないでください。
-- **スパンの名前付け**: スパン名は HTTP メソッド名、`SSE`、または `WebSocket` です。スパン名の HTTP メソッドは正規化された `http.request.method` で、その値が `_OTHER` のときは `HTTP` になります。
+- **定義の `meta`**: `request.meta` の own enumerable なキーはそれぞれ、値をそのままにして、操作スパン、トランスポートスパン、および失敗ログの `defjs.meta.<key>` 属性になります。各値を保持するか破棄するかは、OpenTelemetry SDK の属性ルールに従い、破棄された値は `diag` を通してのみ報告されます。`meta` が存在しない場合や空の場合は何も追加されません。メトリクスには `meta` を付けないため、属性セットは有限に保たれます。`startSpanHook(request)` が返す属性は最後に適用され、スパン上の `defjs.meta.*` の値だけを置き換えることができます。失敗ログは `meta` の値を保持します。これらの値はテレメトリとともにプロセスの外に出るため、シークレットや個人情報は `meta` に含めないでください。
+- **スパンの名前付け**: 操作スパンは `defjs.operation.name` で名付けられます。HTTP メソッド名、`SSE`、または `WebSocket` に続けて定義のパステンプレートが付き、`GET /orders/:id` のようになります。トランスポートスパンは、HTTP メソッド名、`SSE`、または `WebSocket` だけで名付けられます。スパン名の HTTP メソッドは正規化された `http.request.method` で、その値が `_OTHER` のときは `HTTP` になります。
 - **独立したシグナル**: `tracer`、`meter`、`logger` はすべて任意であり、それぞれ独立して機能します。
   - `tracer` を省略すると、メトリクス、ログ、アウトバウンドコンテキスト伝播を記録しつつ、ローカルスパンの生成やスパンフックを無効化できます。
   - `meter` を省略すると、パッケージメトリクスの記録が無効化されます。
   - `propagator` を省略すると、組み込みの W3C Trace Context + W3C Baggage 複合プロパゲーターが使用されます。
-  - `tracer` を設定している場合、`requireParentSpan: true` を指定するとアクティブな親スパンが存在しない場合にスパン生成、伝播、フック、メトリクス、ログがすべてスキップされます。`tracer` 未設定の場合、`requireParentSpan` はメトリクスやログをブロックしません。
+- **親スパン**: 処理中のリクエストのサーバースパンのように、アクティブなスパンの中で行われた呼び出しは、そのトレースに加わります。タイマー、バックグラウンドジョブ、起動時のコードなど、アクティブなスパンがない状態で行われた呼び出しは、すべての OpenTelemetry スパンと同じく独自のトレースを開始します。そうした呼び出しのテレメトリをスキップするオプションはありません。どのトレースを残すかは SDK のサンプラーで決めてください。プロセス内で親子関係を作るには、OpenTelemetry SDK がサーバーランタイムで登録するコンテキストマネージャーが必要です。
+- **エラーテキスト**: `includeErrorDiagnostics: true` はエラーメッセージとスタックを出力します。デフォルトではオフです。[エラーテキスト](#error-text)を参照してください。
 
 ---
 
@@ -33,7 +36,7 @@ description: API 定義をテレメトリ設定から完全に独立させたま
 
 `http`、`sse`、`webSocket` ごとにトランスポート単位の有効／無効スイッチ（`{ enabled: false }`）やスパンフック（`startSpanHook`、`requestHook`、`responseHook`）を設定できます。下流サービスがハンドシェイク時のクエリ文字列にトレースコンテキストを期待する WebSocket 接続では、`queryPropagation: true` をオプトインします。
 
-<Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
+<Tabs items={["app/hooks.ts", "app/ws-propagation.ts"]}>
   <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
@@ -46,45 +49,51 @@ description: API 定義をテレメトリ設定から完全に独立させたま
     </include>
 
   </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/active-span.ts#example
-    </include>
-
-  </Tab>
 </Tabs>
 
 ### フックの仕様契約
 
 - `startSpanHook(request): Attributes` はスパン生成前に同期的に実行されます。返された属性は最後に適用され、組み込み属性を上書きできます（`url.full` の秘匿化など）。
 - `requestHook(span, request)` および `responseHook(span, responseOrHandle, request)` は生成されたスパンを受け取り、同期的または非同期的に実行できます。これらはトランスポートパイプラインによって await されることはなく、`responseHook` の同期的処理が完了した時点で HTTP スパンは即座に終了します。
-- フック内でエラーが発生しても、クライアントの呼び出し自体が中断されることはありません。`span.isRecording()` が true の間、フックエラーはスパン上に `defjs.otel.hook.error` および `exception` イベントとして記録されます（`exception` イベントは、失敗したトランスポートについて記録されるものと同じく、`exception.type` だけを持ち、`exception.message` も `exception.stacktrace` も持ちません）。スパンが記録対象外（non-recording）の場合、エラーは `@opentelemetry/api` の `diag.error` を介して報告されます（`hook.name`、`error.type`、`traceId`、`spanId`）。
+- フックが受け取るのはトランスポートスパンです。操作スパンにフックはないので、載せたいものは定義の `meta` に入れてください。
+- フック内でエラーが発生しても、クライアントの呼び出し自体が中断されることはありません。`span.isRecording()` が true の間、フックエラーはスパン上に `defjs.otel.hook.error` および `exception` イベントとして記録されます（`exception` イベントは、失敗したトランスポートについて記録されるものと同じく、`includeErrorDiagnostics` がオンでない限り `exception.type` だけを持ちます）。スパンが記録対象外（non-recording）の場合、エラーは `@opentelemetry/api` の `diag.error` を介して報告されます（`hook.name`、`error.type`、`traceId`、`spanId`）。
 - `withOpenTelemetryServer` は作成時に `http`、`sse`、`webSocket` のオプションブロックのスナップショットを取得します。`{ enabled: false }` を渡すと、そのトランスポートのフックを読み取ることなく無効化されます。
 
 ---
 
-## 3. HTTP、SSE、WebSocket のテレメトリセマンティクス
+## 3. 操作、HTTP、SSE、WebSocket のテレメトリセマンティクス
 
-プラグインは、インターセプターチェーンの内部で各トランスポートのライフタイムを計測します。
+### 操作スパン
 
-- **HTTP**: スパンは HTTP インターセプター内で開始され、`HttpResponse` が返された時点で終了します。宣言された `output` / `error` のボディ読み取り（および JSON 表現の検証とパース）は、返却前のハンドラー境界の **内側** で行われます。ボディの読み取り失敗や JSON メディアタイプ／パースの失敗はインターセプターを通過して reject され（`error.type: "BodyFailure"`）、スパンに `ERROR` をマークし、メトリクスに `BodyFailure` を記録し、1 件の `WARN` ログを出力します。送信前に拒否されたリクエスト（不正なメソッド、認証情報を含む URL、プラットフォームが拒否するヘッダー値、throw する `finalizeHeaders` フック）もインターセプターを通過して reject され、そのエラーはプラットフォームのエラーまたはフック自身のエラーなので、`error.type` はそのエラーのクラス（通常は `TypeError`）です。ステータス `400+` は、ステータスコード文字列を `error.type` としてスパンに `ERROR` をマークします。呼び出し元のキャンセルは失敗ではありません。スパンは `http.aborted` イベントで終了し、ステータスは未設定のまま、例外も `error.type` も記録されません。タイムアウトは引き続き失敗で、`error.type: "timeout"` になります。 Struct バリデーション（`RES_STRUCT_MISMATCH`）および `HTTP_STATUS` タプル変換はインターセプターチェーンの後に実行されるため、完了済みのトランスポートスパンには影響を与えません。
+すべての操作呼び出しには、種別 `INTERNAL` の操作スパンが 1 つあります。呼び出しの開始時に始まり、タプルが解決されたときに終わるので、入力の検証、エンドポイントの選択、`builder`、インターセプターとリトライ待機を含むすべての試行、レスポンスのデコードを対象にします。`defjs.operation.name` と `defjs.meta.*` 属性を持ちます。
+
+- **成功**: ステータスは未設定のままです。
+- **失敗**: ステータスは `ERROR` で、`error.type` は Fault コードです。`REQ_INPUT_INVALID`、`REQ_BUILD_FAILED`、`NET_UNREACHABLE`、`NET_TIMEOUT`、`HTTP_STATUS`、`RES_STRUCT_MISMATCH`、`EXT_INTERCEPTOR_FAILED` などです。
+- **呼び出し元のキャンセル**（`NET_ABORTED`）: ステータスは未設定のままで、`error.type` はなく、スパンには `http.aborted`、`sse.aborted`、`websocket.aborted` のいずれかが記録されます。
+- **SSE と WebSocket**: 呼び出しはストリームまたはセッションが開いた時点で解決されるため、操作スパンが対象にするのは開始までです。接続そのものは、下のトランスポートスパンが観測します。
+
+呼び出しのトランスポートスパンは、その子です。検証に失敗した入力や throw した builder には、操作スパンはありますがトランスポートスパンはありません。ボディが `output` に一致しない 2xx レスポンスでは、トランスポートスパンのステータスは未設定のままで、その上の操作スパンが `RES_STRUCT_MISMATCH` で `ERROR` として終了します。
+
+### トランスポートスパン
+
+プラグインは、インターセプターチェーンの内部で各トランスポートのライフタイムを計測します。HTTP の試行ごと、または SSE や WebSocket の接続ごとに、`CLIENT` スパンが 1 つ作られます。
+
+- **HTTP**: スパンは HTTP インターセプター内で開始され、`HttpResponse` が返された時点で終了します。宣言された `output` / `error` のボディ読み取り（および JSON 表現の検証とパース）は、返却前のハンドラー境界の **内側** で行われます。ボディの読み取り失敗や JSON メディアタイプ／パースの失敗はインターセプターを通過して reject され（`error.type: "BodyFailure"`）、スパンに `ERROR` をマークし、メトリクスに `BodyFailure` を記録します。送信前に拒否されたリクエスト（不正なメソッド、認証情報を含む URL、プラットフォームが拒否するヘッダー値、throw する `finalizeHeaders` フック）もインターセプターを通過して reject され、そのエラーはプラットフォームのエラーまたはフック自身のエラーなので、`error.type` はそのエラーのクラス（通常は `TypeError`）です。ステータス `400+` は、ステータスコード文字列を `error.type` としてスパンに `ERROR` をマークします。呼び出し元のキャンセルは失敗ではありません。スパンは `http.aborted` イベントで終了し、ステータスは未設定のまま、例外も `error.type` も記録されません。タイムアウトは引き続き失敗で、`error.type: "timeout"` になります。 Struct バリデーション（`RES_STRUCT_MISMATCH`）および `HTTP_STATUS` タプル変換はインターセプターチェーンの後に実行され、操作スパンがそれらを報告します。
 - **SSE**: 自動再接続を含む 1 つの論理ストリームが 1 つのスパンを生成し、`stream.closed` が解決されるまでオープン状態を維持します。記録されるイベント: `sse.connected`、それに続く `sse.closed`、`sse.aborted`（`stream.close()`、または開いているストリームやハンドシェイクに対するタイムアウト以外の呼び出し元中止時。スパンのステータスは未設定のまま）、または `sse.error`（タイムアウトに起因する中止を含め `ERROR` で終了）。スパン属性 `url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。
-- **WebSocket**: 自動再接続を含む 1 つの論理セッションが 1 つのスパンを生成し、`session.closed` が解決されるまで維持されます。記録されるイベント: `websocket.connected`、`websocket.closed`、`websocket.aborted`、`websocket.error`。サーバーからのクローズフレーム（コード不問）は `websocket.closed` を記録し、ステータスを未設定のままスパンを終了します。呼び出し元による中止（開いているセッションに対するものも、接続中のものも）は、ステータスを未設定のまま `websocket.aborted` でスパンを終了します。ログは出力されませんが、中止理由が `TimeoutError` の場合だけは、`ERROR` でスパンを終了して `error.type: "timeout"` を設定し、`WARN` を 1 件出力します。開いているセッションでは `websocket.error` も記録します。クローズフレームを伴わない突然の切断（`1006`）は、どのランタイムでも 1 件のログとともに `ERROR` で終了します。SSE と同様、`url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。`url.full` は接続 URL の `ws:` または `wss:` の形を使います。
+- **WebSocket**: 自動再接続を含む 1 つの論理セッションが 1 つのスパンを生成し、`session.closed` が解決されるまで維持されます。記録されるイベント: `websocket.connected`、`websocket.closed`、`websocket.aborted`、`websocket.error`。サーバーからのクローズフレーム（コード不問）は `websocket.closed` を記録し、ステータスを未設定のままスパンを終了します。呼び出し元による中止（開いているセッションに対するものも、接続中のものも）は、ステータスを未設定のまま `websocket.aborted` でスパンを終了します。ただし中止理由が `TimeoutError` の場合だけは、`ERROR` でスパンを終了して `error.type: "timeout"` を設定し、開いているセッションでは `websocket.error` も記録します。クローズフレームを伴わない突然の切断（`1006`）は `ERROR` で終了します。SSE と同様、`url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。`url.full` は接続 URL の `ws:` または `wss:` の形を使います。
 
-3 つのトランスポートは 1 つのルールに従います。呼び出し元のキャンセル（タイムアウトではない中止）は失敗ではありません。スパンのステータスは未設定のままで、例外も `error.type` も記録されず、イベント `http.aborted`、`sse.aborted`、または `websocket.aborted` が付きます。所要時間メトリクスは引き続き記録されますが `error.type` は付かず、接続メトリクスには `defjs.result: "aborted"` が付きます。ログは出力されません。タイムアウト（`ERR_TIMEOUT` または `TimeoutError`。`AbortSignal.timeout()` の理由を含む）は引き続き失敗で、スパンは `ERROR` で終了し、`error.type` は `timeout` になります。
+3 つのトランスポートは 1 つのルールに従います。呼び出し元のキャンセル（タイムアウトではない中止）は失敗ではありません。スパンのステータスは未設定のままで、例外も `error.type` も記録されず、イベント `http.aborted`、`sse.aborted`、または `websocket.aborted` が付きます。所要時間メトリクスは引き続き記録されますが `error.type` は付かず、接続メトリクスには `defjs.result: "aborted"` が付きます。ログは出力されません。タイムアウト（`ERR_TIMEOUT` または `TimeoutError`。`AbortSignal.timeout()` の理由を含む）は引き続き失敗で、トランスポートスパンは `ERROR` で終了して `error.type: "timeout"` になり、操作スパンは `ERROR` で終了して `error.type: "NET_TIMEOUT"` になります。
 
-インターセプターチェーンの残りの部分とトランスポート自体は、クライアントスパンをアクティブにした状態で実行されます。そのため、そこでの `trace.getActiveSpan()` はこのスパンを返し、それらが作成するスパン（Fetch の自動計装スパンなど）はこのスパンの子になります。コンテキストマネージャーが登録されていなければ、何も変わりません。
+呼び出し全体は操作スパンをアクティブにした状態で実行され、インターセプターチェーンの残りの部分とトランスポート自体はトランスポートスパンをアクティブにした状態で実行されます。そのため、そこでの `trace.getActiveSpan()` はトランスポートスパンを返し、それらが作成するスパン（Fetch の自動計装スパンなど）はその子になります。コンテキストマネージャーが登録されていなければ、プロセス内でスパンの親子関係は作られません。
 
-`server.address` は解決された URL のホストです。IPv6 リテラルは、`URL.hostname` と `Host` ヘッダーと同じく、角括弧を残します。`server.port` は明示されたポートか、URL にポートがないときはスキームのデフォルトです。`http:` と `ws:` は 80、`https:` と `wss:` は 443 です。すべてのスパンは `http.request.method` も持ちます。HTTP と SSE ではリクエストのメソッド、WebSocket では `GET`（開始ハンドシェイクのメソッド）です。RFC 9110 のメソッド、`PATCH`、`QUERY` のいずれでもないメソッドは `_OTHER` として記録され、渡されたメソッドは `http.request.method_original` に入ります。Fetch が大文字で送信するメソッド（`DELETE`、`GET`、`HEAD`、`OPTIONS`、`POST`、`PUT`）は大文字で記録され、両者が異なるときは渡されたメソッドが `http.request.method_original` に残ります。`http.client.request.duration` メトリクスと HTTP のログレコードも、同じ正規化された `http.request.method` を持ちます。
+`server.address` は解決された URL のホストです。IPv6 リテラルは、`URL.hostname` と `Host` ヘッダーと同じく、角括弧を残します。`server.port` は明示されたポートか、URL にポートがないときはスキームのデフォルトです。`http:` と `ws:` は 80、`https:` と `wss:` は 443 です。すべてのトランスポートスパンは `http.request.method` も持ちます。HTTP と SSE ではリクエストのメソッド、WebSocket では `GET`（開始ハンドシェイクのメソッド）です。RFC 9110 のメソッド、`PATCH`、`QUERY` のいずれでもないメソッドは `_OTHER` として記録され、渡されたメソッドは `http.request.method_original` に入ります。Fetch が大文字で送信するメソッド（`DELETE`、`GET`、`HEAD`、`OPTIONS`、`POST`、`PUT`）は大文字で記録され、両者が異なるときは渡されたメソッドが `http.request.method_original` に残ります。`http.client.request.duration` メトリクスも、同じ正規化された `http.request.method` を持ちます。
 
 ### リトライと再接続の境界
 
-以下は現在のインターセプターから観測できる挙動であり、独立したバランサー用テレメトリ API ではありません。
-
-- `withRetry` による各 HTTP 試行は、リトライのたびにインターセプターチェーンが再実行されるため、個別のクライアントスパンと所要時間サンプルを持ちます。アクティブなアプリケーションの親スパンがある場合、各試行はその下の兄弟スパンになります。親スパンがなければ、リトライは自動的に 1 つのトレースにまとめられません。Core は論理呼び出しの親スパンを作成しません。
+- `withRetry` による各 HTTP 試行は、リトライのたびにインターセプターチェーンが再実行されるため、個別のトランスポートスパンと所要時間サンプルを持ちます。各試行は呼び出しの操作スパンの下の兄弟スパンで、操作スパンは呼び出しの結果を 1 回だけ記録します。2 回目の試行で成功した呼び出しは、失敗した HTTP スパン 1 つと成功した HTTP スパン 1 つの上に、ステータス未設定の操作スパンを持ちます。
 - HTTP 試行の URL は、その試行のエンドポイントを識別しますが、試行番号、リトライ理由、リトライバジェットの残高／枯渇、除外／復帰の属性は出力されません。
 - SSE と WebSocket のリトライ（`withRetry`）は、インターセプターを再実行せずにトランスポートの内部で再接続します。再接続をまたいで 1 つの論理セッションスパンを維持し、物理接続ごとにスパンを作成するわけではありません。フェイルオーバー後もスパンの URL とメトリクス属性は初期エンドポイントを保持します。再接続で別の `connected` イベントは出力されません。アクティブ数のメトリクスは、現在選択されたレプリカ上のソケットではなく、`closed` を待つ論理セッションを数えます。
-- HTTP 503 は `error.type: "503"`、接続拒否は `"TypeError"`、期限切れは `"timeout"` になり、呼び出し元のキャンセルには `error.type` が付きません。期限切れとキャンセルの戻り値は、それぞれ `NET_TIMEOUT` と `NET_ABORTED` です。これらの Defjs タプルの Fault コードは、個別の HTTP テレメトリ属性ではありません。開いた WebSocket のデフォルトのキャンセルは警告なしで `websocket.aborted` で終了し、中止理由が `TimeoutError` の場合は `websocket.error`、`error.type: "timeout"`、1 件の警告で終了します。それ以外のエラークラス名はトランスポート／ランタイムからの観測結果であり、タプルやクローズ結果の確認に代わるものではありません。
+- トランスポートスパンでは、HTTP 503 は `error.type: "503"`、接続拒否は `"TypeError"`、期限切れは `"timeout"` になり、呼び出し元のキャンセルには `error.type` が付きません。操作スパンでは、同じ呼び出しがそれぞれ `HTTP_STATUS`、`NET_UNREACHABLE`、`NET_TIMEOUT` で終わります。これらはタプルの Fault のコードです。
 
 ### 出力されるメトリクス
 
@@ -92,6 +101,7 @@ description: API 定義をテレメトリ設定から完全に独立させたま
 
 | メトリクス名                                 | 意味                                                       |
 | -------------------------------------------- | ---------------------------------------------------------- |
+| `defjs.client.operation.duration`            | 操作呼び出しの所要時間（呼び出しからタプルまで）           |
 | `http.client.request.duration`               | HTTP 試行の所要時間（秒）                                  |
 | `defjs.client.sse.connect.duration`          | SSE ハンドルが返されるまでの所要時間                       |
 | `defjs.client.sse.connection.duration`       | ハンドル返却から最終的な `stream.closed` までの継続時間    |
@@ -100,7 +110,7 @@ description: API 定義をテレメトリ設定から完全に独立させたま
 | `defjs.client.websocket.connection.duration` | セッション返却から最終的な `session.closed` までの継続時間 |
 | `defjs.client.websocket.active_connections`  | `closed` が未解決のアクティブな論理 WebSocket セッション数 |
 
-SSE と WebSocket の接続確立時間および接続継続時間のサンプルには `defjs.result` が付き、値は `success`、`error`（`error.type` 付き）、または呼び出し元のキャンセルを表す `aborted` です。
+`defjs.client.operation.duration` は `defjs.operation.name` を持ち、呼び出しが失敗したときは Fault コードを値とする `error.type` も持つので、トランスポートに届かなかった呼び出しを含め、すべての呼び出しを数えます。SSE と WebSocket の接続確立時間および接続継続時間のサンプルには `defjs.result` が付き、値は `success`、`error`（`error.type` 付き）、または呼び出し元のキャンセルを表す `aborted` です。
 
 ---
 
@@ -114,18 +124,27 @@ SSE と WebSocket の接続確立時間および接続継続時間のサンプ�
 
 ### Defjs 診断ログ契約
 
-各リクエストまたは論理接続は、最大 1 件の最終的な `WARN` (`13`) レベルの `LogRecord` を出力します。
+失敗した操作呼び出しごとに `WARN` (`13`) レベルの `LogRecord` を 1 件出力し、開いたあとに失敗した SSE ストリームまたは WebSocket セッションごとにも 1 件出力します。あとの試行で回復したリトライ済みの試行はログに出ません。
 
-| 観測された結果                                                                                                                                                         | 出力される Defjs LogRecord                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| HTTP OTel の `next()` が reject（ネットワーク障害、観測されたタイムアウト、宣言ボディの失敗）。タイムアウト以外の呼び出し元キャンセルや公開 `HTTP_STATUS` Fault は除く | `WARN` 1 件、`http.client.request.exception`、phase `request`                                        |
-| 通常の HTTP レスポンス（宣言された `error` ボディが正常デコードされた 4xx/5xx、ボディ未宣言のレスポンス、ステータス `0` を含む）                                       | 出力なし                                                                                             |
-| 宣言された `output` / `error` のボディ読み取り失敗、または宣言された JSON 表現に対して非 JSON のメディアタイプが返されたか `JSON.parse` に失敗                         | `WARN` 1 件、`http.client.request.exception`、phase `request`、`exception.type: "BodyFailure"`       |
-| SSE または WebSocket のハンドシェイク／接続失敗（SSE の非 2xx ステータスを含む）                                                                                       | `WARN` 1 件、`defjs.client.sse.exception` または `defjs.client.websocket.exception`、phase `connect` |
-| SSE または WebSocket の致命的エラーや `closed` の reject（クローズフレームのない `1006` の切断、ハートビートタイムアウトを含む）                                       | トランスポートイベント名を含む `WARN` 1 件、phase `connection`                                       |
-| 正常終了、メッセージ受信、EOF、サーバーからの WebSocket クローズフレーム（`1011` を含む）、またはタイムアウト以外の呼び出し元キャンセル                                | 出力なし                                                                                             |
+| 観測された結果                                                                                                                              | 出力される Defjs LogRecord                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 操作呼び出しが `NET_ABORTED` 以外の Fault で解決される（どのトランスポートでも）                                                            | `WARN` 1 件、`defjs.client.operation.exception`、`error.type` は Fault コード       |
+| SSE ストリームまたは WebSocket セッションが開いたあとにエラーで終了（クローズフレームのない `1006` の切断、ハートビートタイムアウトを含む） | `WARN` 1 件、`defjs.client.sse.exception` または `defjs.client.websocket.exception` |
+| 成功、メッセージ受信、EOF、サーバーからの WebSocket クローズフレーム（`1011` を含む）、または呼び出し元のキャンセル                         | 出力なし                                                                            |
 
-診断ログには、固定メッセージ、`exception.type`（`BodyFailure`、`EventStreamFatalError`（応答が `text/event-stream` でない SSE ハンドシェイク）、`DefjsFault`（非 2xx の SSE ハンドシェイクを含む）、`TypeError`、`Error` などのプラットフォーム／トランスポートのクラス名）、phase、サーバーアドレス／ポート、プロトコルフィールド、`defjs.meta.*` 属性が記録されます。その値は、アプリケーションが `meta` に入れたものそのままです。Defjs は、生の URL、クエリ文字列、ヘッダー、ボディ、エラースタックトレースを一切追加しません。スパンの `exception` イベントも同じ規則に従い、`exception.type` だけを持ちます。`url.full` はエンドポイントの userinfo を `REDACTED:REDACTED` に置き換え、セマンティック規約のデフォルトの機密クエリキー（`sig` や `X-Amz-Signature` など）の値を `REDACTED` に置き換えます。
+操作レコードは `defjs.operation.name`、`error.type`、`exception.type`（`DefjsFault`）、`defjs.meta.*` 属性を持ち、操作スパンと関連付けられます。接続レコードは `server.address`、`server.port`、`exception.type`（`TypeError` や `DefjsFault` など、失敗のクラス名）、SSE ストリームがエラーで終わる場合の `defjs.sse.fault.code`、close 情報に数値の code がある場合の `websocket.close.code`、`defjs.meta.*` 属性を持ちます。`defjs.meta.*` の値は、アプリケーションが `meta` に入れたものそのままです。
+
+### エラーテキスト [#error-text]
+
+デフォルトでは、Defjs はエラーテキストを出力しません。メッセージもスタックも、生の URL、クエリ文字列、ヘッダー、ボディもありません。スパンの `exception` イベントは `exception.type` だけを持ち、`url.full` はエンドポイントの userinfo を `REDACTED:REDACTED` に置き換え、セマンティック規約のデフォルトの機密クエリキー（`sig` や `X-Amz-Signature` など）の値を `REDACTED` に置き換えます。
+
+`includeErrorDiagnostics: true` を指定すると、これらを出力します。
+
+- 失敗したスパンは、エラーメッセージをステータスの説明として持ちます。操作スパンでは Fault の `message`、トランスポートスパンでは観測されたエラーのメッセージです。
+- `exception` イベントは `exception.message` と `exception.stacktrace` を持ちます。
+- 失敗ログは `exception.message` と `exception.stacktrace` を持ちます。操作呼び出しでは、Fault の `message` と `stack` です。
+
+cause チェーンとエラーの enumerable なフィールドは出力されません。メッセージ自体はフィルタされません。Fault のメッセージはその cause のメッセージであることが多く、プラットフォームのエラー文はリクエスト URL を引用することがあります。Node.js では、認証情報を含む URL に対する `TypeError` が認証情報とクエリを含む URL 全体を引用し、それが `REQ_BUILD_FAILED` Fault のメッセージになります。このオプションは、テレメトリにそのテキストが含まれてよい場合にのみオンにし、含まれてはならない場合は SDK のスパンまたはログプロセッサーで秘匿化してください。
 
 ---
 

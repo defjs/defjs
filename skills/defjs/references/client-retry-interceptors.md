@@ -54,7 +54,7 @@ Client configuration helpers passed to `createClient(...)`:
 | `withCredentials(boolean)`       | Sets Fetch `credentials: "include"` for HTTP and SSE when `true`                                                     |
 | `withXSRF(options?)`             | From `@defjs/core/xsrf` (browser-only); copies the XSRF cookie into a header on mutating same-origin HTTP requests   |
 | `withQuerySerializer(fn)`        | Custom `(query) => string` serializer for object queries                                                             |
-| `withInterceptors(...items)`     | Appends HTTP, SSE, and WebSocket interceptors in onion order                                                         |
+| `withInterceptors(...items)`     | Appends HTTP, SSE, WebSocket, and operation interceptors in onion order                                              |
 | `withSSEOnInvalidEvent(fn)`      | Observer for undeclared or struct-invalid SSE events                                                                 |
 | `withWebSocketHeartbeat(policy)` | Default WebSocket heartbeat (`message` required; `timeoutMs` requires `isAck`)                                       |
 | `withWebSocketProtocols(list)`   | Default WebSocket subprotocols                                                                                       |
@@ -195,6 +195,18 @@ Register interceptors with `withInterceptors(...)`. The first registered interce
 
 - `request.body` is already serialized to wire format (`string` for JSON), and `request.bodyContentType` holds the inferred `Content-Type`.
 - `request.query` is the mutable `URLSearchParams` instance sent on the wire.
+- A transport interceptor sees one attempt: input validation runs before it, each `withRetry` attempt reruns it, and `output` / `error` decoding runs after it. To observe a whole call (timing, auditing, telemetry of `REQ_INPUT_INVALID` or `RES_STRUCT_MISMATCH`), use `createOperationInterceptor((call, next) => ...)`. `call` is `{ transport, method, path, meta }`; `next()` takes no arguments, runs the call once and resolves with its tuple, and the interceptor must resolve with that same tuple. It observes; it cannot change the call. A throw resolves the operation with `EXT_INTERCEPTOR_FAILED`.
+
+```ts
+import { createOperationInterceptor } from "@defjs/core";
+
+export const callAudit = createOperationInterceptor(async (call, next) => {
+  const result = await next();
+  const [err] = result;
+  if (err) console.warn(`${call.method} ${call.path}`, err.code);
+  return result;
+});
+```
 
 ### Best practice 1: Bearer token injection
 

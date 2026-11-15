@@ -1932,7 +1932,7 @@
     "slug": "core/withinterceptors",
     "source": "packages/core/src/client/option.ts",
     "group": "client",
-    "description": "Appends interceptors to the client interceptor chain.\n\nCalling it again appends more; it never replaces earlier ones. The first registered interceptor is the outermost layer. HTTP, SSE, and WebSocket interceptors can be mixed in one call. When an operation runs, only the interceptors of that transport run, in their registration order. Each `{ kind, fn }` record is copied when the option is applied. `fn` keeps its identity. Changing the original record later does not change clients already created.",
+    "description": "Appends interceptors to the client interceptor chain.\n\nCalling it again appends more; it never replaces earlier ones. The first registered interceptor is the outermost layer. HTTP, SSE, WebSocket, and operation interceptors can be mixed in one call. When an operation runs, its operation interceptors wrap the whole call and only the interceptors of its transport run inside it, each in their registration order. Each `{ kind, fn }` record is copied when the option is applied. `fn` keeps its identity. Changing the original record later does not change clients already created.",
     "related": [],
     "exampleFiles": [],
     "returns": ["An option that pushes onto `config.interceptors`."],
@@ -5112,7 +5112,7 @@
     "slug": "core/httpinterceptor-type",
     "source": "packages/core/src/interceptor/interceptor.ts",
     "group": "interceptors",
-    "description": "Tagged HTTP interceptor accepted by client interceptor options.\n\nCreated by `createHttpInterceptor`. `kind` is the discriminant that lets\n`withInterceptors` accept HTTP, SSE, and WebSocket interceptors in one list.",
+    "description": "Tagged HTTP interceptor accepted by client interceptor options.\n\nCreated by `createHttpInterceptor`. `kind` is the discriminant that lets\n`withInterceptors` accept every interceptor kind in one list; only `kind: 'http'`\ninterceptors run for HTTP operations.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -5183,7 +5183,7 @@
     "slug": "core/interceptor-type",
     "source": "packages/core/src/interceptor/interceptor.ts",
     "group": "interceptors",
-    "description": "Any tagged interceptor accepted by client interceptor options.\n\n`kind` (`'http'`, `'sse'`, or `'web-socket'`) selects which operations an\ninterceptor runs for. `withInterceptors` accepts any mix; each transport runs\nonly its own kind, in registration order.",
+    "description": "Any tagged interceptor accepted by client interceptor options.\n\n`kind` (`'http'`, `'sse'`, `'web-socket'`, or `'operation'`) selects which operations an\ninterceptor runs for. `withInterceptors` accepts any mix; each transport runs\nonly its own kind, in registration order, and every operation runs the `'operation'` kind around it.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -5192,7 +5192,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "type Interceptor =\n  HttpInterceptor | SSEInterceptor | WebSocketInterceptor;",
+        "signature": "type Interceptor =\n  | HttpInterceptor\n  | SSEInterceptor\n  | WebSocketInterceptor\n  | OperationInterceptor;",
         "parameters": []
       }
     ]
@@ -5239,6 +5239,165 @@
   },
   {
     "package": "@defjs/core",
+    "name": "OperationCall",
+    "kind": "type",
+    "slug": "core/operationcall-type",
+    "source": "packages/core/src/interceptor/interceptor.ts",
+    "group": "interceptors",
+    "description": "The operation call an operation interceptor wraps, described by its definition.\n\n`transport` is `'http'`, `'sse'`, or `'websocket'`. `method` is the defined method; a WebSocket operation reports\n`GET`, the method of its opening handshake. `path` is the defined path template, such as `/orders/:id`, before any\ninput is placed. `meta` is the definition's `meta`, the same read-only object every call shares. The input, the\nrequest options, and the request itself are not part of it: the call has not been built when the interceptor runs.\n\nEach definition reuses one record for all of its calls.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "transport",
+        "description": "",
+        "type": "\"http\" | \"sse\" | \"websocket\"",
+        "simplifiedType": "union",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "method",
+        "description": "",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "path",
+        "description": "",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "meta",
+        "description": "",
+        "type": "{ readonly [key: string]: unknown; } | undefined",
+        "simplifiedType": "union",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface OperationCall {\n  readonly transport: \"http\" | \"sse\" | \"websocket\";\n  readonly method: string;\n  readonly path: string;\n  readonly meta: { readonly [key: string]: unknown } | undefined;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OperationInterceptor",
+    "kind": "type",
+    "slug": "core/operationinterceptor-type",
+    "source": "packages/core/src/interceptor/interceptor.ts",
+    "group": "interceptors",
+    "description": "Tagged operation interceptor accepted by client interceptor options.\n\nCreated by `createOperationInterceptor`. Operation interceptors run for every HTTP, SSE, and WebSocket operation, in\nregistration order, outside the transport interceptors.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "kind",
+        "description": "",
+        "type": "\"operation\"",
+        "simplifiedType": "\"operation\"",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "fn",
+        "description": "",
+        "type": "OperationInterceptorFn",
+        "simplifiedType": "OperationInterceptorFn",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface OperationInterceptor {\n  kind: \"operation\";\n  fn: OperationInterceptorFn;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OperationInterceptorFn",
+    "kind": "type",
+    "slug": "core/operationinterceptorfn-type",
+    "source": "packages/core/src/interceptor/interceptor.ts",
+    "group": "interceptors",
+    "description": "Operation interceptor function: observes one operation call from its start to the tuple it resolves with.\n\n`next()` runs the whole call: input validation, the endpoint pick, the builder, every attempt with its interceptor\nchain and retries, and the response decoding. It takes no arguments, so the interceptor cannot change the call. A\nsecond call of `next()` returns the same promise and does not run the call again. The function is generic in the\nresult, so it can only resolve with what `next()` resolved with.\n\nCode that the function runs inside `next()`, such as an OpenTelemetry `context.with`, is in effect for the whole\ncall, including the transport interceptors. `next()` never rejects. If the function throws or rejects, its layer\nresolves with `EXT_INTERCEPTOR_FAILED` and the thrown value as `cause`: that is what the operation resolves with,\nand what `next()` resolves with in the operation interceptors registered before it. A stream or session the call\nhad already opened is closed with that value.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type OperationInterceptorFn = <TResult extends OperationResult>(\n  call: OperationCall,\n  next: () => Promise<TResult>,\n) => Promise<TResult>;",
+        "parameters": [
+          {
+            "name": "call",
+            "description": "",
+            "type": "OperationCall",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "next",
+            "description": "",
+            "type": "() => Promise<TResult>",
+            "simplifiedType": "function",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OperationResult",
+    "kind": "type",
+    "slug": "core/operationresult-type",
+    "source": "packages/core/src/interceptor/interceptor.ts",
+    "group": "interceptors",
+    "description": "The error-first tuple any operation resolves with, as an operation interceptor reads it.\n\nIts first element is the fault, or `null` on success. The rest is the operation's own result: the data and response\nfor HTTP, the stream and its open information for SSE, the session and its connection for WebSocket.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type OperationResult = readonly [\n  err: AnyFault | null,\n  ...rest: unknown[],\n];",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
     "name": "SSEHandler",
     "kind": "type",
     "slug": "core/ssehandler-type",
@@ -5275,7 +5434,7 @@
     "slug": "core/sseinterceptor-type",
     "source": "packages/core/src/interceptor/interceptor.ts",
     "group": "interceptors",
-    "description": "Tagged SSE interceptor for client option lists, accepted by `withInterceptors`.\n\nCreated by `createSSEInterceptor`. The `kind` tag lets `withInterceptors`\naccept HTTP, SSE, and WebSocket interceptors in one list; only `kind: 'sse'`\ninterceptors run for SSE operations.",
+    "description": "Tagged SSE interceptor for client option lists, accepted by `withInterceptors`.\n\nCreated by `createSSEInterceptor`. The `kind` tag lets `withInterceptors`\naccept every interceptor kind in one list; only `kind: 'sse'`\ninterceptors run for SSE operations.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -5386,7 +5545,7 @@
     "slug": "core/websocketinterceptor-type",
     "source": "packages/core/src/interceptor/interceptor.ts",
     "group": "interceptors",
-    "description": "Tagged WebSocket interceptor for client option lists, accepted by `withInterceptors`.\n\nCreated by `createWebSocketInterceptor`. The `kind` tag lets\n`withInterceptors` accept HTTP, SSE, and WebSocket interceptors in one list;\nonly `kind: 'web-socket'` interceptors run for WebSocket operations.",
+    "description": "Tagged WebSocket interceptor for client option lists, accepted by `withInterceptors`.\n\nCreated by `createWebSocketInterceptor`. The `kind` tag lets\n`withInterceptors` accept every interceptor kind in one list;\nonly `kind: 'web-socket'` interceptors run for WebSocket operations.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -5674,6 +5833,43 @@
             "description": "HTTP interceptor function.",
             "type": "InterceptorFn",
             "simplifiedType": "InterceptorFn",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createOperationInterceptor",
+    "kind": "function",
+    "slug": "core/createoperationinterceptor",
+    "source": "packages/core/src/interceptor/interceptor.ts",
+    "group": "interceptors",
+    "description": "Wraps an `OperationInterceptorFn` as a tagged `OperationInterceptor`.\n\nReturns `{ kind: 'operation', fn }`. An operation interceptor sees each operation call once, from the moment it is\ncalled until it resolves its error-first tuple, so it observes what the transport interceptors cannot: an input\nthat fails validation (`REQ_INPUT_INVALID`), a builder or endpoint failure before any request exists\n(`REQ_BUILD_FAILED`), the retries of one call, and a response that fails decoding after the transport chain\nreturned it (`HTTP_STATUS`, `RES_*`). For SSE and WebSocket the call resolves once the stream or session is open;\nwhat happens on it later is observed through its `closed`.\n\nIt observes; it does not alter the call. Use a transport interceptor to change requests or responses.",
+    "related": [],
+    "exampleFiles": [
+      {
+        "path": "examples/api/create-operation-interceptor.ts",
+        "region": "example",
+        "code": "import {\n  createClient,\n  createOperationInterceptor,\n  withEndpoint,\n  withInterceptors,\n} from \"@defjs/core\";\n\nconst timing = createOperationInterceptor(async (call, next) => {\n  const started = performance.now();\n  const result = await next();\n  const [err] = result;\n  console.info(\n    `${call.method} ${call.path}`,\n    err ? err.code : \"ok\",\n    Math.round(performance.now() - started),\n  );\n  return result;\n});\n\nconst client = createClient(\n  withEndpoint(\"https://api.example.com\"),\n  withInterceptors(timing),\n);"
+      }
+    ],
+    "returns": ["An `OperationInterceptor` with `kind: 'operation'`."],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function createOperationInterceptor(\n  fn: OperationInterceptorFn,\n): OperationInterceptor;",
+        "parameters": [
+          {
+            "name": "fn",
+            "description": "Operation interceptor function.",
+            "type": "OperationInterceptorFn",
+            "simplifiedType": "OperationInterceptorFn",
             "required": true,
             "deprecated": false,
             "tags": []
@@ -8257,7 +8453,7 @@
     "slug": "opentelemetry-server/opentelemetryserverhttpoptions-type",
     "source": "packages/opentelemetry-server/src/option.ts",
     "group": "opentelemetry-server",
-    "description": "Options for the HTTP transport — the shared options with an HttpResponse in responseHook.\n\nSet on `http` in `OpenTelemetryServerOptions`. It has no fields of its own: `enabled`, `startSpanHook`, `requestHook` and `responseHook` come from `OpenTelemetryServerTransportOptions`.\n\n- `responseHook(span, res, req)` receives the `HttpResponse` that came back through the interceptor, before the client decodes a declared body, together with the original `HttpRequest`. Read `req.meta` for application-defined request metadata; the span already carries each key as `defjs.meta.<key>`.\n\n- The HTTP span ends as soon as `responseHook` returns; the hook is not awaited, so only its synchronous part can still change the span. A status of 400 or above ends it `ERROR` with `error.type` set to the status string; 100–399 leaves its status unset. An asynchronous hook rejection after end is reported through `diag.error`; configure `diag.setLogger(...)` from `@opentelemetry/api` to receive it. It cannot append events to an ended span.\n\n- A rejection through the interceptor has no response status and does not call `responseHook`. That includes a network failure, a timeout (`ERR_TIMEOUT`, or an abort whose reason is `TimeoutError`), caller cancellation, any declared-body read failure (`BodyFailure`, including text, blob, and bytes, not only JSON), a progress observer failure (`EXT_OBSERVER_FAILED`), and a request refused before it is sent (an invalid method, a URL with credentials, a header value the platform rejects, or a throwing `finalizeHeaders` hook), which carries the platform error or the hook's own error, not a library class. The span ends `ERROR` with `error.type` set to the thrown class name, such as `TypeError`, `Error` or `BodyFailure`, or to `timeout` for a timeout. Caller cancellation is the exception: the span records `http.aborted`, keeps its status unset and has no `error.type`, and the `http.client.request.duration` sample has none either.\n\nPass `{ enabled: false }` to skip HTTP instrumentation. Span hooks run only when a `tracer` is supplied.",
+    "description": "Options for the HTTP transport — the shared options with an HttpResponse in responseHook.\n\nSet on `http` in `OpenTelemetryServerOptions`. It has no fields of its own: `enabled`, `startSpanHook`, `requestHook` and `responseHook` come from `OpenTelemetryServerTransportOptions`.\n\n- `responseHook(span, res, req)` receives the `HttpResponse` that came back through the interceptor, before the client decodes a declared body, together with the original `HttpRequest`. Read `req.meta` for application-defined request metadata; the span already carries each key as `defjs.meta.<key>`.\n\n- Each attempt gets its own HTTP span, so a call that `withRetry` retries has one per attempt under the same operation span. The span ends as soon as `responseHook` returns; the hook is not awaited, so only its synchronous part can still change the span. A status of 400 or above ends it `ERROR` with `error.type` set to the status string; 100–399 leaves its status unset. A body that later fails to decode against the declared struct does not change this span; the operation span reports it. An asynchronous hook rejection after end is reported through `diag.error`; configure `diag.setLogger(...)` from `@opentelemetry/api` to receive it. It cannot append events to an ended span.\n\n- A rejection through the interceptor has no response status and does not call `responseHook`. That includes a network failure, a timeout (`ERR_TIMEOUT`, or an abort whose reason is `TimeoutError`), caller cancellation, any declared-body read failure (`BodyFailure`, including text, blob, and bytes, not only JSON), a progress observer failure (`EXT_OBSERVER_FAILED`), and a request refused before it is sent (an invalid method, a URL with credentials, a header value the platform rejects, or a throwing `finalizeHeaders` hook), which carries the platform error or the hook's own error, not a library class. The span ends `ERROR` with `error.type` set to the thrown class name, such as `TypeError`, `Error` or `BodyFailure`, or to `timeout` for a timeout. Caller cancellation is the exception: the span records `http.aborted`, keeps its status unset and has no `error.type`, and the `http.client.request.duration` sample has none either. The HTTP span emits no log; the operation call logs a failure once.\n\nPass `{ enabled: false }` to skip HTTP instrumentation. Span hooks run only when a `tracer` is supplied.",
     "related": [
       "@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"
     ],
@@ -8280,7 +8476,7 @@
     "slug": "opentelemetry-server/opentelemetryserveroptions-type",
     "source": "packages/opentelemetry-server/src/option.ts",
     "group": "opentelemetry-server",
-    "description": "Options for {@link withOpenTelemetryServer}: tracer, meter, logger, propagator, and per-transport settings.\n\nPass application-owned OpenTelemetry `Tracer`, `Meter`, and/or `Logger` handles.\nThis package does not initialize the OpenTelemetry SDK.\n\n- `tracer` — Optional. Without it there are no local spans and no span hooks.\n\n- `meter` — Optional. Without it no package metrics are recorded.\n\n- `logger` — Optional. A `Logger` from `@opentelemetry/api-logs`, not a Winston/Pino Logger. Without it no diagnostic LogRecords are emitted. Defjs never obtains a global logger or owns its provider.\n\n- `propagator` — Defaults to W3C Trace Context + Baggage.\n\n- `requireParentSpan` — Defaults to `false`. With a `tracer`, `true` bypasses all instrumentation, including logs, when no active parent span exists. Without a `tracer` it blocks neither metrics nor logs.\n\n- `http`, `sse`, `webSocket` — Per-transport options. Omitting a block leaves it unset and the transport enabled. A transport is disabled only by `{ enabled: false }`. `withOpenTelemetryServer` reads each present block once and copies its fields.",
+    "description": "Options for {@link withOpenTelemetryServer}: tracer, meter, logger, propagator, and per-transport settings.\n\nPass application-owned OpenTelemetry `Tracer`, `Meter`, and/or `Logger` handles.\nThis package does not initialize the OpenTelemetry SDK.\n\nEvery operation call is observed from the moment it is called until it resolves its error-first tuple, so input validation (`REQ_INPUT_INVALID`), a builder or endpoint failure (`REQ_BUILD_FAILED`), the retries of one call, and a response that fails decoding (`HTTP_STATUS`, `RES_*`) all reach telemetry. Under the operation, each HTTP attempt and each SSE or WebSocket connection is observed at the transport.\n\n- `tracer` — Optional. Each operation call gets an `INTERNAL` span named `defjs.operation.name`: the HTTP method (`HTTP` for `_OTHER`), `SSE` or `WebSocket`, then the definition's path template, as in `GET /orders/:id`. It carries `defjs.operation.name` and the `defjs.meta.*` attributes, and on failure `error.type` set to the fault code with status `ERROR`. Caller cancellation (`NET_ABORTED`) adds the event `http.aborted`, `sse.aborted` or `websocket.aborted` and leaves the status unset. The span ends when the tuple resolves, so for SSE and WebSocket it covers startup only. Its child is one `CLIENT` span per HTTP attempt or per SSE or WebSocket connection. A call without an active parent span starts a new trace, as any OpenTelemetry span does; choose what is kept with the SDK's sampler. Without a tracer there are no local spans and no span hooks.\n\n- `meter` — Optional. Records `defjs.client.operation.duration` (seconds, per operation call, with `defjs.operation.name` and, on failure, `error.type` set to the fault code) and the transport metrics. Without it no package metrics are recorded.\n\n- `logger` — Optional. A `Logger` from `@opentelemetry/api-logs`, not a Winston/Pino Logger. A failed operation call emits one `WARN` LogRecord, `defjs.client.operation.exception`, with `defjs.operation.name`, `error.type` (the fault code), `exception.type` and the `defjs.meta.*` attributes, correlated with the operation span. An SSE stream or WebSocket session that fails after it opened emits one more on its transport event. Caller cancellation logs nothing. Without a logger no LogRecords are emitted. Defjs never obtains a global logger or owns its provider.\n\n- `propagator` — Defaults to W3C Trace Context + Baggage.\n\n- `includeErrorDiagnostics` — Defaults to `false`. With `true`, failures also export their error text: a failed span gets the error message as its status description, its `exception` events carry `exception.message` and `exception.stacktrace`, and failure logs carry `exception.message` and `exception.stacktrace`. For an operation call that is the fault's `message` and `stack`; a fault's message is often its cause's message, and platform error text can contain the request URL with its query. The cause chain and the enumerable fields of an error are never exported. This is not a redaction control: redact in an SDK processor if you need one.\n\n- `http`, `sse`, `webSocket` — Per-transport options. Omitting a block leaves it unset and the transport enabled. A transport is disabled only by `{ enabled: false }`. `withOpenTelemetryServer` reads each present block once and copies its fields.",
     "related": [
       "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",
       "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions",
@@ -8312,7 +8508,7 @@
       },
       {
         "name": "logger",
-        "description": "Optional logger; emits WARN diagnostics for failed outbound requests and connections.",
+        "description": "Optional logger; emits one WARN LogRecord per failed operation call, and per SSE or WebSocket connection that fails after it opened.",
         "type": "Logger | undefined",
         "simplifiedType": "object",
         "required": false,
@@ -8329,8 +8525,8 @@
         "tags": []
       },
       {
-        "name": "requireParentSpan",
-        "description": "With a tracer, bypass instrumentation when no active parent span exists. Ignored without a tracer.",
+        "name": "includeErrorDiagnostics",
+        "description": "Export error messages and stacks on failed spans and failure logs. Defaults to `false`.",
         "type": "boolean | undefined",
         "simplifiedType": "union",
         "required": false,
@@ -8367,7 +8563,7 @@
     ],
     "overloads": [
       {
-        "signature": "interface OpenTelemetryServerOptions {\n  tracer?: Tracer;\n  meter?: Meter;\n  logger?: Logger;\n  propagator?: TextMapPropagator;\n  requireParentSpan?: boolean;\n  http?: OpenTelemetryServerHttpOptions;\n  sse?: OpenTelemetryServerSSEOptions;\n  webSocket?: OpenTelemetryServerWebSocketOptions;\n}",
+        "signature": "interface OpenTelemetryServerOptions {\n  tracer?: Tracer;\n  meter?: Meter;\n  logger?: Logger;\n  propagator?: TextMapPropagator;\n  includeErrorDiagnostics?: boolean;\n  http?: OpenTelemetryServerHttpOptions;\n  sse?: OpenTelemetryServerSSEOptions;\n  webSocket?: OpenTelemetryServerWebSocketOptions;\n}",
         "parameters": []
       }
     ]
@@ -8379,7 +8575,7 @@
     "slug": "opentelemetry-server/opentelemetryserversseoptions-type",
     "source": "packages/opentelemetry-server/src/option.ts",
     "group": "opentelemetry-server",
-    "description": "Options for the SSE transport — the shared options with the stream handle in responseHook.\n\nSet on `sse` in `OpenTelemetryServerOptions`. It has no fields of its own: `enabled`, `startSpanHook`, `requestHook` and `responseHook` come from `OpenTelemetryServerTransportOptions`.\n\n- `responseHook(span, stream, req)` runs once the stream has opened, before the span records `sse.connected`. `stream` is the `EventStreamHandle` the transport returned; `req` is the original `HttpRequest`.\n\n- SSE is traced at connection level. After startup the span stays open until `stream.closed` settles, and records `sse.connected`, then one of `sse.closed` (server EOF), `sse.aborted` (`stream.close()`, or a caller abort of the open stream or of the handshake whose reason is not `TimeoutError`; the span ends with its status unset and the connection metrics carry `defjs.result` `aborted`), or `sse.error` (including an abort whose reason is `TimeoutError`, which ends the span `ERROR` with `error.type` `timeout`). No per-event spans are created. Reconnects happen inside the transport without rerunning interceptors, so `url.full`, `server.address` and `server.port` describe the first connection even when a reconnect picks another endpoint.\n\n- A non-2xx handshake is observed as a connection failure: the span ends `ERROR` and, with a `logger`, one `WARN` is emitted whatever the response body.\n\nPass `{ enabled: false }` to skip SSE instrumentation. Span hooks run only when a `tracer` is supplied.",
+    "description": "Options for the SSE transport — the shared options with the stream handle in responseHook.\n\nSet on `sse` in `OpenTelemetryServerOptions`. It has no fields of its own: `enabled`, `startSpanHook`, `requestHook` and `responseHook` come from `OpenTelemetryServerTransportOptions`.\n\n- `responseHook(span, stream, req)` runs once the stream has opened, before the span records `sse.connected`. `stream` is the `EventStreamHandle` the transport returned; `req` is the original `HttpRequest`.\n\n- SSE is traced at connection level. After startup the span stays open until `stream.closed` settles, and records `sse.connected`, then one of `sse.closed` (server EOF), `sse.aborted` (`stream.close()`, or a caller abort of the open stream or of the handshake whose reason is not `TimeoutError`; the span ends with its status unset and the connection metrics carry `defjs.result` `aborted`), or `sse.error` (including an abort whose reason is `TimeoutError`, which ends the span `ERROR` with `error.type` `timeout`). No per-event spans are created. Reconnects happen inside the transport without rerunning interceptors, so `url.full`, `server.address` and `server.port` describe the first connection even when a reconnect picks another endpoint.\n\n- A non-2xx handshake is observed as a connection failure: the span ends `ERROR`. The operation call then fails and logs once; a failure after the stream opened logs once on the `defjs.client.sse.exception` event.\n\nPass `{ enabled: false }` to skip SSE instrumentation. Span hooks run only when a `tracer` is supplied.",
     "related": [
       "@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"
     ],
@@ -8402,7 +8598,7 @@
     "slug": "opentelemetry-server/opentelemetryservertransportoptions-type",
     "source": "packages/opentelemetry-server/src/option.ts",
     "group": "opentelemetry-server",
-    "description": "Shared per-transport OpenTelemetry client options: whether the transport is enabled and its span hooks, generic over the response type.\n\n`TResponse` is what `responseHook` receives: `HttpResponse<unknown>` for HTTP, `EventStreamHandle<unknown>` for SSE, `WebSocketSessionLike` for WebSocket. See {@link OpenTelemetryServerHttpOptions}, {@link OpenTelemetryServerSSEOptions} and {@link OpenTelemetryServerWebSocketOptions}.\n\n`enabled` defaults to `true`; only `enabled: false` turns the transport off.\n\nSpan hooks run only when a `tracer` is supplied. `startSpanHook` runs synchronously before span creation for its own transport. Its attributes are applied after built-in attributes, so the application may override `url.full` or another initial value. If it throws, Defjs creates the span with built-in attributes and continues the request. `requestHook` runs after span creation and before the request is sent; `responseHook` runs after the transport result is returned. Both may return a promise, but neither is awaited: a throw or rejection never blocks or fails the operation. `responseHook` receives the original request as its third argument.\n\nWhile `span.isRecording()` is true, hook failures record `defjs.otel.hook.error` and `exception` events. The `exception` event carries only `exception.type` (the class name, not a Defjs fault code), never `exception.message` or `exception.stacktrace`, because runtime error text can include the full request URL or a response body fragment; the same rule applies to the `exception` event recorded when a transport fails. For non-recording spans (ended or unsampled), failures go to the OpenTelemetry diagnostic logger through `diag.error`. Applications must configure `diag.setLogger(...)` from `@opentelemetry/api` to receive them; there is no automatic output by default. The package does not initialize the SDK, and this diagnostic is not a separate SDK `LogRecord`.\n\nCaller cancellation is not a failure, on every transport. An abort cause that is not a timeout (`ERR_ABORTED`, or an `AbortError`) leaves the span status unset, records no exception and no `error.type`, and adds the span event `http.aborted`, `sse.aborted` or `websocket.aborted`. The duration metrics are still recorded, without `error.type`; the connection metrics carry `defjs.result` `aborted`. No log is emitted. A timeout (`ERR_TIMEOUT`, or a `TimeoutError` such as the reason of `AbortSignal.timeout()`) stays a failure: the span ends `ERROR` and `error.type` is `timeout`. There is no `timeout` option; a deadline is `signal`.\n\nBy default, `url.full` resolves only `request.endpoint` against optional `request.baseEndpoint`; `request.query` is not appended. That boundary is not query redaction. As the OpenTelemetry semantic conventions require, credentials in the endpoint's userinfo are replaced with `REDACTED:REDACTED`, and the values of the default sensitive query keys (`sig`, `Signature`, `AWSAccessKeyId`, `X-Amz-Signature`, `X-Amz-Credential`, `X-Amz-Security-Token`, `X-Goog-Signature`) are replaced with `REDACTED`, but the package has no other built-in redactor or sensitive-key policy. A `url.full` returned by `startSpanHook` is redacted the same way, but a URL an application writes through the `Span` object in `requestHook` or `responseHook` is not intercepted, so construct and, if needed, redact it explicitly.\n\nEvery span carries `http.request.method`, which is `GET` for the WebSocket handshake. A method outside RFC 9110, `PATCH` and `QUERY` is recorded as `_OTHER`, and a method that Fetch sends in upper case is recorded in upper case; `http.request.method_original` keeps the method as given when it differs.",
+    "description": "Shared per-transport OpenTelemetry client options: whether the transport is enabled and its span hooks, generic over the response type.\n\n`TResponse` is what `responseHook` receives: `HttpResponse<unknown>` for HTTP, `EventStreamHandle<unknown>` for SSE, `WebSocketSessionLike` for WebSocket. See {@link OpenTelemetryServerHttpOptions}, {@link OpenTelemetryServerSSEOptions} and {@link OpenTelemetryServerWebSocketOptions}.\n\n`enabled` defaults to `true`; only `enabled: false` turns the transport off.\n\nSpan hooks run only when a `tracer` is supplied. `startSpanHook` runs synchronously before span creation for its own transport. Its attributes are applied after built-in attributes, so the application may override `url.full` or another initial value. If it throws, Defjs creates the span with built-in attributes and continues the request. `requestHook` runs after span creation and before the request is sent; `responseHook` runs after the transport result is returned. Both may return a promise, but neither is awaited: a throw or rejection never blocks or fails the operation. `responseHook` receives the original request as its third argument.\n\nThese options shape the transport span: one `CLIENT` span per HTTP attempt, or per SSE or WebSocket connection. It is a child of the operation span, which `withOpenTelemetryServer` creates for the whole operation call and which no hook reaches; see {@link OpenTelemetryServerOptions}.\n\nWhile `span.isRecording()` is true, hook failures record `defjs.otel.hook.error` and `exception` events. The `exception` event carries only `exception.type` (the class name, not a Defjs fault code), and neither `exception.message` nor `exception.stacktrace` unless `includeErrorDiagnostics` is on, because runtime error text can include the full request URL or a response body fragment; the same rule applies to the `exception` event recorded when a transport fails. For non-recording spans (ended or unsampled), failures go to the OpenTelemetry diagnostic logger through `diag.error`. Applications must configure `diag.setLogger(...)` from `@opentelemetry/api` to receive them; there is no automatic output by default. The package does not initialize the SDK, and this diagnostic is not a separate SDK `LogRecord`.\n\nCaller cancellation is not a failure, on every transport. An abort cause that is not a timeout (`ERR_ABORTED`, or an `AbortError`) leaves the span status unset, records no exception and no `error.type`, and adds the span event `http.aborted`, `sse.aborted` or `websocket.aborted`. The duration metrics are still recorded, without `error.type`; the connection metrics carry `defjs.result` `aborted`. A timeout (`ERR_TIMEOUT`, or a `TimeoutError` such as the reason of `AbortSignal.timeout()`) stays a failure: the span ends `ERROR` and `error.type` is `timeout`. There is no `timeout` option; a deadline is `signal`.\n\nBy default, `url.full` resolves only `request.endpoint` against optional `request.baseEndpoint`; `request.query` is not appended. That boundary is not query redaction. As the OpenTelemetry semantic conventions require, credentials in the endpoint's userinfo are replaced with `REDACTED:REDACTED`, and the values of the default sensitive query keys (`sig`, `Signature`, `AWSAccessKeyId`, `X-Amz-Signature`, `X-Amz-Credential`, `X-Amz-Security-Token`, `X-Goog-Signature`) are replaced with `REDACTED`, but the package has no other built-in redactor or sensitive-key policy. A `url.full` returned by `startSpanHook` is redacted the same way, but a URL an application writes through the `Span` object in `requestHook` or `responseHook` is not intercepted, so construct and, if needed, redact it explicitly.\n\nEvery span carries `http.request.method`, which is `GET` for the WebSocket handshake. A method outside RFC 9110, `PATCH` and `QUERY` is recorded as `_OTHER`, and a method that Fetch sends in upper case is recorded in upper case; `http.request.method_original` keeps the method as given when it differs.",
     "related": [
       "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",
       "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions",
@@ -8470,7 +8666,7 @@
     "slug": "opentelemetry-server/opentelemetryserverwebsocketoptions-type",
     "source": "packages/opentelemetry-server/src/option.ts",
     "group": "opentelemetry-server",
-    "description": "Options for the WebSocket transport — the shared options plus queryPropagation.\n\nSet on `webSocket` in `OpenTelemetryServerOptions`. `enabled`, `startSpanHook`, `requestHook` and `responseHook` come from `OpenTelemetryServerTransportOptions`; `responseHook(span, session, req)` receives the opened `WebSocketSessionLike` and the original `HttpRequest`.\n\n`queryPropagation` defaults to `false`: the WebSocket query string is left unchanged and no trace context or baggage is written into the URL. Browser WebSocket clients usually cannot set headers, so enabling it writes the propagated context to the end of the query string, replacing any parameter of the same name. Query strings can be recorded by proxies, access logs and APM tools, and baggage values can be sensitive. Turn it on only after you accept that exposure.\n\nWebSocket is traced at connection level. The span stays open until `session.closed` settles. It records `websocket.connected`, then `websocket.closed` for a normal close, `websocket.aborted` for a caller abort, or `websocket.error`. A close frame from the server counts as normal with any code, including 1011. An abrupt drop without a close frame (1006) ends the session in error and logs once, on every runtime. A caller abort, of an open session or while the WebSocket is still connecting, ends the span with its status unset and no log, and the connection metrics carry `defjs.result` `aborted`. When the abort reason is `TimeoutError`, it is a connection failure instead: the span ends `ERROR` with `error.type` `timeout`, one log is emitted, and an open session also records `websocket.error`. No per-message spans are created. The span carries `http.request.method` `GET`, the method of the opening handshake. `url.full` uses the `ws:` or `wss:` form of the connection URL. As with SSE, connection attributes describe the first connection; a reconnect to another endpoint does not change them.\n\nPass `{ enabled: false }` to skip WebSocket instrumentation. Span hooks run only when a `tracer` is supplied.",
+    "description": "Options for the WebSocket transport — the shared options plus queryPropagation.\n\nSet on `webSocket` in `OpenTelemetryServerOptions`. `enabled`, `startSpanHook`, `requestHook` and `responseHook` come from `OpenTelemetryServerTransportOptions`; `responseHook(span, session, req)` receives the opened `WebSocketSessionLike` and the original `HttpRequest`.\n\n`queryPropagation` defaults to `false`: the WebSocket query string is left unchanged and no trace context or baggage is written into the URL. Browser WebSocket clients usually cannot set headers, so enabling it writes the propagated context to the end of the query string, replacing any parameter of the same name. Query strings can be recorded by proxies, access logs and APM tools, and baggage values can be sensitive. Turn it on only after you accept that exposure.\n\nWebSocket is traced at connection level. The span stays open until `session.closed` settles. It records `websocket.connected`, then `websocket.closed` for a normal close, `websocket.aborted` for a caller abort, or `websocket.error`. A close frame from the server counts as normal with any code, including 1011. An abrupt drop without a close frame (1006) ends the session in error and logs once on the `defjs.client.websocket.exception` event, on every runtime. A caller abort, of an open session or while the WebSocket is still connecting, ends the span with its status unset and no log, and the connection metrics carry `defjs.result` `aborted`. When the abort reason is `TimeoutError`, it is a connection failure instead: the span ends `ERROR` with `error.type` `timeout`, one log is emitted (by the operation call while connecting, on the connection event for an open session), and an open session also records `websocket.error`. No per-message spans are created. The span carries `http.request.method` `GET`, the method of the opening handshake. `url.full` uses the `ws:` or `wss:` form of the connection URL. As with SSE, connection attributes describe the first connection; a reconnect to another endpoint does not change them.\n\nPass `{ enabled: false }` to skip WebSocket instrumentation. Span hooks run only when a `tracer` is supplied.",
     "related": [
       "@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"
     ],
@@ -8539,7 +8735,7 @@
     "slug": "opentelemetry-server/withopentelemetryserver",
     "source": "packages/opentelemetry-server/src/option.ts",
     "group": "opentelemetry-server",
-    "description": "Client option that installs outbound OpenTelemetry interceptors for HTTP, SSE, and WebSocket.\n\nAppends one interceptor per enabled transport, in the order HTTP, SSE, WebSocket. Apply it at `createClient` time. It does not initialize the OpenTelemetry SDK or acquire global tracer, meter, or logger handles: pass the ones your application owns. Each transport can be toggled or customized via `http`, `sse`, and `webSocket`.\n\n`options` is required. It carries `tracer`, `meter`, `logger`, `propagator`, `requireParentSpan`, and the `http` / `sse` / `webSocket` transport options. Pass `{}` to install the interceptors with propagation only.\n\nEach of `tracer`, `meter` and `logger` is optional and works without the others. Without `tracer`, the plugin creates no local spans, never calls `trace.getTracer(...)`, and skips `startSpanHook`, `requestHook` and `responseHook`. Propagation still forwards the extracted parent context.\n\nHTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a transport to skip it.\n\n`http`, `sse`, and `webSocket` are read once, in that order, during this call. A missing block stays missing. `tracer`, `meter`, `logger`, `propagator`, and hook functions keep their identity. Replacing a block, or changing its fields, after this call does not affect the returned option.\n\n`enabled` is read next. Only `enabled: false` disables a block, and that branch does not read its hooks or `queryPropagation`. Otherwise the copy continues with `startSpanHook`, `requestHook`, and `responseHook`; a WebSocket block then copies `queryPropagation`. Those getters run here, once. If a getter throws, the exception leaves this call immediately and later blocks are not read. It is not caught or deferred until the option is applied.\n\nThe supplied Meter's instrument creation methods are called each time the returned option is applied to a client config, not during this call. The Meter/SDK controls instrument identity and aggregation. Each duration histogram receives its own copy of the default bucket boundaries.",
+    "description": "Client option that installs outbound OpenTelemetry interceptors for every operation call and for HTTP, SSE, and WebSocket.\n\nAppends an operation interceptor when a `tracer`, `meter`, or `logger` is supplied, then one interceptor per enabled transport, in the order HTTP, SSE, WebSocket. Apply it at `createClient` time, once per client: every operation the client runs is observed through it. It does not initialize the OpenTelemetry SDK or acquire global tracer, meter, or logger handles: pass the ones your application owns. Each transport can be toggled or customized via `http`, `sse`, and `webSocket`.\n\n`options` is required. It carries `tracer`, `meter`, `logger`, `propagator`, `includeErrorDiagnostics`, and the `http` / `sse` / `webSocket` transport options. Pass `{}` to install the interceptors with propagation only.\n\nEach of `tracer`, `meter` and `logger` is optional and works without the others. Without `tracer`, the plugin creates no local spans, never calls `trace.getTracer(...)`, and skips `startSpanHook`, `requestHook` and `responseHook`. Propagation still forwards the extracted parent context.\n\nHTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a transport to skip it: its operations then produce no operation span, metric or log either.\n\n`http`, `sse`, and `webSocket` are read once, in that order, during this call. A missing block stays missing. `tracer`, `meter`, `logger`, `propagator`, and hook functions keep their identity. Replacing a block, or changing its fields, after this call does not affect the returned option.\n\n`enabled` is read next. Only `enabled: false` disables a block, and that branch does not read its hooks or `queryPropagation`. Otherwise the copy continues with `startSpanHook`, `requestHook`, and `responseHook`; a WebSocket block then copies `queryPropagation`. Those getters run here, once. If a getter throws, the exception leaves this call immediately and later blocks are not read. It is not caught or deferred until the option is applied.\n\nThe supplied Meter's instrument creation methods are called each time the returned option is applied to a client config, not during this call. The Meter/SDK controls instrument identity and aggregation. Each duration histogram receives its own copy of the default bucket boundaries.",
     "related": [
       "@defjs/core:ClientOption",
       "@defjs/opentelemetry-server:OpenTelemetryServerOptions"

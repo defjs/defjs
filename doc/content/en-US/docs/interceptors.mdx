@@ -7,7 +7,7 @@ description: Apply authentication and transport policies to the application clie
 
 Interceptors attach cross-cutting execution policies—authentication headers, request signing, maintenance short-circuiting, or `Retry-After` handling—to the application's `Client` without modifying SDK operation definitions.
 
-Input validation and `builder` mapping run **before** the interceptor chain; HTTP status dispatch and `output` / `error` struct validation run **after** the chain.
+Input validation and `builder` mapping run **before** the interceptor chain; HTTP status dispatch and `output` / `error` struct validation run **after** the chain. An [operation interceptor](#operation-interceptors) wraps all of it.
 
 ## 1. Create and register an interceptor
 
@@ -80,13 +80,28 @@ A WebSocket interceptor may call `next(req)` **at most once**. When wrapping the
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. Built-in factories and helpers
+## 5. Observe a whole operation call [#operation-interceptors]
+
+A transport interceptor sees one request at a time: an input that fails validation never reaches it, each retry runs it again, and the response is decoded after it returns. To observe the call itself, from the moment `getOrder(client, input)` is called until its tuple resolves, use `createOperationInterceptor`:
+
+<include cwd lang="typescript">
+  examples/api/create-operation-interceptor.ts#example
+</include>
+
+- **What it sees**: `call` describes the definition: `transport` (`"http"`, `"sse"` or `"websocket"`), `method`, the `path` template and `meta`. It does not carry the input or the request, because neither exists yet. `next()` resolves with the operation's tuple, so `err` is the final fault: `REQ_INPUT_INVALID`, `REQ_BUILD_FAILED`, `HTTP_STATUS`, `RES_STRUCT_MISMATCH` and the rest.
+- **It observes, it does not change**: `next()` takes no arguments, a second `next()` returns the same promise without running the call again, and the function can only resolve with what `next()` resolved with. Change requests and responses in a transport interceptor.
+- **Order**: Operation interceptors run outside every transport interceptor, in registration order. Code that runs around `next()`, such as an OpenTelemetry `context.with`, is in effect for the whole call, the transport interceptors included.
+- **Streams and sessions**: An SSE or WebSocket call resolves once the stream or session is open; what happens on it later is observed through its `closed`.
+- **Failures**: A throw or rejection resolves the operation with `EXT_INTERCEPTOR_FAILED` and the thrown value as `cause`. A stream or session the call had already opened is closed.
+
+## 6. Built-in factories and helpers
 
 | Export                                         | Transport | Description                                                                                  |
 | ---------------------------------------------- | --------- | -------------------------------------------------------------------------------------------- |
 | `createHttpInterceptor(fn)`                    | HTTP      | Wraps `(req, next) => Promise<HttpResponse<unknown>>`                                        |
 | `createSSEInterceptor(fn)`                     | SSE       | Wraps `(req, next) => Promise<EventStreamHandle<unknown>>`                                   |
 | `createWebSocketInterceptor(fn)`               | WebSocket | Wraps `(req, next) => Promise<WebSocketSessionLike>`                                         |
+| `createOperationInterceptor(fn)`               | All       | Wraps `(call, next) => Promise<result>` around a whole operation call                        |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injects `Authorization: Basic ...` from a synchronous credential provider called per request |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injects `Authorization: Basic ...` on SSE handshakes                                         |
 

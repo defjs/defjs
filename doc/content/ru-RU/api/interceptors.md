@@ -5,7 +5,7 @@ description: Конструкторы перехватчиков HTTP, SSE и We
 
 # Перехватчики
 
-Оберните `next` для одного транспорта. Регистрируйте через `withInterceptors`. Смешанные списки фильтруются по виду, когда выполняется операция.
+Оберните `next` для одного транспорта или для всего вызова операции. Регистрируйте через `withInterceptors`. Смешанные списки фильтруются по виду, когда выполняется операция.
 
 ## createHttpInterceptor()
 
@@ -29,6 +29,14 @@ description: Конструкторы перехватчиков HTTP, SSE и We
 
 Обёртка или сессия с short-circuit должна пересылать тот же механизм освобождения `[Symbol.asyncDispose]()`, что и её жизненный цикл `close` / `closed`; отдельного разрешённого promise недостаточно.
 
+## createOperationInterceptor()
+
+<ApiSignature name="createOperationInterceptor, OperationInterceptorFn, OperationCall, OperationResult" />
+
+`next()` выполняет весь вызов: валидацию input, выбор эндпоинта, builder, каждую попытку с её транспортными перехватчиками и повторами, а также декодирование ответа. Он не принимает аргументов и выполняет вызов один раз, сколько бы раз его ни вызывали. Функция обобщена по результату, поэтому она может завершиться только тем, чем завершился `next()`. Перехватчики операции выполняются для каждого транспорта, снаружи транспортных перехватчиков. Брошенная ошибка или отклонение promise завершают операцию сбоем `EXT_INTERCEPTOR_FAILED`, а уже открытые вызовом поток или сессия закрываются.
+
+<include cwd>examples/api/create-operation-interceptor.ts#example</include>
+
 ## Типы с тегом
 
 ## Interceptor
@@ -39,7 +47,9 @@ description: Конструкторы перехватчиков HTTP, SSE и We
 
 ## WebSocketInterceptor
 
-<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor" />
+## OperationInterceptor
+
+<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor, OperationInterceptor" />
 
 ## Базовая аутентификация
 

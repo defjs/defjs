@@ -5,7 +5,7 @@ description: HTTP、SSE、WebSocket のインターセプターコンストラ�
 
 # Interceptors
 
-1 つのトランスポート向けに `next` を包みます。`withInterceptors` で登録します。混在したリストは、操作が実行されるときに種類ごとにフィルタされます。
+1 つのトランスポート、または操作呼び出し全体向けに `next` を包みます。`withInterceptors` で登録します。混在したリストは、操作が実行されるときに種類ごとにフィルタされます。
 
 ## createHttpInterceptor()
 
@@ -29,6 +29,14 @@ description: HTTP、SSE、WebSocket のインターセプターコンストラ�
 
 ラッパーやショートサーキットのセッションは、`close` / `closed` のライフサイクルと同じ `[Symbol.asyncDispose]()` の破棄処理を委譲する必要があります。無関係な解決済み promise を返すのでは足りません。
 
+## createOperationInterceptor()
+
+<ApiSignature name="createOperationInterceptor, OperationInterceptorFn, OperationCall, OperationResult" />
+
+`next()` は呼び出し全体を実行します。入力の検証、エンドポイントの選択、builder、トランスポートインターセプターとリトライを含むすべての試行、レスポンスのデコードです。引数は取らず、何度呼んでも呼び出しは 1 回だけ実行されます。関数は結果についてジェネリックなので、`next()` が解決した値でのみ解決できます。操作インターセプターはすべてのトランスポートに対して、トランスポートインターセプターの外側で実行されます。throw や reject があると操作は `EXT_INTERCEPTOR_FAILED` で解決され、呼び出しがすでに開いていたストリームやセッションは閉じられます。
+
+<include cwd>examples/api/create-operation-interceptor.ts#example</include>
+
 ## タグ付きの型
 
 ## Interceptor
@@ -39,7 +47,9 @@ description: HTTP、SSE、WebSocket のインターセプターコンストラ�
 
 ## WebSocketInterceptor
 
-<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor" />
+## OperationInterceptor
+
+<ApiSignature name="Interceptor, HttpInterceptor, SSEInterceptor, WebSocketInterceptor, OperationInterceptor" />
 
 ## Basic 認証
 

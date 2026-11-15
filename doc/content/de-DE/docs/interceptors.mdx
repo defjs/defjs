@@ -7,7 +7,7 @@ description: Wende Authentifizierungs- und Transportrichtlinien auf den Anwendun
 
 Interceptors binden übergreifende Ausführungsregeln – wie Authentifizierungs-Header, Request-Signierung, Maintenance-Kurzschlüsse oder die Behandlung von `Retry-After` – direkt an den `Client` der Anwendung, ohne die SDK-Operationsdefinitionen anzupassen.
 
-Input-Validierung und das `builder`-Mapping laufen **vor** der Interceptor-Kette; HTTP-Status-Dispatch und die `output`- / `error`-Struct-Validierung laufen **nach** der Kette.
+Input-Validierung und das `builder`-Mapping laufen **vor** der Interceptor-Kette; HTTP-Status-Dispatch und die `output`- / `error`-Struct-Validierung laufen **nach** der Kette. Ein [Operations-Interceptor](/de-DE/docs/interceptors#operation-interceptors) umschließt all das.
 
 ## 1. Interceptor erstellen und registrieren
 
@@ -80,13 +80,28 @@ Ein WebSocket-Interceptor darf `next(req)` **höchstens einmal** aufrufen. Beim 
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. Eingebaute Factories und Helfer
+## 5. Einen ganzen Operationsaufruf beobachten [#operation-interceptors]
+
+Ein Transport-Interceptor sieht jeweils einen Request: Ein Input, der die Validierung nicht besteht, erreicht ihn nie, jeder Retry führt ihn erneut aus, und die Response wird erst nach seiner Rückkehr dekodiert. Um den Aufruf selbst zu beobachten, von dem Moment, in dem `getOrder(client, input)` aufgerufen wird, bis sein Tupel auflöst, verwende `createOperationInterceptor`:
+
+<include cwd lang="typescript">
+  examples/api/create-operation-interceptor.ts#example
+</include>
+
+- **Was er sieht**: `call` beschreibt die Definition: `transport` (`"http"`, `"sse"` oder `"websocket"`), `method`, das `path`-Template und `meta`. Input und Request enthält es nicht, weil beides noch nicht existiert. `next()` löst mit dem Tupel der Operation auf, `err` ist also der endgültige Fault: `REQ_INPUT_INVALID`, `REQ_BUILD_FAILED`, `HTTP_STATUS`, `RES_STRUCT_MISMATCH` und so weiter.
+- **Er beobachtet, er verändert nichts**: `next()` nimmt keine Argumente, ein zweites `next()` gibt dasselbe Promise zurück, ohne den Aufruf erneut auszuführen, und die Funktion kann nur mit dem auflösen, womit `next()` aufgelöst hat. Requests und Responses änderst du in einem Transport-Interceptor.
+- **Reihenfolge**: Operations-Interceptors laufen außerhalb jedes Transport-Interceptors, in Registrierungsreihenfolge. Code, der um `next()` herum läuft, etwa ein `context.with` von OpenTelemetry, gilt für den ganzen Aufruf, einschließlich der Transport-Interceptors.
+- **Streams und Sessions**: Ein SSE- oder WebSocket-Aufruf löst auf, sobald der Stream oder die Session offen ist; was danach darauf passiert, beobachtest du über sein `closed`.
+- **Fehler**: Ein Throw oder eine Ablehnung löst die Operation mit `EXT_INTERCEPTOR_FAILED` auf, mit dem geworfenen Wert als `cause`. Ein Stream oder eine Session, die der Aufruf schon geöffnet hatte, wird geschlossen.
+
+## 6. Eingebaute Factories und Helfer
 
 | Export                                         | Transport | Beschreibung                                                                                                    |
 | ---------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
 | `createHttpInterceptor(fn)`                    | HTTP      | Umhüllt `(req, next) => Promise<HttpResponse<unknown>>`                                                         |
 | `createSSEInterceptor(fn)`                     | SSE       | Umhüllt `(req, next) => Promise<EventStreamHandle<unknown>>`                                                    |
 | `createWebSocketInterceptor(fn)`               | WebSocket | Umhüllt `(req, next) => Promise<WebSocketSessionLike>`                                                          |
+| `createOperationInterceptor(fn)`               | Alle      | Umhüllt `(call, next) => Promise<result>` um einen ganzen Operationsaufruf                                      |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injiziert `Authorization: Basic ...` über einen synchronen Credential-Provider, der pro Request aufgerufen wird |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injiziert `Authorization: Basic ...` bei SSE-Handshakes                                                         |
 

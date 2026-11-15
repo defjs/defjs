@@ -213,13 +213,16 @@ void (async () => {
 
 ## 3. Server-side OpenTelemetry (`@defjs/opentelemetry-server`)
 
-`@defjs/opentelemetry-server` instruments outbound HTTP, SSE, and WebSocket operations on a `@defjs/core` client via `withOpenTelemetryServer({ tracer?, meter?, logger?, ... })`.
+`@defjs/opentelemetry-server` instruments every operation call and its outbound HTTP, SSE, and WebSocket transport on a `@defjs/core` client via `withOpenTelemetryServer({ tracer?, meter?, logger?, ... })`. Install it once on the client every call goes through; call sites then do not log failures themselves.
 
-- **Boundary**: The plugin does **not** initialize the OpenTelemetry SDK—configure your `TracerProvider`, `MeterProvider`, and `LoggerProvider` in application bootstrap code.
+- **Boundary**: The plugin does **not** initialize the OpenTelemetry SDK—configure your `TracerProvider`, `MeterProvider`, `LoggerProvider`, and context manager in application bootstrap code.
+- **One call, one operation span**: Each call gets an `INTERNAL` span named `defjs.operation.name` (such as `GET /orders/:id`) from the call to its tuple, covering input validation, the builder, retries, and response decoding. A failure ends it `ERROR` with `error.type` set to the fault code (`REQ_INPUT_INVALID`, `RES_STRUCT_MISMATCH`, `NET_TIMEOUT`, ...). The meter records `defjs.client.operation.duration`, and the logger emits one `WARN` `defjs.client.operation.exception` record per failed call.
+- **Transport spans**: Each HTTP attempt, and each SSE or WebSocket connection, gets a `CLIENT` span under the operation span. SSE and WebSocket reconnects retain one logical-session span; a failure after open logs once on `defjs.client.sse.exception` / `defjs.client.websocket.exception`.
+- **Parents**: A call inside an active span joins its trace; a call without one starts its own trace. There is no option to skip parentless calls; use the SDK sampler.
 - **Application-defined `meta`**: Attach `meta` (`{ [key: string]: unknown }`, for example `{ operation: "orders.read" }`) when interceptors need context. `@defjs/opentelemetry-server` reports each key as a `defjs.meta.<key>` attribute on spans and failure logs (not metrics); an empty `meta` adds nothing. It is one read-only object shared by every call of the definition, and Defjs core never sends it with the request.
 - **WebSocket trace propagation**: Browser/standard WebSockets cannot set handshake headers. Enable `webSocket: { queryPropagation: true }` only when the server explicitly reads W3C `traceparent` / `tracestate` from query parameters (it replaces any existing same-name query pairs).
-- **Attempts vs logical sessions**: HTTP retries emit one span per attempt as siblings under the active parent. SSE and WebSocket reconnects retain one logical-session span across reconnects. Caller aborts (`NET_ABORTED`) leave span status unset and emit no error log; timeouts (`NET_TIMEOUT`) mark the span `ERROR` with `error.type: "timeout"`.
-- **Privacy defaults**: Request/response bodies, full headers, and `request.query` on `url.full` are never captured by default.
+- **Cancellation and timeouts**: Caller aborts (`NET_ABORTED`) leave span status unset and emit no log; timeouts mark the transport span `ERROR` with `error.type: "timeout"` and the operation span with `NET_TIMEOUT`.
+- **Privacy defaults**: Request/response bodies, full headers, `request.query` on `url.full`, and error messages and stacks are never captured by default. `includeErrorDiagnostics: true` exports the error message and stack on failed spans and failure logs; platform error text can quote the request URL, and the cause chain is never exported.
 
 ### Best practice: server client with OpenTelemetry tracing, metrics, and logs
 

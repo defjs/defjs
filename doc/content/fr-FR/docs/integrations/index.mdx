@@ -55,7 +55,7 @@ Un plugin de framework transmet un [`DerivableClient`](/fr-FR/api/core/derivable
 
 ### 2. Plugins middleware (`@defjs/opentelemetry-server`)
 
-Un plugin middleware est une fabrique renvoyant une [`ClientOption`](/fr-FR/api/core/clientoption-type). Lorsqu'elle est passée à `createClient(...)`, elle ajoute des intercepteurs HTTP, SSE et/ou WebSocket via `withInterceptors` :
+Un plugin middleware est une fabrique renvoyant une [`ClientOption`](/fr-FR/api/core/clientoption-type). Lorsqu'elle est passée à `createClient(...)`, elle ajoute des intercepteurs d'opération, HTTP, SSE et/ou WebSocket via `withInterceptors` :
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab>

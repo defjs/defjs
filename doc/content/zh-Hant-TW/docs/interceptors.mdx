@@ -7,7 +7,7 @@ description: 在應用程式 Client 上套用身分驗證與傳輸策略，不�
 
 攔截器能把橫切面的執行策略——身分驗證標頭、請求簽署、維護中短路，或 `Retry-After` 處理——掛到應用程式的 `Client` 上，完全不必修改 SDK 的操作定義。
 
-輸入驗證與 `builder` 對應會在攔截器鏈**之前**執行；HTTP 狀態分派與 `output` / `error` struct 驗證則在鏈**之後**執行。
+輸入驗證與 `builder` 對應會在攔截器鏈**之前**執行；HTTP 狀態分派與 `output` / `error` struct 驗證則在鏈**之後**執行。[操作攔截器](/zh-Hant-TW/docs/interceptors#operation-interceptors)則包住以上全部。
 
 ## 1. 建立並註冊攔截器
 
@@ -80,13 +80,28 @@ WebSocket 攔截器**最多只能呼叫一次** `next(req)`。包裝回傳的 `W
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. 內建 factory 與輔助函式
+## 5. 觀察整次操作呼叫 [#operation-interceptors]
+
+傳輸攔截器一次只看到一個請求：驗證失敗的輸入到不了它，每次重試都會再執行它，回應則在它回傳之後才解碼。想觀察呼叫本身，也就是從 `getOrder(client, input)` 被呼叫到它的 tuple 解析為止，請使用 `createOperationInterceptor`：
+
+<include cwd lang="typescript">
+  examples/api/create-operation-interceptor.ts#example
+</include>
+
+- **能看到什麼**：`call` 描述定義：`transport`（`"http"`、`"sse"` 或 `"websocket"`）、`method`、`path` 範本與 `meta`。它不帶輸入或請求，因為那時兩者都還不存在。`next()` 以操作的 tuple 解析，所以 `err` 就是最終的 fault：`REQ_INPUT_INVALID`、`REQ_BUILD_FAILED`、`HTTP_STATUS`、`RES_STRUCT_MISMATCH` 等等。
+- **只觀察，不修改**：`next()` 不接受引數，第二次呼叫 `next()` 會回傳同一個 promise，不會再次執行呼叫，函式也只能以 `next()` 解析出的值來解析。要修改請求與回應，請使用傳輸攔截器。
+- **順序**：操作攔截器依註冊順序執行，位於所有傳輸攔截器之外。圍繞 `next()` 執行的程式碼，例如 OpenTelemetry 的 `context.with`，對整次呼叫都有效，包含其中的傳輸攔截器。
+- **串流與工作階段**：SSE 或 WebSocket 呼叫在串流或工作階段開啟後即解析；之後在其上發生的事，透過它的 `closed` 來觀察。
+- **失敗**：拋出例外或 rejection 會讓操作以 `EXT_INTERCEPTOR_FAILED` 解析，拋出的值作為 `cause`。呼叫已開啟的串流或工作階段會被關閉。
+
+## 6. 內建 factory 與輔助函式
 
 | 匯出名稱                                       | 傳輸協定  | 說明                                                              |
 | ---------------------------------------------- | --------- | ----------------------------------------------------------------- |
 | `createHttpInterceptor(fn)`                    | HTTP      | 包裝 `(req, next) => Promise<HttpResponse<unknown>>`              |
 | `createSSEInterceptor(fn)`                     | SSE       | 包裝 `(req, next) => Promise<EventStreamHandle<unknown>>`         |
 | `createWebSocketInterceptor(fn)`               | WebSocket | 包裝 `(req, next) => Promise<WebSocketSessionLike>`               |
+| `createOperationInterceptor(fn)`               | 全部      | 在整次操作呼叫外包裝 `(call, next) => Promise<result>`            |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 從每個請求都會呼叫的同步憑證提供者注入 `Authorization: Basic ...` |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 交握注入 `Authorization: Basic ...`                        |
 

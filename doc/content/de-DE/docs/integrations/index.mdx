@@ -55,7 +55,7 @@ Ein Framework-Plugin reicht einen bestehenden [`DerivableClient`](/de-DE/api/cor
 
 ### 2. Middleware-Plugins (`@defjs/opentelemetry-server`)
 
-Ein Middleware-Plugin ist eine Factory, die eine [`ClientOption`](/de-DE/api/core/clientoption-type) zurückgibt. Wird diese an `createClient(...)` übergeben, hängt sie HTTP-, SSE- und/oder WebSocket-Interceptors über `withInterceptors` an:
+Ein Middleware-Plugin ist eine Factory, die eine [`ClientOption`](/de-DE/api/core/clientoption-type) zurückgibt. Wird diese an `createClient(...)` übergeben, hängt sie Operations-, HTTP-, SSE- und/oder WebSocket-Interceptors über `withInterceptors` an:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab>
