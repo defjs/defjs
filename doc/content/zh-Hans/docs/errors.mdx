@@ -1,15 +1,15 @@
 ---
 title: "错误"
-description: 在 SDK 中声明服务错误契约，并在消费方应用中处理带类型的执行失败。
+description: 在接口定义里声明可预期的错误结构，并在业务代码里通过 error-first 元组统一分类处理。
 ---
 
 # 错误处理
 
-在 Defjs 中，请求、传输和解码失败不会在调用处抛出异常。每个操作都返回错误优先元组（`[err, ...]`），其中 `err` 要么是 `null`，要么是带类型的 `Fault`（原生 `Error` 实例，由 `err.code` 判别）。把这个变量命名为 `err`，并像 Go 一样立刻检查。
+Defjs 遇到入参校验失败、网络异常或响应解码失败时，**不会在调用处 `throw` 异常**。每个操作都会返回一个错误优先的元组 `[err, ...]`：其中 `err` 要么是 `null`，要么是一个带 `code` 判别字段的 `Fault`（本身也是原生 `Error` 实例）。建议统一把错误变量命名为 `err`，像 Go 语言那样在调用后第一时间判断处理。
 
-TypeScript 拒绝的调用是例外：它没有规定的结果，也不是 `Fault`。实际上它通常以平台的 `TypeError` reject。
+唯一会直接 reject 抛出 `TypeError` 的情况，是调用方式本身连 TypeScript 类型检查都通不过（例如根本没传 `Client`、或者传入的 `signal` 不是合法的 `AbortSignal`）——这类非法调用不在契约保障范围内。
 
-## 1. 在 SDK 中声明业务错误，在应用中进行分流
+## 1. 声明错误契约，并在业务处分流
 
 <Tabs items={["穷尽代码分支", "基本状态码检查", "各传输的元组结构"]}>
 <Tab>
@@ -33,45 +33,54 @@ TypeScript 拒绝的调用是例外：它没有规定的结果，也不是 `Faul
 </Tab>
 </Tabs>
 
-### 为什么 HTTP 失败时 `err` 会携带响应元数据？
+### 为什么 HTTP 请求失败时 `err` 上也挂着 `response`？
 
-HTTP 失败时，元组是 `[err, undefined, undefined]`。到达的响应元数据（`status`、`statusText`、`headers`、`url`）直接挂在 `err.response` 上，因此只把 `err` 交给日志记录器或错误处理程序也不会丢失上下文。
+HTTP 请求失败时返回的元组是 `[err, undefined, undefined]`。为了让排查日志或上层错误处理仍然看得到状态码和响应头，Defjs 把拿到的响应元数据（`status`、`statusText`、`headers`、`url`）直接挂在了 `err.response` 上——把 `err` 往外传递时上下文不会丢。
 
-### 每个错误只处理一次
+### 推荐做法：每个错误只处理一次
 
-把元组当作 Go 的 `(T, error)`。调用后立即检查 `if (err)`，并在该代码块内部离开，这样成功路径不会多出缩进；与具体 code 相关的分支（`err.code === "HTTP_STATUS" && err.status === 404`，或 `switch (err.code)`）放在块内，就像 Go 把 `errors.Is` 和 `errors.As` 放在 `if err != nil` 里。错误要么处理（记录日志、展示、回退），要么返回，不能两者都做。只有程序顶层（`main`、UI 事件处理函数、测试）负责处理；其他可能失败的函数都返回自己的错误优先元组 `Promise<[Error, undefined] | [null, T]>`，绝不用 `undefined`、`null` 或 `false` 表示失败。只有一次 Defjs 调用时，原样返回 Fault（Go 的 `return nil, err`）。有多次调用时，按步骤给每个错误命名（`putErr`、`listErr`），并用 `new Error("put object", { cause: putErr })` 包装，对应 `fmt.Errorf("put object: %w", err)`。只有库的契约要求时才抛出，例如 TanStack Query 的 `queryFn`。
+建议把 `[err, data]` 当作 Go 语言的 `(T, error)` 来写，逻辑最清爽：
+
+- **紧接着 `if (err)` 提前返回**：调用完立刻写 `if (err)`，并在 `if` 块内 `return`（后续成功路径不用缩进一层），具体状态码或 `err.code` 分支全部写在 `if (err)` 里面，不要在正常代码流里写 `err?.code`。
+- **处理和返回二选一**：一个错误要么在这里消化掉（打日志、弹提示、走兜底），要么包装后向上返回，切忌“既打了一遍日志又往上抛”导致告警重复。通常只在应用顶层（如 `main`、UI 事件处理器、测试断言）打印或弹窗；下层业务 helper 统一返回 `Promise<[Error, undefined] | [null, T]>`，不要靠返回 `undefined`、`null` 或 `false` 暗示失败。
+- **单步透传、多步包装**：如果 helper 只调一次 Defjs 操作，可以直接原样 `return [err, undefined]`；如果连续调了好几步，请按步骤命名每个错误变量（如 `putErr`、`listErr`），并用 `new Error("put object", { cause: putErr })` 保留根因。只有像 TanStack Query `queryFn` 这种明确要求 Promise reject 的第三方适配边界，才主动 `throw err`。
 
 <include cwd lang="typescript">
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
-## 2. Fault 类别与封闭的代码集合
+## 2. Fault 七大分类与错误码速查
 
-第一个 `_` 之前的前缀是 Fault 类别（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），完整的 `code` 构成封闭联合，可用于穷尽的 `switch`：
+`err.code` 第一个 `_` 前面的前缀代表出错环节（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），所有错误码组成封闭联合类型，方便做完备的 `switch`：
 
-| 类别   | Fault 代码                                                             | 含义与处理                                                                                                                                                                                                       |
-| ------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HTTP` | `HTTP_STATUS`                                                          | 服务端返回了非 `2xx` 状态码（`3xx`、`4xx`、`5xx`），若声明了 `error` struct 则其已被成功解码。                                                                                                                   |
-| `REQ`  | `REQ_INPUT_INVALID`, `REQ_BUILD_FAILED`                                | 调用方输入校验失败、URL/路径无效、`builder` 抛出，或请求无法构造（HTTP：body 流已被使用、无效或被禁止的方法、GET/HEAD body、无效的 `Content-Type`；HTTP 和 SSE：带凭据的 URL、平台拒绝的请求头值）。绝不可重试。 |
-| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | 服务端响应破坏了已声明的媒体类型、底层表示或 `struct` 契约。                                                                                                                                                     |
-| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | 调用方主动取消（`NET_ABORTED`）、请求超时（`NET_TIMEOUT`）、网络连不上，或响应流在传输中途中断。                                                                                                                 |
-| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | 应用拦截器、hook 或进度/状态观察者抛出了自身的错误，或拦截器向 `next()` 传入了不是 `AbortSignal` 的 `signal`。                                                                                                   |
-| `CAP`  | `CAP_BUFFER_EXCEEDED`                                                  | SSE 帧缓冲区超出了配置的上限。                                                                                                                                                                                   |
-| `ENV`  | `ENV_UNSUPPORTED`                                                      | 当前宿主运行时缺少必须的 Web API（如在 Firefox 中尝试流式发送请求体）。                                                                                                                                          |
+| 类别   | 错误码                                                                 | 什么时候发生与怎么处理                                                                                                                               |
+| ------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HTTP` | `HTTP_STATUS`                                                          | 服务端返回非 `2xx` 状态码（`3xx`/`4xx`/`5xx`）；如果操作定义了 `error` struct，解码结果在 `err.data`                                                 |
+| `REQ`  | `REQ_INPUT_INVALID`, `REQ_BUILD_FAILED`                                | 入参没过 `input` schema、`builder` 抛错、路径非法或 `Request` 构造失败（body 流已被消耗、方法非法、`GET`/`HEAD` 带了 body、带账密 URL 等）。不可重试 |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | 响应 `Content-Type` 不对、JSON 读取/语法解析失败，或返回字段和声明的 `struct` 对不上                                                                 |
+| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | 主动取消（`NET_ABORTED`）、等待超时（`NET_TIMEOUT`）、连不上服务（`NET_UNREACHABLE`）或响应流半路断掉（`NET_BODY_INCOMPLETE`）                       |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | 自定义拦截器（如传了非法的 `signal` 给 `next()`）、`shouldRetry` 等钩子，或进度/状态观察者回调里抛了错                                               |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`                                                  | SSE 帧缓冲区超出允许上限                                                                                                                             |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | 当前运行环境缺少所需 Web API（例如在 Firefox 下流式上传请求体）                                                                                      |
 
-代码命名的是什么失败了，而不是谁提供了这个值。对 HTTP 而言，平台无法构建的请求是 `REQ_BUILD_FAILED`，无论错误值来自 `builder`、Client 配置还是拦截器。SSE 对请求头值、无效 URL 和带凭据的 URL 适用同一规则，首次尝试和每次重连都一样。库会自行检查最后一种，因为 Bun 会接受这样的 URL 并发送请求。平台可能拒绝的其他值，库在 SSE 和 WebSocket 上并不检查（SSE 上的无效方法；WebSocket 上带凭据的 URL、无效子协议或不支持的 scheme），因此那里的拒绝报告为 `NET_UNREACHABLE`，`cause` 是平台的错误；接受该值的运行时（Bun，对于无效的 SSE 方法）会发送请求。`EXT_INTERCEPTOR_FAILED` 覆盖拦截器自身的行为：它抛出的错误，或不是 `AbortSignal` 的 `signal`（取消通道，不是请求内容）。
+**错误码归因原则（按故障本质归类，不按来源背锅）**：
 
-### 各 Fault 代码携带的属性
+- 对 HTTP 来说，只要平台构造 `Request` 失败，一律归为 `REQ_BUILD_FAILED`，不管这个非法值来自 `builder`、Client 配置还是拦截器。
+- SSE 首次建连与每次重连对非法头、无效 URL 及带账密 URL 同样报 `REQ_BUILD_FAILED`（因为 Bun 会直接放行带账密 URL，所以 Defjs 做了统一前置拦截）。
+- 对于库本身不提前拦截、交由运行环境拒绝的情况（如 SSE 用了非法方法、WebSocket 用带账密 URL/无效子协议/不支持的协议），平台拒收后会统一报成 `NET_UNREACHABLE`，原始异常放在 `err.cause`；若换到直接放行的环境（例如 Bun 上的非法 SSE 方法）则会照常发出。
+- `EXT_INTERCEPTOR_FAILED` 专指拦截器自己的问题——要么它抛出了异常，要么传给 `next()` 的 `signal` 不是合法 `AbortSignal`。
 
-| Fault 代码    | `status` | `response`                                        | `data`                                  | `cause`                        |
-| ------------- | -------- | ------------------------------------------------- | --------------------------------------- | ------------------------------ |
-| `HTTP_STATUS` | `number` | `DecodedResponse<TErr>` 或 `HttpMeta`             | 解码后的 `error` struct，或 `undefined` | 底层原始原因（若存在）         |
-| `RES_*`       | `number` | `HttpMeta`（**绝无 `body` 属性**）                | 不存在                                  | `StructError` 或解析器原始报错 |
-| 其他代码      | 不存在   | 若已收到响应头则为 `HttpMeta`，否则为 `undefined` | 不存在                                  | 底层 `Error` / 中止原因        |
+### 不同错误码上能读到哪些属性
 
-## 3. 窄化联合错误体（`err.data`）
+| 错误码        | `status` | `response`                                    | `data`                                 | `cause`                    |
+| ------------- | -------- | --------------------------------------------- | -------------------------------------- | -------------------------- |
+| `HTTP_STATUS` | `number` | `DecodedResponse<TErr>` 或 `HttpMeta`         | 解码后的 `error` struct 或 `undefined` | 底层原因（如果有）         |
+| `RES_*`       | `number` | `HttpMeta`（**绝不会带 `body` 属性**）        | 不存在                                 | `StructError` 或解析器异常 |
+| 其他错误码    | 不存在   | 已拿到响应头时是 `HttpMeta`，否则 `undefined` | 不存在                                 | 底层 `Error` 或中止原因    |
 
-由于同一个 `error` struct 需要承载所有非 `2xx` 状态码的错误结构，当不同 HTTP 状态码返回不同的 JSON 格式时，请声明一个联合类型：
+## 3. 同一接口不同状态码怎么区分错误体（`err.data`）
+
+由于每个操作只提供一个 `error` struct 来涵盖所有非 `2xx` 状态码，当 `400`、`404`、`422` 等返回格式不同时，推荐用联合类型建模：
 
 <Tabs items={["按 kind 区分", "按响应体状态区分", "普通联合（struct.or）"]}>
 <Tab>
@@ -97,21 +106,21 @@ HTTP 失败时，元组是 `[err, undefined, undefined]`。到达的响应元数
 </Tab>
 </Tabs>
 
-只要后端接口响应体中包含明确的字面量标签（如 `kind`、`type` 或内嵌的 `status` 字段），推荐优先使用 `struct.discriminatedUnion(...)`。
+只要后端错误信息里带有固定判别字段（比如 `kind`、`type` 或内嵌 `status`），优先用 `struct.discriminatedUnion(...)`，写代码收窄类型最顺手。
 
-## 4. SSE 与 WebSocket 的启动期 vs. 连接建立后异常
+## 4. SSE 与 WebSocket 的建连错误 vs. 运行中错误
 
-对于长连接，操作元组报告**启动期**失败（流或 socket 打开之前）。连接打开后，运行时失败通过句柄或会话生命周期传递：
+对于长连接来说，函数返回值里的元组只反映**初始握手有没有成功**；连接打开之后中途出问题，由流/会话对象接管报告：
 
-| 传输          | 启动期失败（在元组中返回）                                                                                                         | 打开后的失败（元组 resolve 之后）                                                                                                                                                                      |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **HTTP**      | 所有失败都在操作元组中结算一次。                                                                                                   | 不适用。                                                                                                                                                                                               |
-| **SSE**       | 非 `2xx`（`HTTP_STATUS`，或声明的 `error` body 无法解码时的解码 Fault），或内容类型不对的 `2xx` 握手（`RES_MEDIA_TYPE_INVALID`）。 | 异步迭代器直接 reject；`stream.closed` resolve 为 `{ kind: 'error', code }`。                                                                                                                          |
-| **WebSocket** | 握手前连接关闭、构造器执行失败，或在握手期间触发取消信号。                                                                         | 非致命的数据帧错误触发 `session.onRuntimeError`；致命错误使 `session.receive` 报错并使 `session.closed` resolve 为 `{ kind: 'error', cause }`。心跳超时和重试耗尽仍使用普通运行时 `Error` 作为 cause。 |
+| 协议          | 启动期失败（直接在元组 `err` 返回）                                                                                         | 打开连接后的失败（返回流/会话之后）                                                                                                                    |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **HTTP**      | 全部都在这一次调用的元组里一次性返回                                                                                        | 不适用                                                                                                                                                 |
+| **SSE**       | 非 `2xx`（`HTTP_STATUS`，若声明 `error` 且解码失败则是对应解码 Fault），或 `2xx` 但媒体类型不对（`RES_MEDIA_TYPE_INVALID`） | `for await` 异步迭代器直接 reject；`stream.closed` 返回 `{ kind: 'error', code }`                                                                      |
+| **WebSocket** | 握手前连不上、构造函数报错或握手期被信号中止                                                                                | 单条消息解析失败只触发 `session.onRuntimeError`（不断线）；致命故障让 `session.receive` reject 并将 `session.closed` 结束为 `{ kind: 'error', cause }` |
 
-## 5. 安全的结构化日志与 Cause 排查
+## 5. 安全地记日志与排查 `err.cause`
 
-每个 `Fault` 均为原生 `Error` 实例（`instanceof Error === true`），并且拥有可枚举的 `code`。`status`、`response` 和 `data` 取决于 code，如上表所示：`HTTP_STATUS` 三者都有，`RES_*` 有 `status` 和 `response`，其他 code 只有 `response`，且在收到响应头之前为 `undefined`。
+每个 `Fault` 都是标准 `Error`（`err instanceof Error === true`），并带有可枚举的 `code` 属性。其它字段按错误码有无有所不同：只有 `HTTP_STATUS` 同时带 `status`、`response` 和 `data`；`RES_*` 带 `status` 和 `response`；其余只带拿到响应头后的 `response`。
 
 <Tabs items={["检查 StructError 原因", "脱敏诊断摘要"]}>
 <Tab>
@@ -131,10 +140,10 @@ HTTP 失败时，元组是 `[err, undefined, undefined]`。到达的响应元数
 </Tabs>
 
 > [!CAUTION]
-> 把 `fault.cause`、`fault.data`、响应头、完整 URL 和 `StructIssue.received` 都视为可能敏感。默认只记录低基数白名单字段（你自己的 `meta` 标签、`code`、`status`、耗时）。
+> **别把整坨 `err` 直接打进日志**：`err.cause`、`err.data`、响应头、完整 URL（可能含 Query 参数）和 `StructIssue.received` 都可能包含用户的隐私数据或敏感信息。生产日志默认只挑安全字段白名单（例如你自己打的 `meta` 标签、`code`、`status` 和耗时）。
 
 ## 相关阅读
 
-- [处理声明的 404](/zh-Hans/recipes/get-declared-404)
-- [取消 HTTP 调用](/zh-Hans/recipes/cancel-http)
-- [核心架构](/zh-Hans/docs/design-decisions)
+- [按业务预期处理 404 响应](/zh-Hans/recipes/get-declared-404)
+- [取消进行中的 HTTP 请求](/zh-Hans/recipes/cancel-http)
+- [核心架构设计](/zh-Hans/docs/design-decisions)

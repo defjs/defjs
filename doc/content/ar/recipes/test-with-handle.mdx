@@ -5,7 +5,7 @@ description: استبدل دالة Fetch لعميل واحد عبر withHTTPHand
 
 # اختبار الطلبات محلياً عبر مقبض Fetch
 
-تستبدل الدالة `withHTTPHandle(...)` دالة `fetch` الأساسية لنسخة عميل محددة مع تشغيل خط أنابيب Defjs بالكامل — التحقق من المدخلات، وتطبيق دالة `builder`، وحل الروابط، والمعترضات، وتصنيف الحالات، وفك ترميز كائنات Struct — دون فتح أي مقبس شبكي حقيقي:
+تستبدل `withHTTPHandle(...)` دالة `fetch` الأساسية لعميل اختبار واحد مع تشغيل خط أنابيب Defjs بالكامل في الذاكرة — التحقق من المدخلات و`builder` وحل الروابط والمعترضات وتصنيف الحالات وفك ترميز `struct` — دون فتح مقبس شبكي:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
@@ -22,4 +22,13 @@ description: استبدل دالة Fetch لعميل واحد عبر withHTTPHand
   </Tab>
 </Tabs>
 
-في بيئة الإنتاج، استدعِ نفس العملية `getOrder` تماماً بعميل مضبوط عبر `withEndpoint(...)`. راجع دليلي [الاختبارات](/ar/docs/testing) و[العميل](/ar/docs/client).
+### ثلاث نقاط مهمة أثناء كتابة الاختبار
+
+- **لماذا نغلف `(input, init)` داخل `new Request(input, init)`**: تستقبل `withHTTPHandle` نفس توقيع `fetch(input, init)` القياسي، وتغليفها في `new Request(input, init)` يمنحك واجهة موحدة لقراءة `method` و`url` و`headers` و`await request.json()`.
+- **لماذا نمرر `withEndpoint("https://fixture.invalid")`**: تتحقق `createClient` من رابط الأساس قبل استدعاء `withHTTPHandle`، والنطاق `.invalid` محجوز حسب RFC فلا يرسل استعلام DNS حقيقياً أبداً.
+- **كيف تحاكي نتائج HTTP الثلاث الشائعة**:
+  - نجاح `2xx`: أعد `Response.json(...)` -> `[null, data, response]`
+  - خطأ `4xx` / `5xx`: أعد `Response.json(..., { status: 422 })` -> `err.code === "HTTP_STATUS"`
+  - فشل الشبكة: ارفض الوعد أو ارمِ خطأ (`Promise.reject(new TypeError("fetch failed"))`) -> `err.code === "NET_UNREACHABLE"`. **لا** تعد `Response.error()` لأن أي كائن `Response` (حتى بالحالة `0`) يُعامل كاستجابة HTTP (`HTTP_STATUS`).
+
+في الإنتاج استدعِ نفس العملية `getOrder` بعميل مضبوط عبر `withEndpoint(...)`. راجع [الاختبارات](/ar/docs/testing) و[العميل](/ar/docs/client).

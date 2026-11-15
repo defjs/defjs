@@ -5,22 +5,28 @@ description: How to test the Defjs request definitions, struct schemas, custom i
 
 # Testing
 
-`@defjs/core` already tests its own transport and codec engine. When you use Defjs inside your application or SDK package, your tests exist to verify **the code you wrote**—your request definitions and `struct` schemas (`src/api/request/`, `src/api/schema/`), your custom interceptors (`src/api/client.ts`), your business orchestration helpers (`src/checkout.ts`), and your UI components.
+`@defjs/core` already tests its own transport and codec engine. When you use Defjs inside an app or SDK package, your tests exist to verify **the code you wrote**: `builder` placement, `.alias()` wire keys, `struct` decoding, custom auth/refresh interceptors, business error mapping, and UI abort cleanup.
 
 ## What to test in your project—and why not `vi.mock`
 
-Do **not** stub or `vi.mock(...)` exported `defineRequest`, `defineEventStream`, or `defineWebSocket` functions. Instead, instantiate an isolated test `Client` per test with `withHTTPHandle`, `withSSEHandle`, or `withWebSocketHandle`. That tests your real project definitions and policies end-to-end in memory without opening a network socket:
+Do **not** stub or `vi.mock(...)` exported `defineRequest`, `defineEventStream`, or `defineWebSocket` operations. Mocking an operation skips your `builder`, `.alias()` serialization, custom interceptors, status dispatch, and `struct` decoding—leaving bugs in your own code untested.
+
+Instead, build an isolated test `Client` per test with an in-memory transport handle (`withHTTPHandle`, `withSSEHandle`, or `withWebSocketHandle`). Your real definitions and business logic run end-to-end in memory without opening a socket:
 
 | Layer in your project                                                 | What your test verifies                                                                | How to wire the test `Client`                                                                |
 | :-------------------------------------------------------------------- | :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------- |
 | Request definitions & schemas (`src/api/request/`, `src/api/schema/`) | `builder` placement (`path`, `query`, `headers`, `body`), `.alias()`, `output`/`error` | Import the real operation and pass a fresh `withHTTPHandle` client                           |
-| Business helpers & custom interceptors (`checkout.ts`, `client`)      | Auth/header interceptors, multi-step flows, error-first tuple mapping, retries         | Pass `testClient` into your helper (with `withInterceptors(...)` mounted)                    |
-| SSE & WebSocket consumers (`src/events/`, `src/quotes/`)              | Frame/event parsing in business logic, outgoing messages, `await using` cleanup        | Feed simulated frames in memory via `withSSEHandle` or `withWebSocketHandle`                 |
-| React / Vue components (`OrderCard.tsx`, `OrderView.vue`)             | Loading states, rendered API data, error UI, unmount `AbortController` cleanup         | Wrap with `<ClientProvider client={testClient}>` or install `createClientPlugin(testClient)` |
+| Business helpers & custom interceptors (`checkout.ts`, `client`)      | Auth headers, `401` token-refresh replay, multi-step flows, domain error mapping       | Pass `testClient` into your helper (with `withInterceptors(...)` mounted)                    |
+| SSE & WebSocket consumers (`src/events/`, `src/quotes/`)              | Stream/frame parsing in your consumer, outgoing messages, `await using` cleanup        | Feed simulated frames in memory via `withSSEHandle` or `withWebSocketHandle`                 |
+| React / Vue components (`OrderCard.tsx`, `OrderView.vue`)             | Loading states, rendered data, error UI, unmount `AbortController` cleanup             | Wrap with `<ClientProvider client={testClient}>` or install `createClientPlugin(testClient)` |
 
 ## 1. Test your request definitions and schemas (`withHTTPHandle`)
 
-Import the real `defineRequest` operations from your project, create an isolated test `Client` with a reserved base URL (such as `https://fixture.invalid`) and `withHTTPHandle(...)`, and inspect the outbound `Request`. Retries are disabled unless `withRetry` is configured; omit `withRetry` on ordinary unit-test clients so `502`/`503`/`504` and network-error tests return immediately after a single attempt without waiting through backoff delays.
+Import the real `defineRequest` operations from your project and create a test `Client` with `withEndpoint("https://fixture.invalid")` and `withHTTPHandle(...)`:
+
+- **Why `https://fixture.invalid`**: `createClient` validates the base URL before the request reaches `withHTTPHandle`; `.invalid` is RFC-reserved so accidental misconfiguration never queries public DNS.
+- **One handle kind per transport**: `withHTTPHandle` intercepts only HTTP operations (`defineRequest`). Use `withSSEHandle` for `defineEventStream` and `withWebSocketHandle` for `defineWebSocket`.
+- **Retry defaults and `withRetry(undefined)` trap**: Retries are disabled when `withRetry` is omitted—leave it off in ordinary unit tests so `502`/`503`/`504` and network-error cases return after a single attempt instead of waiting through `1s + 2s + 4s` backoff. Watch out: calling `withRetry()` or `withRetry(undefined)` turns **on** 3 default retries. When disabling retries from a shared test helper, pass `withRetry({ maxRetries: 0 })`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -39,17 +45,39 @@ Import the real `defineRequest` operations from your project, create an isolated
 </Tab>
 </Tabs>
 
-### Isolation, outbound request checks, and error-first tuples
+### Three essentials: isolation, outbound wire checks, and error-first tuples
 
-- **Isolate a client per test**: Create a fresh `createClient(...)` inside each test or test helper so retry budgets, endpoint health, and stateful closures never leak between tests.
-- **Verify outbound wire format**: Inside `withHTTPHandle(async (input, init) => ...)`, build `const request = new Request(input, init)` and assert `request.method`, `request.url`, `request.headers`, and `await request.text()` (or `await request.json()`) to make sure your `builder` and `.alias()` match your backend contract.
-- **Assert the `[err, data, response]` tuple**:
-  - For `2xx` responses, assert `expect(err).toBeNull()` followed by `if (err) throw err;` before checking the decoded `data` fields (including `.alias()` wire-to-logical mapping).
-  - For failure responses, guard with `if (err)` first, narrow `if (err.code === "HTTP_STATUS")` inside it to assert `err.status`, `err.data`, and `err.response` (or inspect `err.cause` on decode/preflight faults and wrapped business `Error`s), and `return` from inside `if (err)` followed by `expect.unreachable(...)`.
+- **Isolate a client per test**: Create a fresh `createClient(...)` inside each `test(...)` or helper so retry budgets, endpoint health state, and closures never leak between tests.
+- **Verify the outbound request**: Inside `withHTTPHandle(async (input, init) => ...)`, construct `const request = new Request(input, init)` and assert `request.method`, `request.url`, `request.headers`, and `await request.text()` (or `await request.json()`) against your backend contract.
+- **Simulate and assert the three common HTTP outcomes**:
+  - **`2xx` success**: Assert `expect(err).toBeNull()`, immediately followed by `if (err) throw err;` to narrow `data`, then inspect decoded fields.
+  - **`4xx` / `5xx` API error**: Return `Response.json(..., { status: 422 })`, guard with `if (err)`, narrow `if (err.code === "HTTP_STATUS")` inside it to assert `err.status`, `err.data`, and `err.response`, `return` from inside `if (err)`, and put `expect.unreachable(...)` afterwards (in `bun:test`, throw `new Error("expected fault")` instead).
+  - **Network failure (`NET_UNREACHABLE`)**: Do **not** return `Response.error()`. Any returned `Response` (even with status `0`) goes through HTTP status handling and produces `HTTP_STATUS`. Reject or throw instead—such as `Promise.reject(new TypeError("fetch failed"))`—to trigger `NET_UNREACHABLE`:
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { expect, test } from "vitest";
+import { createOrder } from "./sdk/orders.ts";
+
+test("returns NET_UNREACHABLE when fetch rejects", async () => {
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() => Promise.reject(new TypeError("fetch failed"))),
+  );
+
+  const [err] = await createOrder(client, { sku: "book", quantity: 1 });
+  if (err) {
+    expect(err.code).toBe("NET_UNREACHABLE");
+    return;
+  }
+
+  expect.unreachable("expected NET_UNREACHABLE fault");
+});
+```
 
 ## 2. Test your business helpers and custom interceptors
 
-Pass a `Client` into your project's business orchestration functions (`checkout.ts`) and mount your custom `createHttpInterceptor` helpers (`withInterceptors(bearerAuth(...))`) directly on the test client. In one offline test you verify auth headers injected by your interceptor, `.alias()` JSON encoding produced by `submitOrder`, and how your business function maps both success and declared error statuses (such as `409` conflict):
+Pass a `Client` directly into your business helpers (`src/checkout.ts`) and mount your `createHttpInterceptor` policies (`withInterceptors(bearerAuth(...))`) on the test client. A single in-memory test covers injected auth headers, `.alias()` JSON encoding in `submitOrder`, and how your helper translates declared errors such as `409`:
 
 <Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
 <Tab>
@@ -68,14 +96,93 @@ Pass a `Client` into your project's business orchestration functions (`checkout.
 </Tab>
 </Tabs>
 
-To test `withRetry` recovery on a transient `503` without real timer waits, keep a counter (`let attempts = 0`) inside `withHTTPHandle` and configure `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` (`methods: ["POST"]` is required when retrying a `POST` operation such as `submitOrder`). Interceptor-level replay (such as a `401` token-refresh interceptor that re-invokes `next(...)`) does not use `withRetry`—test it directly against a stateful `withHTTPHandle` counter.
+### Testing `withRetry` recovery and `401` token-refresh replay
+
+- **Transient `503` recovery with `withRetry`**: Keep a `let attempts = 0` counter outside `withHTTPHandle` and set `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` for zero-wait retries. Watch out: passing `methods` **replaces** the default safe method list (`["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]`), so use `methods: ["GET", "POST"]` if the same test client also retries `GET`.
+- **`401` refresh replay in an interceptor**: Interceptor replay (`next(...)` called again after refreshing credentials) does not use `withRetry`. Test it directly with a stateful `withHTTPHandle` counter. Note that if your code reads `err.data` on `401`, the operation must declare an `error: struct(...)` schema; otherwise only `err.status` and `err.response` are populated.
+
+```ts
+import {
+  createClient,
+  createHttpInterceptor,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+  withRetry,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+import { submitOrder } from "./src/checkout.ts";
+
+test("retries transient 503 for POST when methods includes POST", async () => {
+  let attempts = 0;
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] }),
+    withHTTPHandle(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Response.json({ message: "try again" }, { status: 503 });
+      }
+      return Response.json({ id: "ord_2" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "pen", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_2");
+});
+
+test("refreshes token on 401 and replays next() inside an interceptor", async () => {
+  let token = "expired-token";
+  let attempts = 0;
+
+  const refreshAuth = createHttpInterceptor(async (req, next) => {
+    const first = await next({
+      ...req,
+      headers: { ...req.headers, authorization: `Bearer ${token}` },
+    });
+    if (first[0]?.code === "HTTP_STATUS" && first[0].status === 401) {
+      token = "fresh-token";
+      return next({
+        ...req,
+        headers: { ...req.headers, authorization: `Bearer ${token}` },
+      });
+    }
+    return first;
+  });
+
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withInterceptors(refreshAuth),
+    withHTTPHandle(async (input, init) => {
+      attempts += 1;
+      const auth = new Request(input, init).headers.get("authorization");
+      if (auth === "Bearer expired-token") {
+        return new Response(null, { status: 401 });
+      }
+      expect(auth).toBe("Bearer fresh-token");
+      return Response.json({ id: "ord_3" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "mug", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_3");
+});
+```
 
 ## 3. Test your SSE and WebSocket consumers
 
-When your project wraps `defineEventStream` or `defineWebSocket` in streaming helpers or state updaters, feed simulated server frames in memory using `withSSEHandle` or `withWebSocketHandle` and assert the behavior of your consumer function:
+When your project wraps `defineEventStream` or `defineWebSocket` in streaming helpers or state aggregators, feed simulated frames in memory with `withSSEHandle` or `withWebSocketHandle` and assert your consumer's output and cleanup:
 
-- **SSE (`withSSEHandle`)**: Return a `Response` backed by a `ReadableStream<Uint8Array>` with `content-type: "text/event-stream"`.
-- **WebSocket (`withWebSocketHandle`)**: Pass a minimal `EventTarget` class implementing `WebSocketHandle` (exposing `static readonly OPEN = 1`) that records sent messages and dispatches `open`, `MessageEvent("message")`, and `CloseEvent("close")`.
+- **SSE (`withSSEHandle`)**: Return a `Response` backed by `ReadableStream<Uint8Array>` with `content-type: "text/event-stream"`. To simulate a mid-stream connection drop, call `controller.error(new TypeError("stream dropped"))` after pushing chunks (or return HTTP `500` to fail the initial handshake).
+- **WebSocket (`withWebSocketHandle`)**: Pass a small `EventTarget` subclass implementing `WebSocketHandle` (with `static readonly OPEN = 1` and `readyState`). Note that `FakeQuoteSocket` schedules `open` and initial messages via `queueMicrotask` so the caller can attach listeners or enter `for await` before events fire; synchronous dispatch inside the constructor would happen too early. To simulate mid-stream errors, dispatch `new Event("error")` followed by `new CloseEvent("close", { code: 1011, reason: "boom" })`.
 
 <Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
 <Tab>
@@ -98,21 +205,85 @@ When your project wraps `defineEventStream` or `defineWebSocket` in streaming he
 
 Following the layout in [Application API layer](/docs/application-api) keeps every test free of `vi.mock`:
 
-- **Keep `src/api/request/*.ts` client-free**: Export only `defineRequest`, `defineEventStream`, and `defineWebSocket` values. Never import your production `apiClient` inside definition files, so any test can call those operations directly against a `with*Handle` client.
-- **Accept `Client` (or `DerivableClient`) as a parameter in business helpers**: Either pass `client` explicitly as the first parameter (`export async function placeOrder(client: Client, input: ...)` when forwarding `client`, or `client: DerivableClient` when deriving per-call options like `client({ signal })`), or put the defaulted client parameter last (`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`) so production callers can write `placeOrder(input)` while unit tests pass `placeOrder(input, testClient)`. Export custom interceptors and SSR factories (`createServerApiClient(token, ...options: ClientOption[])` forwarding trailing `ClientOption` arguments to `createClient(...)`) from `src/api/client.ts` so tests can attach `withHTTPHandle`.
+- **Keep `src/api/request/*.ts` client-free**: Export only `defineRequest`, `defineEventStream`, and `defineWebSocket` operations. Never import `apiClient` inside definition files, so tests can pass a `with*Handle` client directly.
+- **Accept `Client` (or `DerivableClient`) in business helpers**:
+  - **Choosing `Client` vs `DerivableClient`**: `createClient(...)` returns a `DerivableClient`, which satisfies `Client`. If a helper just invokes `getOrder(client, id)`, `client: Client` is enough; if it derives per-call options like `client({ signal })`, type the parameter as `DerivableClient`.
+  - **Parameter style & SSR factories**: Pass `client` first (`placeOrder(client: DerivableClient, input: ...)`) or last with a default (`placeOrder(input: PlaceOrderInput, client: Client = apiClient)`), and export custom interceptors plus SSR factories (`createServerApiClient(token, ...options: ClientOption[])`) from `src/api/client.ts` so tests can append `withHTTPHandle`.
+  - **`withXSRF()` pitfall in Node/Bun tests**: `withXSRF()` reads browser globals (`globalThis.location`). If `src/api/client.ts` unconditionally exports `apiClient = createClient(..., withXSRF())` at module top level, importing any helper with `client = apiClient` in Node or Bun throws at module load time—even if your test passes `testClient`. Guard `withXSRF()` to browser environments (`typeof window !== "undefined"`) or construct browser clients in a factory.
 - **Inject `testClient` into React and Vue components**:
-  - **React (`@defjs/react`)**: Wrap the component under test in `<ClientProvider client={testClient}>` (or pass `testClient` to `useClient(overrideClient)`).
-  - **Vue (`@defjs/vue`)**: Install `app.use(createClientPlugin(testClient))` (or `provide(HTTP_CLIENT, testClient)`) when mounting components in tests.
+
+<Tabs items={["React (Testing Library)", "Vue (Test Utils)"]}>
+<Tab>
+
+```tsx
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+import { render, screen } from "@testing-library/react";
+import { expect, test } from "vitest";
+import { OrderCard } from "./OrderCard.tsx";
+
+test("injects testClient through ClientProvider", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const { unmount } = render(
+    <ClientProvider client={testClient}>
+      <OrderCard id="ord_1" />
+    </ClientProvider>,
+  );
+
+  expect(await screen.findByText("ord_1")).toBeTruthy();
+  unmount();
+});
+```
+
+</Tab>
+<Tab>
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { createClientPlugin } from "@defjs/vue";
+import { flushPromises, mount } from "@vue/test-utils";
+import { expect, test } from "vitest";
+import OrderView from "./OrderView.vue";
+
+test("injects testClient through createClientPlugin", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const wrapper = mount(OrderView, {
+    props: { orderId: "ord_1" },
+    global: {
+      plugins: [createClientPlugin(testClient)],
+    },
+  });
+
+  await flushPromises();
+  expect(wrapper.text()).toContain("ord_1");
+});
+```
+
+</Tab>
+</Tabs>
 
 ## 5. Test request deadlines and timer-driven behavior
 
-For retry backoff, SSE/WebSocket reconnect delays, or WebSocket heartbeats in your application policies, use `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` in Vitest (`jest.useFakeTimers()` in Bun test). Vitest fake timers do **not** advance the native `AbortSignal.timeout` clock; to test a deterministic request deadline in Vitest, abort an `AbortController` from a controlled `setTimeout` with a `TimeoutError` reason:
+For retry backoff, SSE/WebSocket reconnect delays, or WebSocket heartbeats, use `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` in Vitest (`jest.useFakeTimers()` in Bun test). Narrowing `toFake` leaves microtasks and Promises unmocked so `async`/`await` keeps moving.
+
+Notice that **Vitest fake timers do not advance the native `AbortSignal.timeout` clock**, because `AbortSignal.timeout` uses the runtime's native timer rather than JS `setTimeout`:
+
+- To test a `client({ signal })` deadline deterministically in Vitest, abort an `AbortController` from a controlled `setTimeout` with `new DOMException("request deadline", "TimeoutError")`. Always `await ready` before calling `advanceTimersByTimeAsync` so the `setTimeout` inside your handle has been scheduled before advancing the clock:
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-In Bun test, `jest.useFakeTimers()` and `jest.advanceTimersByTime()` also control `AbortSignal.timeout`. Advance timers only after the awaited phase has started, assert state transitions or attempt counts rather than elapsed wall-clock time, and restore real timers in `finally`.
+- Alternatively, if your client sets `withRetry({ maxRetries: 0, attemptTimeoutMs: 500 })`, Defjs uses JS `setTimeout` internally, so `vi.advanceTimersByTimeAsync(500)` triggers `NET_TIMEOUT` directly.
+- In **Bun test**, `jest.useFakeTimers()` and `jest.advanceTimersByTime()` also drive `AbortSignal.timeout`. Assert state changes or attempt counters rather than elapsed wall time, and always restore real timers in `finally`.
 
 ## Related reading
 

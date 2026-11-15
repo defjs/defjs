@@ -1,15 +1,15 @@
 ---
 title: "HTTP 请求"
-description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消方式调用它们。
+description: 使用 defineRequest 声明 HTTP 接口，并由应用自主控制客户端配置与取消请求。
 ---
 
 # HTTP 请求
 
-在 SDK 中，每个 HTTP 操作都用 `defineRequest` 定义：请求方法、路径模板、`input` schema、同步 `builder`，以及 `output` / `error` 响应 schema。消费方应用导入该操作，传入配置好的 `Client`，并处理返回的 `[err, data, response]` 元组。
+每个 HTTP 接口都用 `defineRequest` 定义：写清请求方法、路径模板、`input` schema、同步 `builder`，以及正常/错误响应的 `output` / `error` schema。业务代码拿到这个定义后，只需要传入配置好的 `Client`，再处理返回的 `[err, data, response]` 元组就行。
 
-## 1. 定义操作并调用
+## 1. 拆开定义和调用
 
-在 SDK 模块中为每个操作单独导出一个 `defineRequest`，把 `createClient` 留在消费方应用里：
+把接口定义单独写在模块里，每个接口导出一个函数，把 `createClient` 留在应用配置处：
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab>
@@ -35,85 +35,87 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 </Tab>
 </Tabs>
 
-### SDK 设计最佳实践
+### 定义接口时的三条实用习惯
 
-- **一个定义对应一个操作**：让每个方法、路径和契约各自成为独立的定义，应用才能对未使用的操作做 tree-shaking。
-- **需要给拦截器提供上下文时附加 `meta`**：`meta` 是 `{ [key: string]: unknown }`，由应用自行定义，例如 `{ operation: "orders.read" }`。它会传给拦截器和均衡器（`request.meta`、`PickInfo.meta`），并且每个定义只有一个只读对象，由每次调用、每次尝试和每个 client 共享。只读类型是浅层的，因此单次调用的状态应保存在拦截器的闭包中，而不是放在 `meta` 或其嵌套对象里。如果要为 `meta` 命名类型，必须使用 `type` 别名：TypeScript 不会把 `interface` 赋值给其索引签名。Defjs 核心从不读取或复制 `meta`，也从不随请求发送它；URL、请求头或 body 的值都经由 `builder` 设置。`@defjs/opentelemetry-server` 会把每个键作为 `defjs.meta.<key>` 属性上报到 Span 和失败日志，因此请勿把密钥和个人数据放进 `meta`。
-- **绝不在 SDK 内嵌 Client**：只导出定义、`struct` schema 和类型。
+- **一个接口对应一个独立导出**：拆开定义之后，打包器才能把页面里没用到的接口干净地 tree-shake 掉。
+- **需要给拦截器或均衡器传自定义上下文时用 `meta`**：
+  - `meta` 形状是 `{ [key: string]: unknown }`，例如 `{ operation: "orders.read" }`，在拦截器（`request.meta`）和负载均衡器（`PickInfo.meta`）里都能读到。
+  - 每个操作只共享同一份浅只读 `meta` 对象，所以请求级别的临时状态不要塞在 `meta` 里，而要放在拦截器执行时的闭包变量中；给 `meta` 声明类型时请用 `type` 别名而不是 `interface`（TS 不会把 `interface` 赋值给索引签名）。
+  - Defjs 内核不会私自发掉 `meta`，也不会把它拼进 URL 或请求头；但 `@defjs/opentelemetry-server` 会把每个键值记成 `defjs.meta.<key>` 上报到 Span 和日志里，所以切勿往 `meta` 放 Token、密码或隐私字段。
+- **绝不在定义文件里塞 `Client`**：定义文件只导出操作、`struct` schema 和类型。
 
-## 2. URL 解析与路径占位符
+## 2. 路径拼接与占位符规则
 
-`withEndpoint(...)` 要求传入有效的绝对 URL。它的 pathname 作为基础目录（基地址上的 query 字符串或 hash 会被丢弃）。
+`withEndpoint(...)` 必须接收合法的绝对 URL，它的 pathname 会作为所有接口的基础前缀目录（基地址上带的 query 和 hash 会被忽略）。
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
-- **路径占位符（`:name`）**：恰好编码一次，作为单个路径片段。斜杠、`?`、`#`、`%`、空格和 Unicode 字符都留在该片段内——不要预先编码。空字符串、`.` 和 `..` 会以 `REQ_BUILD_FAILED` 失败。
-- **源与目录限制**：定义中的 path 不能是绝对 URL 或协议相对 URL（`//...`），不能包含 C0 控制字符、反斜杠、`?` 或 `#`，也不能用 `../` 逃出基地址所在目录。任何违规都会在拦截器或传输层运行之前以 `REQ_BUILD_FAILED` 失败。
+- **路径参数 `:name`**：只做一次 URL 编码，并整体作为单个路径片段。里面的斜杠、`?`、`#`、`%`、空格都会老老实实待在这个片段里——不要自己在外面手动 `encodeURIComponent`。如果参数是空字符串、`"."` 或 `".."`，会立即报错 `REQ_BUILD_FAILED`。
+- **防路径逃逸约束**：定义里的 `path` 不能写成完整 URL 或协议相对 URL（`//...`），不能含控制字符、反斜杠、`?` 或 `#`，也不能靠 `../` 跳出 `endpoint` 的基础目录，违规则在拦截器和网络请求之前直接报 `REQ_BUILD_FAILED`。
 
-## 3. 使用 `builder` 放置入参
+## 3. 用 `builder` 把参数放到位
 
-只要操作声明了 `input`，就**必须**提供同步、纯的 `builder`，返回 `{ path?, query?, headers?, body? }`。只有没有 `input` 的操作才能省略 `builder`。
+只要定义了 `input`，就**必须**配一个同步、无副作用的纯函数 `builder`，返回 `{ path?, query?, headers?, body? }`。只有完全不需要入参的接口才可以省略 `builder`。
 
 <include cwd lang="typescript">
   examples/http/place-input.ts#example
 </include>
 
-### `builder` 如何处理字段别名
+### `builder` 里怎么触发 `.alias()` 字段转换
 
-| `builder` 表达式                               | 实际网络输出                                                                |
+| `builder` 写法                                 | 实际发到网络上的结果                                                        |
 | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| `body: input.profile`                          | 类型化的 struct 对象：自动应用 `.alias()` 别名以及 `Date` / `bigint` 编解码 |
-| `body: { profile: input.profile }`             | 外层键名 `profile` 保持字面量；内层 struct 对象保留其别名规则               |
-| `body: { ...input.profile, role: "admin" }`    | 对象展开操作会保留 struct 别名；新增的 `role` 保持字面量                    |
-| `body: { name: input.profile.customerName }`   | 匿名对象：键名都是字面量                                                    |
-| `query: input.filter` / `headers: input.trace` | 扁平类型化对象：字段的 `.alias()` 成为网络键名                              |
+| `body: input.profile`                          | 直接交出 `struct` 对象：自动应用 `.alias()` 别名和 `Date` / `bigint` 编码   |
+| `body: { profile: input.profile }`             | 外层键名 `profile` 按字面量发；里面的 `input.profile` 仍保留别名映射        |
+| `body: { ...input.profile, role: "admin" }`    | 展开对象会带走原有的别名规则；新写的 `role` 按字面量发                      |
+| `body: { name: input.profile.customerName }`   | 全新匿名对象：所有键名都按你手写的字面量发送                                |
+| `query: input.filter` / `headers: input.trace` | 扁平 `struct` 对象：字段上的 `.alias()` 会自动变成 query 键名或 header 名称 |
 
-### 自定义查询序列化
+### 后端要特殊格式的查询参数？用 `withQuerySerializer`
 
-默认情况下，查询标量和标量数组（重复键）直接编码，嵌套查询对象会以 `REQ_BUILD_FAILED` 失败。如果后端期望嵌套查询语法（`filter[status]=paid`），在 Client 上配置 `withQuerySerializer`：
+默认情况下，普通值和一维数组（同键重复）直接序列化，遇到嵌套对象会直接报错 `REQ_BUILD_FAILED`。如果后端接口需要 `filter[status]=paid` 这种风格，在 `Client` 上挂 `withQuerySerializer` 即可：
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
-你返回的字符串会被解析为请求的 `query`，因此请求发送的是 `query.toString()`，即 URL Standard 的 application/x-www-form-urlencoded 序列化。空格是 `+`，`filter[status]=paid` 中的方括号会以 `filter%5Bstatus%5D=paid` 发出，表单解码器会把它读回同一个名称。
+`withQuerySerializer` 返回的字符串会被解析进标准 URL 查询参数并最终以 `query.toString()`（`application/x-www-form-urlencoded`）发送。空格会编成 `+`，方括号会以 `filter%5Bstatus%5D=paid` 发出，绝大多数后端框架都会原样还原成同一个字段名。
 
-### 请求体格式适配
+### 请求体格式自动适配
 
-`GET` 和 `HEAD` 不能携带请求体。其他方法下，请求体格式由 `builder` 返回的 `body` 值决定：
+`GET` 和 `HEAD` 不能带请求体。其他 HTTP 方法的请求体格式，取决于 `builder` 返回的 `body` 是什么类型：
 
-| `body` 取值                                                | 实际传输格式                                   | 默认 `Content-Type`                       |
+| `body` 传的值                                              | 实际发出的请求体                               | 默认 `Content-Type`                       |
 | ---------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------- |
-| `undefined` / 省略                                         | 不发送请求体                                   | —                                         |
-| 带有 `urlencoded` / `formData` 编解码器的根 struct         | `URLSearchParams` / `FormData`（自动应用别名） | 表单类型 / Multipart Boundary             |
-| 原生 `FormData` 或 `URLSearchParams`                       | 原样直接传输                                   | Multipart Boundary / urlencoded           |
-| `Blob` / `File`                                            | 原样二进制传输                                 | `blob.type` 或 `application/octet-stream` |
-| `ArrayBuffer`、类型化数组、`DataView`、`ReadableStream`    | 原始字节流 / 流式传输                          | `application/octet-stream`                |
+| `undefined` / 不返回                                       | 不发 body                                      | —                                         |
+| `struct.urlencoded` / `struct.formData` 构造的根对象       | `URLSearchParams` / `FormData`（自动保留别名） | 表单类型 / Multipart Boundary             |
+| 原生 `FormData` 或 `URLSearchParams`                       | 原样发送                                       | Multipart Boundary / urlencoded           |
+| `Blob` / `File`                                            | 原样二进制发送                                 | `blob.type` 或 `application/octet-stream` |
+| `ArrayBuffer`、类型化数组、`DataView`、`ReadableStream`    | 原始字节流 / 流式发送                          | `application/octet-stream`                |
 | `string` 纯字符串                                          | UTF-8 文本                                     | `text/plain;charset=UTF-8`                |
-| 普通对象、数组、有限数字、布尔值、`null`、`Date`、`bigint` | 经 struct 编码的 JSON                          | `application/json`                        |
+| 普通对象、数组、有限数字、布尔值、`null`、`Date`、`bigint` | 按 `struct` 编码为 JSON                        | `application/json`                        |
 
 <include cwd lang="typescript">
   examples/http/body.ts#example
 </include>
 
-无法用 JSON 表示的值（`NaN`、`±Infinity`、`Map`、`Set`、函数、没有 `toJSON()` 的类实例或裸可迭代对象）会立即以 `REQ_BUILD_FAILED` 失败，而不是静默序列化成 `{}` 或 `null`。
+JSON 表达不了的值（比如 `NaN`、`±Infinity`、`Map`、`Set`、函数、没写 `toJSON()` 的类实例或裸可迭代对象）会在发出前直接报 `REQ_BUILD_FAILED`，不会偷偷给你序列成 `{}` 或 `null`。
 
-## 4. 响应如何解码
+## 4. 响应体怎么解码
 
-`output` 校验 `2xx` 响应；`error` 校验非 `2xx` 响应（`3xx`、`4xx`、`5xx`）。struct 类型决定响应流如何读取（`struct.string()` → 文本，`struct.blob()` / `struct.file()` → `Blob`，`struct.arrayBuffer()` → `ArrayBuffer`，其他 → JSON）：
+`output` 校验 `2xx` 响应；`error` 校验非 `2xx` 响应（`3xx`、`4xx`、`5xx`）。读流方式跟着 `struct` 类型走（`struct.string()` → 文本，`struct.blob()`/`struct.file()` → `Blob`，`struct.arrayBuffer()` → `ArrayBuffer`，其余 → JSON）：
 
-1. **按 `ok`（`200..299`）选择一侧**：`2xx` 用 `output`，非 `2xx` 用 `error`。
-2. **省略即不读取**：该侧没有声明 struct 时，响应 body 从不读取（`2xx` 解析为 `data: undefined` + `HttpMeta`；非 `2xx` 解析为 `HTTP_STATUS` 且 `data: undefined`）。
-3. **先校验 JSON 媒体类型**：对于 JSON struct，非 JSON 的 `Content-Type` 会在读取或查找 body 之前以 `RES_MEDIA_TYPE_INVALID` 失败。没有内容的响应（`HEAD`、`204`、`205`、`304`）与其他响应一样接受声明的约束。
-4. **读取并解析**：无法读取的流或无效 JSON 以 `RES_DECODE_FAILED` 失败（流中途截断时为 `NET_BODY_INCOMPLETE`）。
-   没有内容的响应（`HEAD`、`204`、`205`、`304`）没有 body 可读：`struct.string()` 得到 `''`，`struct.arrayBuffer()` 得到空的 `ArrayBuffer`，`struct.blob()` 得到空的 `Blob`。通过了第 3 步的 JSON struct 会解析这些空字节，并以 `RES_DECODE_FAILED` 失败。
-5. **用 `struct` 校验**：schema 不匹配以 `RES_STRUCT_MISMATCH` 失败。
+1. **按 `ok`（`200..299`）选一侧**：`2xx` 看 `output`，其余看 `error`。
+2. **没写就不去读**：对应那一侧没有声明 `struct` 时，根本不读取响应流（`2xx` 直接返回 `data: undefined` + `HttpMeta`；非 `2xx` 返回 `HTTP_STATUS` 且 `data` 为 `undefined`）。
+3. **JSON 先验媒体类型**：声明了 JSON `struct` 但响应头 `Content-Type` 不是 JSON 时，直接报 `RES_MEDIA_TYPE_INVALID`（`HEAD`、`204`、`205`、`304` 这种无内容响应也一视同仁）。
+4. **读取并解析**：读流出错或 JSON 解析失败会返回 `RES_DECODE_FAILED`（传输半路被截断则是 `NET_BODY_INCOMPLETE`）。对 `HEAD`/`204`/`205`/`304` 来说：`struct.string()` 会拿到 `""`，`arrayBuffer()` / `blob()` 拿到空二进制对象，而通过第 3 步检查的 JSON `struct` 会因空体无法解析而返回 `RES_DECODE_FAILED`。
+5. **用 `struct` 校验**：字段缺漏或类型对不上会返回 `RES_STRUCT_MISMATCH`。
 
-## 5. 取消请求与设置超时期限 [#cancel-the-work]
+## 5. 取消请求与单次超时 [#cancel-the-work]
 
-在派生的单次调用 Client 上传入 `signal`：`client({ signal })`。
+通过派生 `client({ signal })` 传入取消信号：
 
-- **期限（`NET_TIMEOUT`）**：使用 `AbortSignal.timeout(ms)`。
-- **手动取消（`NET_ABORTED`）**：使用 `AbortController`。
-- **组合信号**：使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`。
+- **设置超时（`NET_TIMEOUT`）**：`AbortSignal.timeout(ms)`
+- **手动取消（`NET_ABORTED`）**：`AbortController`
+- **两者一起用**：`AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`
 
 <Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
 <Tab>
@@ -128,17 +130,23 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 </Tab>
 </Tabs>
 
-取消写请求只表示调用方停止等待，并不保证服务端回滚了这次变更。
+注意：取消写请求只是让前端/调用方不再干等响应，并不代表后端会帮你回滚已经收到的操作。
 
-## 6. 凭证、XSRF 与传输进度
+## 6. 凭据、XSRF 与上传下载进度
 
-- **`withCredentials(true)`**：为 HTTP 和 SSE 请求设置 Fetch `credentials: "include"`。
-- **`withXSRF(options?)`**：来自 `@defjs/core/xsrf`。在浏览器中读取 XSRF cookie（默认 `XSRF-TOKEN`），并在同源的变更类 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上注入请求头（`X-XSRF-TOKEN`）。调用 `withXSRF()` 时，若缺少 `location` 或 `document`（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。同源检查针对的是库构建出的 URL；Fetch 自己跟随重定向，并在重定向到另一个源之后保留这个请求头（它只移除 `Authorization`）。要拒绝这种情况，见 [`withXSRF`](/zh-Hans/api/core/withxsrf)。
-- **`onDownloadProgress` / `onUploadProgress`**：通过 `client({ onDownloadProgress, onUploadProgress })` 传入。仅当 `Content-Length` 为正且 `Content-Encoding` 缺失或为 `identity` 时，下载进度才报告 `lengthComputable: true`。上传进度只在请求 body 是你传入的 `ReadableStream` 时才会报告；其他任何 body（`Blob`、`File`、`ArrayBuffer`、`FormData`、字符串、`URLSearchParams`）都按构建结果发送，并且在每个运行时上都不会调用 `onUploadProgress`。`ReadableStream` body 遵循 Fetch 对流式请求体的规则，无论有没有 `onUploadProgress`：Chromium 和 WebKit 只在 HTTP/2 及以上接受它，因此在 HTTP/1.1 上调用会以 `NET_UNREACHABLE` 失败（Node.js 和 Bun 接受 HTTP/1.1）；Firefox 不能流式发送请求体，并以 `ENV_UNSUPPORTED` 失败；在浏览器中，跨源请求需要 CORS 预检，除非浏览器持有缓存的预检结果；301、302、307 或 308 重定向会失败。浏览器不发送 `Content-Length`。负载均衡器对这些失败，以及对抛出的源流，收到 `{ attempted: false }`，因为 `fetch` 把它们报告成与不可达端点相同的网络错误；因此仅靠流式上传无法发现已宕机的端点。细节见 API 参考中的 `HttpProgressFn` 条目。进度回调抛出异常会以 `EXT_OBSERVER_FAILED` 使调用失败。
+- **`withCredentials(true)`**：同时为 HTTP 与 SSE 请求开启 Fetch `credentials: "include"`。
+- **`withXSRF(options?)`**（从 `@defjs/core/xsrf` 导入）：
+  - 在浏览器中自动读取 XSRF Cookie（默认 `XSRF-TOKEN`），并对同源的变更类请求（`POST`、`PUT`、`PATCH`、`DELETE`）自动带上请求头（默认 `X-XSRF-TOKEN`）。
+  - **非浏览器环境注意**：缺少 `location` 或 `document` 时（包括 Node、Bun 和 Web Worker）调用 `withXSRF()` 会直接抛错，同构项目请先判断运行环境再挂载（自定义读取 Token 请改用拦截器）。另外，同源校验只检查请求构造出来的 URL；如果接口发生跨源 `30x` 重定向，原生 `fetch` 不会自动帮你剥除这个头（它只删 `Authorization`），需要严禁跨源携带请见 [`withXSRF`](/zh-Hans/api/core/withxsrf)。
+- **`onDownloadProgress` / `onUploadProgress`**（通过 `client({ onDownloadProgress, onUploadProgress })` 传入）：
+  - **下载进度**：仅当响应头带有正数 `Content-Length` 且没有开启压缩编码（`Content-Encoding` 缺失或为 `identity`）时，`lengthComputable` 才为 `true`。
+  - **上传进度**：只有当你传给 `body` 的是你自己创建的 `ReadableStream` 时才会回调 `onUploadProgress`；像 `Blob`、`File`、`FormData`、字符串等常规请求体都不会触发。
+  - **流式上传的运行时差异**：即使没传 `onUploadProgress`，传 `ReadableStream` 当请求体也要遵守浏览器原生限制——Chromium / WebKit 仅在 HTTP/2+ 支持流式上传（跑在 HTTP/1.1 会变成 `NET_UNREACHABLE`），Firefox 完全不支持（会报 `ENV_UNSUPPORTED`），Node.js 和 Bun 支持 HTTP/1.1；跨源流式上传在浏览器必须有 CORS 预检放行，且遇到 `301`/`302`/`307`/`308` 重定向会失败，浏览器也不发 `Content-Length`。
+  - **与均衡器的关系 & 异常捕获**：以上因 Fetch 限制导致的失败和源流抛错，均衡器会收到 `{ attempted: false }`（单靠流式上传失败无法触发节点摘除）；如果在进度回调里自己抛出异常，调用会以 `EXT_OBSERVER_FAILED` 结束。详细签名见 API 参考中的 `HttpProgressFn`。
 
 ## 相关阅读
 
 - [发送并校验 JSON](/zh-Hans/recipes/post-json)
-- [处理声明的 404](/zh-Hans/recipes/get-declared-404)
-- [取消 HTTP 调用](/zh-Hans/recipes/cancel-http)
+- [按业务预期处理 404 响应](/zh-Hans/recipes/get-declared-404)
+- [取消进行中的 HTTP 请求](/zh-Hans/recipes/cancel-http)
 - [用本地 Fetch 句柄测试](/zh-Hans/recipes/test-with-handle)

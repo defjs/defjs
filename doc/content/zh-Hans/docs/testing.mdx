@@ -1,26 +1,32 @@
 ---
 title: "测试"
-description: 指导你在自己的项目中为 Defjs 请求定义、struct 结构、自定义拦截器、业务编排函数、实时流消费逻辑和 UI 组件编写测试用例。
+description: 教你在自己的项目里为 Defjs 接口定义、struct 结构、自定义拦截器、业务函数、SSE/WebSocket 消费逻辑和 React / Vue 组件写单元测试。
 ---
 
 # 测试
 
-`@defjs/core` 本身已经测试了自身的传输和编解码引擎。当你在业务应用或 SDK 项目中使用 Defjs 时，编写测试用例的核心目的是验证**你自己写下的项目代码**——包括 `src/api/request/` 与 `src/api/schema/` 里的接口定义和数据结构、`src/api/client.ts` 里的自定义拦截器、`src/checkout.ts` 里的业务编排逻辑，以及 React / Vue 组件中的请求交互。
+`@defjs/core` 自身已经把底层的传输、重试和编解码测得很全了。你在业务项目或 SDK 仓库里写测试，重点测的是**你自己写的那部分代码**：`builder` 参数有没有放对地方、`.alias()` 线格式字段有没有配反、`struct` 能否解出真实接口返回、鉴权/刷新 Token 拦截器怎么工作、业务函数怎么把错误状态码转成业务结果，以及页面组件卸载时有没有把请求取消掉。
 
-## 项目中要测什么——为什么不要 `vi.mock`
+## 项目里该测什么——为什么别用 `vi.mock`
 
-**不要**在业务测试中对导出的 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 做 stub 或 `vi.mock(...)`。正确做法是在每个测试用例中创建一个注入了本地传输句柄（`withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle`）的测试 `Client`，让你的真实接口定义与业务代码在内存中协同跑通：
+编写业务测试时，**不要**用 `vi.mock(...)` 或 stub 把导出的 `defineRequest`、`defineEventStream`、`defineWebSocket` 直接替换掉。一旦 mock 掉操作函数，你自己的 `builder` 参数映射、`.alias()` 编码、自定义拦截器、状态码分发和 `struct` 解码就会全被跳过，测试通过了也可能带着 bug 上线。
 
-| 项目代码分层                                               | 测试重点                                                                | 如何连接测试 `Client`                                                                   |
-| :--------------------------------------------------------- | :---------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
-| 接口定义与 Schema（`src/api/request/`、`src/api/schema/`） | 手写的 `builder` 参数放置、`.alias()` 线格式字段、`output`/`error` 解码 | 直接导入真实操作函数，传入挂载了 `withHTTPHandle` 的测试 `Client`                       |
-| 业务函数与自定义拦截器（`checkout.ts`、`client.ts`）       | 鉴权/请求头拦截器、多步业务流编排、业务错误映射与重试策略               | 将测试 `Client`（挂载 `withInterceptors(...)`）直接传入业务函数                         |
-| SSE 与 WebSocket 消费逻辑（`src/events/`、`src/quotes/`）  | 业务函数对推送事件的消费处理、上行消息格式与 `await using` 释放         | 用 `withSSEHandle` 或 `withWebSocketHandle` 在内存中投喂模拟帧                          |
-| React / Vue UI 组件（`OrderCard.tsx`、`OrderView.vue`）    | 加载态、接口数据渲染、错误提示 UI 以及卸载时 `AbortController` 取消     | 外层包裹 `<ClientProvider client={testClient}>` 或安装 `createClientPlugin(testClient)` |
+更可靠的做法是：在每个测试里新建一个 `Client`，挂上内存传输句柄（`withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle`），让你写的真实接口定义和业务代码在不真正发网包的前提下完整走完一遍流程。
 
-## 1. 测试项目内的接口定义与 Schema（`withHTTPHandle`）
+| 项目代码分层                                               | 测试主要验证什么                                               | 测试 `Client` 怎么接进去                                                    |
+| :--------------------------------------------------------- | :------------------------------------------------------------- | :-------------------------------------------------------------------------- |
+| 接口定义与 Schema（`src/api/request/`、`src/api/schema/`） | 手写的 `builder` 参数位置、`.alias()` 映射、`output`/`error`   | 直接导入真实操作函数，传入挂载了 `withHTTPHandle` 的测试 `Client`           |
+| 业务函数与自定义拦截器（`checkout.ts`、`client.ts`）       | 鉴权头注入、Token 刷新重放、多步业务流、错误映射与重试配置     | 把挂好 `withInterceptors(...)` 的测试 `Client` 直接传进业务函数             |
+| SSE 与 WebSocket 消费逻辑（`src/events/`、`src/quotes/`）  | 业务函数对推送事件的聚合处理、上行报文格式、`await using` 释放 | 用 `withSSEHandle` 或 `withWebSocketHandle` 在内存中构造推送帧              |
+| React / Vue UI 组件（`OrderCard.tsx`、`OrderView.vue`）    | 加载态、数据渲染、报错提示、组件卸载时 `AbortController` 取消  | 用 `<ClientProvider client={testClient}>` 包裹，或安装 `createClientPlugin` |
 
-从项目里导入真实的 `defineRequest` 操作，在用例中使用保留域名（如 `https://fixture.invalid`）和 `withHTTPHandle(...)` 创建测试 `Client`，校验出站 `Request` 报文是否符合后端契约。未配置 `withRetry` 时默认不开启重试；普通单元测试客户端请省略 `withRetry`，这样 `502`/`503`/`504` 与网络错误用例会在单次尝试后立即返回，不会等待退避延迟。
+## 1. 测试接口定义与 Schema（`withHTTPHandle`）
+
+直接导入项目里真实导出的 `defineRequest` 操作，并用 `withEndpoint("https://fixture.invalid")` 搭配 `withHTTPHandle(...)` 创建测试 `Client`：
+
+- **为什么要配 `https://fixture.invalid`**：`createClient` 会在请求进入 `withHTTPHandle` 之前校验一次基础 URL；`.invalid` 是 RFC 标准保留的无效域名，即使配置写漏也不会意外打到真实公网 DNS。
+- **注意句柄职责划分**：`withHTTPHandle` **只拦截 HTTP 操作（`defineRequest`）**；如果你测的是 `defineEventStream` 或 `defineWebSocket`，请分别使用 `withSSEHandle` 或 `withWebSocketHandle`。
+- **关于 `withRetry` 的默认值**：未配置 `withRetry` 时默认**不重试**。普通单元测试尽量不要挂载 `withRetry`，这样遇到 `502`、`503`、`504` 或断网异常时一次就返回结果，不会卡在 `1s + 2s + 4s` 的退避等待上。**特别留意**：调用 `withRetry()` 或传入 `withRetry(undefined)` 会默认开启 **3 次重试**；如果你基于公共测试工厂关闭重试，请显式传入 `withRetry({ maxRetries: 0 })`。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -39,17 +45,39 @@ description: 指导你在自己的项目中为 Defjs 请求定义、struct 结�
 </Tab>
 </Tabs>
 
-### 用例隔离、报文断言与错误优先元组
+### 三个实战要点：用例隔离、核对请求报文、模拟三种常见返回
 
-- **每个用例新建测试 Client**：在每个 `test(...)` 或测试辅助函数内部新建 `createClient(...)`，避免重试预算、端点健康状态与有状态闭包在用例之间串扰。
-- **核对实际发出的网络报文**：在 `withHTTPHandle(async (input, init) => ...)` 中构造 `const request = new Request(input, init)`，断言 `request.method`、`request.url`、`request.headers` 和 `await request.text()`（或 `await request.json()`），确认你写的 `builder` 和 `.alias()` 与后端接口文档一致。
-- **断言 `[err, data, response]` 元组**：
-  - `2xx` 成功分支：断言 `expect(err).toBeNull()` 后紧跟 `if (err) throw err;`，再检查解码后的 `data` 字段（含 `.alias()` 映射结果）。
-  - 失败分支：先用 `if (err)` 判断并在分支内收窄 `if (err.code === "HTTP_STATUS")` 后断言 `err.status`、`err.data` 和 `err.response`（对于解码/预检故障或包装后的业务 `Error` 则检查 `err.cause`），在 `if (err)` 块内 `return` 并于末尾附上 `expect.unreachable(...)`。
+- **每个用例新建一个 `Client`**：不要把带重试预算、健康度状态或请求计数器的 `Client` 放在外层 `describe` 里跨用例共享，随用随建最干净。
+- **核对实际发出去的报文**：在 `withHTTPHandle(async (input, init) => ...)` 里构造 `const request = new Request(input, init)`，把 `request.method`、`request.url`、`request.headers` 和 `await request.text()`（或 `await request.json()`）断言一遍，确认 `builder` 和 `.alias()` 没有写偏。
+- **常见返回分支怎么构造、怎么断言**：
+  - **`2xx` 成功分支**：先 `expect(err).toBeNull()`，紧接着写 `if (err) throw err;` 收窄类型，然后再断言解码出来的 `data`。
+  - **`4xx` / `5xx` 接口报错分支**：返回 `Response.json(..., { status: 422 })`，紧接 `if (err)` 判断，在块里通过 `if (err.code === "HTTP_STATUS")` 断言 `err.status`、`err.data` 和 `err.response`，处理完在 `if (err)` 块内直接 `return`，块外末尾补一句 `expect.unreachable("expected HTTP_STATUS fault")`（如果用 `bun:test` 没有 `expect.unreachable`，直接 `throw new Error("expected HTTP_STATUS fault")` 即可）。
+  - **断网 / 连接失败分支（`NET_UNREACHABLE`）**：**不要**返回 `Response.error()`——只要 `withHTTPHandle` 返回了 `Response` 实例（哪怕状态码是 `0`），Defjs 都会按“已收到 HTTP 响应”处理，得到 `HTTP_STATUS` 而不是网络错误。要模拟断网、DNS 失败或连接重置，请在句柄里直接 `return Promise.reject(new TypeError("fetch failed"))`（或直接 `throw`）：
 
-## 2. 测试项目内的业务函数与自定义拦截器
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { expect, test } from "vitest";
+import { createOrder } from "./sdk/orders.ts";
 
-编写业务编排函数（如 `src/checkout.ts`）和自定义拦截器（`createHttpInterceptor`）的测试时，把测试 `Client` 直接传给业务函数，并把项目中的拦截器通过 `withInterceptors(...)` 挂上。一次内存测试即可同时验证拦截器注入的凭证头、`submitOrder` 序列化出的 `.alias()` 请求体，以及业务层对成功值和错误状态码（例如 `409` 冲突转业务错误）的处理：
+test("断网时返回 NET_UNREACHABLE", async () => {
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() => Promise.reject(new TypeError("fetch failed"))),
+  );
+
+  const [err] = await createOrder(client, { sku: "book", quantity: 1 });
+  if (err) {
+    expect(err.code).toBe("NET_UNREACHABLE");
+    return;
+  }
+
+  expect.unreachable("expected NET_UNREACHABLE fault");
+});
+```
+
+## 2. 测试业务函数与自定义拦截器
+
+测试业务编排函数（比如 `src/checkout.ts`）和自定义拦截器（`createHttpInterceptor`）时，把挂好拦截器的测试 `Client` 直接传给业务函数即可。一次内存测试就能把鉴权头注入、`.alias()` 请求体序列化、成功响应转换以及状态码映射（比如把 `409` 转成业务可读错误）全部覆盖到：
 
 <Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
 <Tab>
@@ -68,14 +96,93 @@ description: 指导你在自己的项目中为 Defjs 请求定义、struct 结�
 </Tab>
 </Tabs>
 
-当你需要测试临时 `503` 的重试恢复而不等待真实定时器时，可在 `withHTTPHandle` 中维护计数器 `let attempts = 0`，并配置 `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })`（重试 `submitOrder` 这类 `POST` 操作时必须声明 `methods: ["POST"]`）。拦截器层级的重放（例如在拦截器内部通过 `next(...)` 刷新 Token 并重放 `401` 请求）不依赖 `withRetry`，直接配合有状态 `withHTTPHandle` 计数器测试即可。
+### 怎么测重试（`withRetry`）和 `401` 刷新 Token 重放
 
-## 3. 测试项目内的实时流消费逻辑（SSE / WebSocket）
+- **测试临时 `503` 重试恢复**：在 `withHTTPHandle` 外面放一个计数器 `let attempts = 0`，配置 `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` 即可零等待测完重试。**坑点提醒**：传入 `methods` 会**整体覆盖**默认可重试方法列表（默认是 `["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]`）；如果同一个测试 `Client` 上既要重试 `GET` 又要重试 `POST`，请写成 `methods: ["GET", "POST"]`。
+- **测试 `401` 刷新 Token 重放**：拦截器里通过再调用一次 `next(...)` 重放请求时，**不依赖 `withRetry`**。直接用有状态的 `withHTTPHandle` 计数器记录第一次返回 `401`、第二次校验新 `Authorization` 头并返回 `200` 即可。另外注意：如果拦截器或业务代码需要读取 `401` 响应体（`err.data`），操作定义上必须声明 `error: struct(...)`，否则只会返回状态码而不会自动解码响应体。
 
-如果项目中有封装 `defineEventStream` 或 `defineWebSocket` 的实时流消费函数或状态聚合器，可以用 `withSSEHandle` 或 `withWebSocketHandle` 在内存中喂入模拟帧，直接断言业务消费逻辑的输出与关闭行为：
+```ts
+import {
+  createClient,
+  createHttpInterceptor,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+  withRetry,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+import { submitOrder } from "./src/checkout.ts";
 
-- **SSE（`withSSEHandle`）**：返回包含 `ReadableStream<Uint8Array>` 与 `content-type: "text/event-stream"` 的 `Response`。
-- **WebSocket（`withWebSocketHandle`）**：传入继承 `EventTarget` 并实现 `WebSocketHandle`（提供 `static readonly OPEN = 1`）的轻量桩类，记录上行发送内容并派发 `open`、`MessageEvent("message")` 与 `CloseEvent("close")`。
+test("临时 503 通过 withRetry 恢复且 POST 需显式加入 methods", async () => {
+  let attempts = 0;
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] }),
+    withHTTPHandle(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Response.json({ message: "try again" }, { status: 503 });
+      }
+      return Response.json({ id: "ord_2" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "pen", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_2");
+});
+
+test("拦截器在 401 时刷新 Token 并重放 next()", async () => {
+  let token = "expired-token";
+  let attempts = 0;
+
+  const refreshAuth = createHttpInterceptor(async (req, next) => {
+    const first = await next({
+      ...req,
+      headers: { ...req.headers, authorization: `Bearer ${token}` },
+    });
+    if (first[0]?.code === "HTTP_STATUS" && first[0].status === 401) {
+      token = "fresh-token";
+      return next({
+        ...req,
+        headers: { ...req.headers, authorization: `Bearer ${token}` },
+      });
+    }
+    return first;
+  });
+
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withInterceptors(refreshAuth),
+    withHTTPHandle(async (input, init) => {
+      attempts += 1;
+      const auth = new Request(input, init).headers.get("authorization");
+      if (auth === "Bearer expired-token") {
+        return new Response(null, { status: 401 });
+      }
+      expect(auth).toBe("Bearer fresh-token");
+      return Response.json({ id: "ord_3" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "mug", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_3");
+});
+```
+
+## 3. 测试 SSE 与 WebSocket 消费逻辑
+
+测试项目里封装好的实时流消费函数或状态聚合器时，可以用 `withSSEHandle` 或 `withWebSocketHandle` 在内存里构造推送事件，直接验证解析结果和资源释放行为：
+
+- **SSE（`withSSEHandle`）**：返回的 `Response` 必须带上 `"content-type": "text/event-stream"` 和一个 `ReadableStream<Uint8Array>`；如果要测试半路断流，在 `start(controller)` 里推送完几条分片后调用 `controller.error(new TypeError("stream dropped"))` 即可（若要测试握手阶段失败，直接返回 `{ status: 500 }` 响应）。
+- **WebSocket（`withWebSocketHandle`）**：传入一个继承 `EventTarget`、实现 `WebSocketHandle`（提供 `static readonly OPEN = 1` 和 `readyState`）的轻量测试桩类。注意示例里的 `FakeQuoteSocket` 会用 **`queueMicrotask` 异步派发 `open` 和消息事件**——这是因为业务代码在发起连接后才会接着挂载监听或进入 `for await`，如果在构造函数里同步派发事件，事件发出时监听还没挂上就会丢消息。如果想测试中途异常关闭，可以在测试桩里派发 `this.dispatchEvent(new Event("error"))` 再接一个 `CloseEvent("close", { code: 1011, reason: "boom" })`。
 
 <Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
 <Tab>
@@ -94,25 +201,89 @@ description: 指导你在自己的项目中为 Defjs 请求定义、struct 结�
 </Tab>
 </Tabs>
 
-## 4. 如何组织项目代码，让业务层和 UI 组件都好测
+## 4. 怎么组织项目代码，让业务层和 UI 组件都好测
 
-遵循 [应用接口层](/zh-Hans/docs/application-api) 的分层方式，你的项目在编写测试时就能完全摆脱 `vi.mock`：
+只要按 [应用接口层](/zh-Hans/docs/application-api) 的目录规范来拆代码，项目测试基本不需要碰 `vi.mock`：
 
-- **定义文件 `src/api/request/*.ts` 不绑定全局 Client**：只导出 `defineRequest`、`defineEventStream` 和 `defineWebSocket`，永远不在定义文件里引入生产 `apiClient`，这样任何测试都能直接对操作函数传入测试 `Client`。
-- **业务函数通过参数接收 `Client`（或 `DerivableClient`）**：可以把 `client` 作为显式首参（只转发 `client` 时写 `client: Client`，需要派生单次选项如 `client({ signal })` 时写 `client: DerivableClient`）声明为 `export async function placeOrder(client: Client, input: ...)`；或者把带默认值的客户端放在最后一个参数（`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`），这样生产代码可写 `placeOrder(input)`，单元测试可传 `placeOrder(input, testClient)`。同时从 `src/api/client.ts` 导出自定义拦截器与 SSR 工厂函数（例如 `createServerApiClient(token, ...options: ClientOption[])`，将尾部的 `ClientOption` 透传给 `createClient(...)`），便于测试挂载 `withHTTPHandle`。
-- **React 与 Vue UI 组件通过 Provider / Plugin 替换 `testClient`**：
-  - **React（`@defjs/react`）**：测试组件时外层包裹 `<ClientProvider client={testClient}>`（或向支持 `useClient(overrideClient)` 的组件/Hook 传入 `testClient`）。
-  - **Vue（`@defjs/vue`）**：挂载待测组件时安装 `app.use(createClientPlugin(testClient))`（或通过 `provide(HTTP_CLIENT, testClient)` 注入）。
+- **定义文件 `src/api/request/*.ts` 不绑定全局 Client**：只导出 `defineRequest`、`defineEventStream` 和 `defineWebSocket`，永远不在定义文件里 `import` 生产 `apiClient`，保证任何测试都能传进自己的测试 `Client`。
+- **业务函数通过参数接收 `Client`（或 `DerivableClient`）**：
+  - **什么时候写 `Client` vs `DerivableClient`**：`createClient(...)` 返回的类型是 `DerivableClient`，它可以传给要求 `Client` 的参数。但如果你在业务函数内部要调用 `client({ signal })` 或 `client({ headers })` 派生单次请求配置，参数类型**必须写 `DerivableClient`**（普通 `Client` 类型上没有可调用的函数签名）。
+  - **参数位置与默认值**：可以把 `client` 放在第一个参数（`export async function placeOrder(client: DerivableClient, input: ...)`），也可以把带默认值的客户端放最后（`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`），这样业务代码里直接调用 `placeOrder(input)`，测试里写 `placeOrder(input, testClient)`。同时从 `src/api/client.ts` 导出自定义拦截器和 SSR 工厂函数（例如 `createServerApiClient(token, ...options: ClientOption[])`，把尾部可选配置透传进 `createClient(...)`），方便测试追加 `withHTTPHandle`。
+  - **Node / Bun 测试里的 `withXSRF()` 注意事项**：`withXSRF()` 会读取浏览器全局对象（如 `globalThis.location`）。如果你的 `src/api/client.ts` 在模块顶层无条件导出 `export const apiClient = createClient(..., withXSRF())`，那么只要测试文件 `import` 了带默认参数 `= apiClient` 的业务函数，哪怕用例里显式传了 `testClient`，文件一加载就会在 Node 或 Bun 测试环境里报错。解决办法是仅在浏览器环境挂载 `withXSRF()`（例如通过工厂函数按运行环境组装），或让业务辅助函数不把浏览器专属的默认客户端挂在顶层导入链路里。
+- **React 与 Vue 组件通过 Provider / Plugin 注入 `testClient`**：
 
-## 5. 测试项目中的超时与定时策略
+<Tabs items={["React (Testing Library)", "Vue (Test Utils)"]}>
+<Tab>
 
-测试业务拦截器里的退避等待、SSE/WebSocket 重连延迟或心跳保活时，在 Vitest 中使用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`（在 Bun test 中使用 `jest.useFakeTimers()`）。注意 Vitest 的假定时器不会推进原生的 `AbortSignal.timeout` 时钟；要在 Vitest 中确定地触发请求超时分支，使用受控 `setTimeout` 以 `TimeoutError` 为原因中止 `AbortController`：
+```tsx
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+import { render, screen } from "@testing-library/react";
+import { expect, test } from "vitest";
+import { OrderCard } from "./OrderCard.tsx";
+
+test("通过 ClientProvider 注入测试 Client 并渲染订单", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const { unmount } = render(
+    <ClientProvider client={testClient}>
+      <OrderCard id="ord_1" />
+    </ClientProvider>,
+  );
+
+  expect(await screen.findByText("ord_1")).toBeTruthy();
+  unmount();
+});
+```
+
+</Tab>
+<Tab>
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { createClientPlugin } from "@defjs/vue";
+import { flushPromises, mount } from "@vue/test-utils";
+import { expect, test } from "vitest";
+import OrderView from "./OrderView.vue";
+
+test("通过 createClientPlugin 注入测试 Client", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const wrapper = mount(OrderView, {
+    props: { orderId: "ord_1" },
+    global: {
+      plugins: [createClientPlugin(testClient)],
+    },
+  });
+
+  await flushPromises();
+  expect(wrapper.text()).toContain("ord_1");
+});
+```
+
+</Tab>
+</Tabs>
+
+## 5. 测试超时、退避与定时器
+
+测试自定义拦截器里的退避等待、SSE/WebSocket 重连延迟或心跳检查时，Vitest 下建议使用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`（Bun test 下使用 `jest.useFakeTimers()`）。之所以把 `toFake` 限制在定时器相关 API 上，是为了让 Promise 和微任务队列保持真实调度，避免 `async` / `await` 卡住。
+
+需要注意，**Vitest 的假定时器不会推进运行时的原生 `AbortSignal.timeout` 时钟**：
+
+- 如果你想确定地触发通过 `client({ signal })` 传入的超时中止分支，请在测试里用受控 `setTimeout` 手动以 `new DOMException("request deadline", "TimeoutError")` 触发 `AbortController.abort(...)`（先等待 `await ready` 确认请求已经真正进入 `withHTTPHandle` 并注册好定时器，再调用 `advanceTimersByTimeAsync`，否则时间快进时定时器还没挂上去）：
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-在 Bun test 中，`jest.useFakeTimers()` 与 `jest.advanceTimersByTime()` 同时控制 `AbortSignal.timeout`。务必在被等待的异步阶段启动后再推进时间，断言业务状态变化或请求尝试次数（而非真实经过时间），并在 `finally` 中恢复真实定时器。
+- 另一种更省事的做法是：如果客户端本身启用了 Defjs 内置的 `withRetry({ maxRetries: 0, attemptTimeoutMs: 500 })`，它底层用的就是 JS `setTimeout`，Vitest 的 `vi.advanceTimersByTimeAsync(500)` 可以直接把它推进到 `NET_TIMEOUT`。
+- 在 **Bun test** 中，`jest.useFakeTimers()` 与 `jest.advanceTimersByTime()` 同时支持推进 `AbortSignal.timeout`。无论用哪种测试框架，都请在状态改变或次数断言之后再放行，并在 `try ... finally` 里恢复真实定时器。
 
 ## 相关阅读
 

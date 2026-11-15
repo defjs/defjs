@@ -5,7 +5,7 @@ description: Sustituye Fetch en un cliente con withHTTPHandle y deja la operaci�
 
 # Probar con un handle Fetch local
 
-`withHTTPHandle(...)` sustituye la función subyacente `fetch` para una instancia concreta de cliente mientras ejercita toda la canalización de Defjs —validación de entrada, mapeo en `builder`, resolución de URLs, interceptores, clasificación por código de estado y decodificación con Struct— sin necesidad de abrir ningún socket de red:
+`withHTTPHandle(...)` sustituye la función `fetch` subyacente de un único `Client` de prueba mientras ejecuta en memoria toda la canalización de Defjs —validación de entrada, `builder`, resolución de URL, interceptores, clasificación por estado y decodificación `struct`— sin abrir ningún socket:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
@@ -21,5 +21,14 @@ description: Sustituye Fetch en un cliente con withHTTPHandle y deja la operaci�
 
   </Tab>
 </Tabs>
+
+### Tres detalles clave al escribir pruebas
+
+- **Por qué envolver `(input, init)` en `new Request(input, init)`**: `withHTTPHandle` recibe la firma estándar `fetch(input, init)`. Envolverla en `new Request(input, init)` ofrece una vista única de `method`, `url`, `headers` y `await request.json()`.
+- **Por qué usar `withEndpoint("https://fixture.invalid")`**: `createClient` valida la URL base antes de invocar `withHTTPHandle`; `.invalid` está reservado por RFC para no resolver DNS real.
+- **Cómo simular los tres resultados HTTP habituales**:
+  - Éxito `2xx`: devolver `Response.json(...)` -> `[null, data, response]`
+  - Error `4xx` / `5xx`: devolver `Response.json(..., { status: 422 })` -> `err.code === "HTTP_STATUS"`
+  - Fallo de red: rechazar o lanzar (`Promise.reject(new TypeError("fetch failed"))`) -> `err.code === "NET_UNREACHABLE"`. **No** devuelvas `Response.error()`, porque cualquier `Response` (incluso con estado `0`) se trata como respuesta HTTP (`HTTP_STATUS`).
 
 En producción, llama a la misma operación `getOrder` con un cliente configurado con `withEndpoint(...)`. Consulta [Pruebas](/es-ES/docs/testing) y [Cliente](/es-ES/docs/client).

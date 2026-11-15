@@ -259,11 +259,58 @@ export const serverClient = createClient(
 | SSE & WebSocket consumers (`src/events/`, `src/quotes/`)              | Stream/frame parsing in business logic, outgoing frames, `await using` cleanup         | Feed simulated frames in memory via `withSSEHandle` or `withWebSocketHandle`                 |
 | React / Vue components (`OrderCard.tsx`, `OrderView.vue`)             | Loading states, rendered API data, error UI, unmount `AbortController` cleanup         | Wrap with `<ClientProvider client={testClient}>` or install `createClientPlugin(testClient)` |
 
-Do **not** `vi.mock` or stub exported `defineRequest`, `defineEventStream`, or `defineWebSocket` functions in tests—doing so skips `builder` placement, `.alias()` wire encoding, interceptors, status dispatch, and `struct` decoding. Always keep `src/api/request/*.ts` free of production client singletons, accept `client: Client` (or `client: DerivableClient` when deriving per-call options like `client({ signal })`) as the first parameter—or put a defaulted `client: Client = apiClient` parameter last (`placeOrder(input, client = apiClient)`)—in business helpers so tests can inject `testClient` without mocking, keep `withRetry` omitted on ordinary unit-test clients (retries are disabled unless configured, so `502`/`503`/`504` and network-error paths return immediately after one attempt), and create a fresh `createClient(...)` per test so retry budgets and closures never leak.
+Testing rules for project code:
+
+- **Do not `vi.mock` Defjs operations** (`defineRequest`, `defineEventStream`, `defineWebSocket`): mocking skips `builder` placement, `.alias()` encoding, interceptors, status dispatch, and `struct` decoding.
+- **Accept `Client` (or `DerivableClient`) by parameter**: Keep `src/api/request/*.ts` free of production client singletons. In business helpers, pass `client: Client` (or `client: DerivableClient` when calling `client({ signal })`) first—or place a defaulted `client: Client = apiClient` last—so tests inject `testClient` without mocking modules.
+- **Keep each test isolated**: Create a fresh `createClient(...)` per test so retry budgets and closures never leak. Omit `withRetry(...)` on baseline unit-test clients so `502`/`503`/`504` and network errors return after one attempt.
 
 ### 4.1 Testing project definitions, custom interceptors, and business helpers (`withHTTPHandle`)
 
-Pass a fresh `withHTTPHandle` test `Client` with any custom `createHttpInterceptor` policies mounted (`withInterceptors(bearerAuth(...))`) directly into your project's business helpers, assert outbound `new Request(input, init)` bytes and wire aliases, check `if (err)` first (narrowing `if (err.code === "HTTP_STATUS")` to inspect `err.status`, `err.data`, and `err.response`, or inspecting `err.cause` on decode/preflight faults and wrapped `Error`s), and guard success assertions with `if (err) throw err;` after `expect(err).toBeNull()`. To test `withRetry` recovery on a transient `503` without real timer waits, keep a counter (`let attempts = 0`) inside `withHTTPHandle` and configure `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` (`methods: ["POST"]` is required when retrying a `POST` operation such as `submitOrder`); interceptor-level `401` token-refresh replay (`next(...)`) does not use `withRetry` and tests directly against a stateful `withHTTPHandle` counter.
+Pass a fresh `withHTTPHandle` test `Client` (mounting custom `createHttpInterceptor` policies via `withInterceptors(...)`) into your real operations and business helpers:
+
+- Assert outbound `new Request(input, init)` URLs, headers, and serialized JSON/alias keys.
+- Narrow errors Go-style: check `if (err)` first (`if (err.code === "HTTP_STATUS")` for `err.status` / `err.data` / `err.response`, or `err.cause` on decode/wrapped faults), and guard success assertions with `if (err) throw err;` after `expect(err).toBeNull()`.
+- Use `https://fixture.invalid` with `withEndpoint(...)` so no test can accidentally touch a real host, and separate request handler setup from assertions inside your test helper or `withHTTPHandle`.
+
+| Simulated scenario in `withHTTPHandle`               | Resulting tuple (`[err, data, res]`)           | Notes                                                                                                                 |
+| ---------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `Response.json(body)` (`200`)                        | `err === null`, validated `data`               | Missing `application/json` triggers `RES_MEDIA_TYPE_INVALID`                                                          |
+| `Response.json(errBody, { status: 4xx/5xx })`        | `err.code === "HTTP_STATUS"`, `err.data`       | Requires `error: struct(...)` on `defineRequest` to decode `data`                                                     |
+| Malformed JSON (`"{bad"`) or non-JSON `Content-Type` | `RES_DECODE_FAILED` / `RES_MEDIA_TYPE_INVALID` | Exact cause sits on `err.cause`                                                                                       |
+| `Promise.reject(new TypeError("fetch failed"))`      | `err.code === "NET_UNREACHABLE"`               | Reject the promise instead of returning `Response.error()` (`status: 0` reads as non-ok HTTP unless wrapped by Fetch) |
+
+```ts
+// Simulating a transport failure -> err.code === "NET_UNREACHABLE"
+const offlineClient = createClient(
+  withEndpoint("https://fixture.invalid"),
+  withHTTPHandle(() => Promise.reject(new TypeError("fetch failed"))),
+);
+
+// Testing withRetry recovery on POST vs. interceptor-level 401 refresh replay
+let postAttempts = 0;
+const retryingPostClient = createClient(
+  withEndpoint("https://fixture.invalid"),
+  withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] }), // Note: overwrites default idempotent methods!
+  withHTTPHandle(() => {
+    postAttempts += 1;
+    if (postAttempts === 1) return new Response(null, { status: 503 });
+    return Response.json({ id: 7, status: "queued" });
+  }),
+);
+
+// 401 refresh replay runs inside createHttpInterceptor via next(req) (not withRetry)
+const refreshOn401 = createHttpInterceptor(async (req, next) => {
+  const result = await next(req);
+  const [err] = result;
+  if (err && err.code === "HTTP_STATUS" && err.status === 401) {
+    const retryReq = req.clone();
+    retryReq.headers.set("authorization", "Bearer fresh");
+    return next(retryReq);
+  }
+  return result;
+});
+```
 
 ```ts
 // src/checkout.ts — project operation, custom interceptor, and business helper
@@ -595,13 +642,70 @@ test("readFirstQuote sends a subscription and returns the first quote price", as
 Follow three conventions so every layer in a user project tests cleanly without `vi.mock`:
 
 - **Keep `src/api/request/*.ts` client-free**: Export pure `defineRequest` / `defineEventStream` / `defineWebSocket` values only; never import `apiClient` inside definition files.
-- **Accept `Client` (or `DerivableClient`) as a parameter in business helpers**: Either pass `client` explicitly as the first parameter (`export async function placeOrder(client: Client, input: ...)` when forwarding `client`, or `client: DerivableClient` when deriving per-call options like `client({ signal })`), or put the defaulted client parameter last (`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`) so production callers write `placeOrder(input)` while unit tests pass `placeOrder(input, testClient)`. Export custom interceptors and SSR factories (`createServerApiClient(token, ...options: ClientOption[])` forwarding trailing `ClientOption` arguments to `createClient(...)`) from `src/api/client.ts` so tests can attach `withHTTPHandle`.
-- **React (`@defjs/react`)**: Wrap the component under test with `<ClientProvider client={testClient}>` (or pass `testClient` explicitly to hooks/components using `useClient(overrideClient)`).
-- **Vue (`@defjs/vue`)**: Install `app.use(createClientPlugin(testClient))` (or `provide(HTTP_CLIENT, testClient)`) when mounting components in tests.
+- **Accept `Client` (or `DerivableClient`) in business helpers**:
+  - Pass `client` first (`placeOrder(client: Client, input: ...)`, or `client: DerivableClient` if the helper derives `client({ signal })`), or pass `client: Client = apiClient` last so production code omits it while unit tests pass `testClient`.
+  - Export custom interceptors and SSR factories (`createServerApiClient(token, ...options: ClientOption[])` forwarding `...options` to `createClient(...)`) from `src/api/client.ts` so tests can mount `withHTTPHandle`.
+- **React (`@defjs/react`)**: Wrap the component under test with `<ClientProvider client={testClient}>` (or pass `testClient` explicitly to hooks/components using `useClient(overrideClient)`). Never pass `client` directly to React `setState(client)` since `DerivableClient` is callable.
+- **Vue (`@defjs/vue`)**: Install `global: { plugins: [createClientPlugin(testClient)] }` (or `provide(HTTP_CLIENT, testClient)`) when mounting components. Never pass `client` directly as the first argument to `watch(client, ...)` or `computed(client)`.
+
+```tsx
+// React Testing Library example
+import { render, screen } from "@testing-library/react";
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+
+it("renders order status from the test client", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() => Response.json({ id: 7, status: "paid" })),
+  );
+
+  render(
+    <ClientProvider client={testClient}>
+      <OrderStatus id={7} />
+    </ClientProvider>,
+  );
+
+  expect(await screen.findByText("paid")).toBeDefined();
+});
+```
+
+```ts
+// Vue Test Utils example
+import { flushPromises, mount } from "@vue/test-utils";
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { createClientPlugin } from "@defjs/vue";
+
+it("renders order status with createClientPlugin", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() => Response.json({ id: 7, status: "paid" })),
+  );
+
+  const wrapper = mount(OrderStatus, {
+    props: { id: 7 },
+    global: { plugins: [createClientPlugin(testClient)] },
+  });
+  await flushPromises();
+
+  expect(wrapper.text()).toContain("paid");
+});
+```
 
 ### 4.5 Deterministic time and request deadlines
 
-For retry backoff, SSE/WebSocket reconnect delays, or WebSocket heartbeats in application policies, use `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` in Vitest (`jest.useFakeTimers()` in Bun test). Vitest fake timers do **not** advance native `AbortSignal.timeout`; trigger deterministic request deadlines by aborting an `AbortController` from a controlled `setTimeout` with `new DOMException("request deadline", "TimeoutError")`. Always advance timers only after the awaited phase has started, assert state transitions or attempt counts rather than elapsed wall-clock time, and restore real timers in `finally`.
+- **Vitest / Bun fake timers**: Use `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` (`jest.useFakeTimers()` in Bun test) for retry backoff, SSE/WebSocket reconnect delays, and heartbeats.
+- **Native `AbortSignal.timeout` does not advance under fake timers**: Trigger deterministic request deadlines via an `AbortController` aborted from a controlled `setTimeout(..., ms)` with `new DOMException("request deadline", "TimeoutError")`, or test per-attempt retry deadlines via `withRetry({ maxRetries: 0, attemptTimeoutMs })` (which uses `setTimeout` instead of `AbortSignal.timeout`).
+- **Advance only after startup**: For SSE/WebSocket timers, `await ready` before calling `vi.advanceTimersByTimeAsync(...)`. Assert state transitions or attempt counts rather than elapsed wall-clock time, and restore real timers in `finally`.
+
+### 4.6 Common testing pitfalls
+
+- **`withRetry(undefined)` vs. `withRetry({ maxRetries: 0 })`**: Passing `undefined` falls back to default retry policy (`maxRetries: 2`, backoff enabled); set `{ maxRetries: 0 }` explicitly (or omit `withRetry`) when retries must stay disabled.
+- **`methods: ["POST"]` replaces defaults**: Passing `withRetry({ methods: ["POST"] })` overrides Defjs's default idempotent method list; include `"GET"` / `"HEAD"` too if one test client shares retries across read and write calls.
+- **`401` / error `err.data` stays `undefined` without `error:` schema**: Non-2xx bodies are only decoded into `err.data` when `defineRequest` declares `error: ApiError` (a `struct`).
+- **`content-type` headers in handles**: Mock JSON HTTP responses with `Response.json(...)` (sets `content-type: application/json`), and mock SSE responses in `withSSEHandle` with `"content-type": "text/event-stream"`; wrong or missing content types fail with `RES_MEDIA_TYPE_INVALID` before reading the body.
+- **`FakeQuoteSocket` microtasks & mid-stream faults**: Schedule simulated inbound frames via `queueMicrotask` after `connect()` returns, and trigger `close(code, reason)` / `error()` inside `queueMicrotask` to test mid-stream SSE/WebSocket `catch` and cleanup paths.
+- **`withXSRF()` is browser-only**: Importing or mounting `withXSRF()` in Node/Bun tests throws `Error("withXSRF is only supported in browser environments")`—skip it on server/test clients or import conditionally from `@defjs/core/xsrf`.
 
 ---
 

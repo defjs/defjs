@@ -50,7 +50,7 @@ bun add @defjs/core
    - 提供一個同步嘅純函式 `builder`，將 `input` 映射成 `{ path }`。只要宣告咗 `input`，就必須提供明確嘅 `builder`。
    - 匯出 `getOrder`，過程完全唔會建立或者綁死任何 client。
 2. **`src/execute-locally.ts`（離線測試執行）**：
-   - 用 `withHTTPHandle(...)` 設定 client，唔使連上真實網絡，都可以跑齊完整嘅 Defjs 流程（input 驗證、URL 解析、狀態碼分發，以及 response struct 解析）。
+   - 用 `withHTTPHandle(...)` 設定 client，唔使連上真實網絡，都可以跑齊完整嘅 Defjs 流程（input 驗證、URL 組合、狀態碼分發，以及 response struct 驗證解析）。
 3. **`src/real-api.ts`（生產環境執行）**：
    - 匯入完全同一個 `getOrder` 操作，並透過 `withEndpoint(...)` 設定真實嘅 base URL 嚟呼叫線上服務。
 
@@ -74,7 +74,7 @@ Order not found
 
 ## 4. 理解 error-first tuple
 
-每次 HTTP 呼叫都會 resolve 出 `[err, data, response]`。一呼叫完就檢查 `if (err)`，並喺個區塊入面離開，就好似 Go 嘅 `if err != nil`：
+每次 HTTP 呼叫都會回傳 `[err, data, response]`。一呼叫完就即刻檢查 `if (err)`，並喺個區塊入面提前 `return`，就好似 Go 嘅 `if err != nil`：
 
 - **`2xx` 成功**：`err` 係 `null`，`data` 係通過驗證嘅 `output` 值（`Order`），而 `response` 就係 `DecodedResponse<Order>`。
 - **宣告過嘅非 `2xx` 狀態碼**：`err.code` 係 `'HTTP_STATUS'`，`err.status` 係數字狀態碼（`404`），而 `err.data` 係通過驗證嘅 `error` struct（`NotFound`）。

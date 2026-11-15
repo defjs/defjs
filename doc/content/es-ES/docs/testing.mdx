@@ -1,26 +1,32 @@
 ---
 title: "Pruebas"
-description: Cómo probar dentro de tu propio proyecto las definiciones de peticiones Defjs, esquemas struct, interceptores propios, funciones de negocio, consumidores en tiempo real y componentes UI.
+description: Cómo probar dentro de tu proyecto las definiciones de peticiones Defjs, esquemas struct, interceptores propios, funciones de negocio, consumidores en tiempo real y componentes React / Vue.
 ---
 
 # Pruebas
 
-`@defjs/core` ya prueba su propio motor de transporte y codificación. Cuando usas Defjs en tu aplicación o paquete SDK, tus pruebas existen para verificar **el código que tú escribiste**: tus definiciones de operaciones y esquemas `struct` (`src/api/request/`, `src/api/schema/`), tus interceptores propios (`src/api/client.ts`), tus funciones de orquestación de negocio (`src/checkout.ts`) y tus componentes UI.
+`@defjs/core` ya prueba su propio motor de transporte y codificación. Cuando usas Defjs en tu aplicación o paquete SDK, tus pruebas existen para verificar **el código que tú escribiste**: colocación en `builder`, claves `.alias()`, decodificación `struct`, interceptores de autenticación, traducción de errores de negocio y limpieza al desmontar componentes.
 
 ## Qué probar en tu proyecto — y por qué evitar `vi.mock`
 
-**No** hagas stub ni uses `vi.mock(...)` sobre las funciones exportadas `defineRequest`, `defineEventStream` o `defineWebSocket`. En su lugar, crea un `Client` de prueba aislado por test con `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle`. Así compruebas de extremo a extremo tus definiciones reales y tus políticas de aplicación en memoria, sin abrir ningún socket de red:
+**No** hagas stub ni uses `vi.mock(...)` sobre las operaciones exportadas `defineRequest`, `defineEventStream` o `defineWebSocket`. Si mockeas una operación te saltas justo tu `builder`, tu serialización `.alias()`, tus interceptores, el despacho de códigos de estado y la decodificación `struct`.
+
+En su lugar, crea un `Client` de prueba aislado por test con un handle en memoria (`withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle`). Así ejecutas de extremo a extremo tus definiciones reales y funciones de negocio en memoria sin abrir ningún socket:
 
 | Capa en tu proyecto                                               | Qué verifica tu prueba                                                                                 | Cómo conectar el `Client` de prueba                                                             |
 | :---------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
 | Definiciones y esquemas (`src/api/request/`, `src/api/schema/`)   | Colocación en `builder` (`path`, `query`, `headers`, `body`), `.alias()`, `output`/`error`             | Importar la operación real y pasarle un cliente `withHTTPHandle` nuevo                          |
-| Funciones de negocio e interceptores (`checkout.ts`, `client.ts`) | Cabeceras de auth, flujos multipaso, mapeo de errores de dominio y reintentos                          | Pasar `testClient` (con `withInterceptors(...)`) directamente a tu función                      |
+| Funciones de negocio e interceptores (`checkout.ts`, `client.ts`) | Cabeceras de auth, reenvío tras refresco `401`, flujos multipaso, mapeo de errores de dominio          | Pasar `testClient` (con `withInterceptors(...)`) directamente a tu función                      |
 | Consumidores SSE y WebSocket (`src/events/`, `src/quotes/`)       | Procesamiento de tramas entrantes en tu lógica, mensajes enviados y cierre `await using`               | Inyectar tramas simuladas en memoria con `withSSEHandle` o `withWebSocketHandle`                |
 | Componentes React / Vue (`OrderCard.tsx`, `OrderView.vue`)        | Estado de carga, datos renderizados, UI de error y cancelación mediante `AbortController` al desmontar | Envolver con `<ClientProvider client={testClient}>` o instalar `createClientPlugin(testClient)` |
 
 ## 1. Probar tus definiciones de peticiones y esquemas (`withHTTPHandle`)
 
-Importa las operaciones `defineRequest` reales de tu proyecto, crea un `Client` de prueba aislado con una URL base reservada (como `https://fixture.invalid`) y `withHTTPHandle(...)`, e inspecciona la `Request` saliente. Los reintentos están deshabilitados salvo que configures `withRetry`; omite `withRetry` en los clientes de prueba unitaria ordinarios para que los casos de `502`/`503`/`504` y error de red regresen de inmediato tras un solo intento sin esperar retrocesos.
+Importa las operaciones `defineRequest` reales de tu proyecto y crea un `Client` de prueba con `withEndpoint("https://fixture.invalid")` y `withHTTPHandle(...)`:
+
+- **Por qué `https://fixture.invalid`**: `createClient` valida la URL base antes de llegar a `withHTTPHandle`; `.invalid` está reservado por RFC y nunca consultará un DNS real aunque olvides algo.
+- **Un tipo de handle por transporte**: `withHTTPHandle` solo intercepta HTTP (`defineRequest`). Usa `withSSEHandle` para `defineEventStream` y `withWebSocketHandle` para `defineWebSocket`.
+- **Reintentos por defecto y trampa de `withRetry(undefined)`**: Sin `withRetry`, los reintentos están desactivados; omítelo en pruebas unitarias ordinarias para que `502`/`503`/`504` y los fallos de red devuelvan resultado tras un solo intento sin esperar retrocesos de `1s + 2s + 4s`. Ojo: llamar a `withRetry()` o `withRetry(undefined)` activa **3 reintentos por defecto**. Para desactivarlos explícitamente desde un helper común, pasa `withRetry({ maxRetries: 0 })`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -39,17 +45,39 @@ Importa las operaciones `defineRequest` reales de tu proyecto, crea un `Client` 
 </Tab>
 </Tabs>
 
-### Aislamiento, comprobación del formato de red y tupla error-first
+### Tres pilares: aislamiento, revisión del formato saliente y los tres resultados HTTP
 
-- **Aísla un cliente por prueba**: Instancia un `createClient(...)` nuevo dentro de cada `test(...)` o helper para evitar fugas de presupuesto de reintentos o estado del handle entre pruebas.
-- **Verifica el formato de red saliente**: Dentro de `withHTTPHandle(async (input, init) => ...)`, construye `const request = new Request(input, init)` y comprueba `request.method`, `request.url`, `request.headers` y `await request.text()` (o `await request.json()`) para verificar que tu `builder` y `.alias()` coinciden con el contrato de tu backend.
-- **Comprueba la tupla `[err, data, response]`**:
-  - Para respuestas `2xx`, comprueba `expect(err).toBeNull()` seguido de `if (err) throw err;` antes de inspeccionar los campos decodificados de `data` (incluido el mapeo `.alias()`).
-  - Para fallos, comprueba primero con `if (err)`, acota dentro `if (err.code === "HTTP_STATUS")` para verificar `err.status`, `err.data` y `err.response` (o `err.cause` en fallos de decodificación/preflight y errores `Error` de negocio envueltos), sal con `return` desde `if (err)` y añade `expect.unreachable(...)` a continuación.
+- **Aísla un cliente por prueba**: Crea un `createClient(...)` nuevo dentro de cada `test(...)` o helper para evitar fugas de presupuesto de reintentos o contadores entre pruebas.
+- **Verifica la petición saliente**: Dentro de `withHTTPHandle(async (input, init) => ...)`, construye `const request = new Request(input, init)` y comprueba `request.method`, `request.url`, `request.headers` y `await request.text()` (o `await request.json()`).
+- **Simula y comprueba los tres resultados HTTP habituales**:
+  - **Éxito `2xx`**: Comprueba `expect(err).toBeNull()`, seguido inmediatamente de `if (err) throw err;` para acotar `data`, y luego revisa los campos decodificados.
+  - **Error de API `4xx` / `5xx`**: Devuelve `Response.json(..., { status: 422 })`, protege primero con `if (err)`, acota dentro `if (err.code === "HTTP_STATUS")` para comprobar `err.status`, `err.data` y `err.response`, haz `return` y añade `expect.unreachable(...)` después (en `bun:test`, lanza `new Error("expected fault")`).
+  - **Fallo de red (`NET_UNREACHABLE`)**: **No** devuelvas `Response.error()`. Cualquier `Response` devuelta (aunque tenga estado `0`) pasa por el flujo HTTP y produce `HTTP_STATUS`. Rechaza la promesa —por ejemplo `Promise.reject(new TypeError("fetch failed"))`— para disparar `NET_UNREACHABLE`:
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { expect, test } from "vitest";
+import { createOrder } from "./sdk/orders.ts";
+
+test("devuelve NET_UNREACHABLE cuando fetch rechaza", async () => {
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() => Promise.reject(new TypeError("fetch failed"))),
+  );
+
+  const [err] = await createOrder(client, { sku: "book", quantity: 1 });
+  if (err) {
+    expect(err.code).toBe("NET_UNREACHABLE");
+    return;
+  }
+
+  expect.unreachable("expected NET_UNREACHABLE fault");
+});
+```
 
 ## 2. Probar tus funciones de negocio e interceptores propios
 
-Pasa un `Client` a las funciones de orquestación de negocio de tu proyecto (`checkout.ts`) y monta tus interceptores `createHttpInterceptor` (`withInterceptors(bearerAuth(...))`) directamente en el cliente de prueba. En una sola prueba sin conexión verificas las cabeceras de autenticación añadidas por tu interceptor, la codificación JSON `.alias()` generada por `submitOrder` y cómo tu función traduce tanto éxitos como errores declarados (como un conflicto `409`):
+Pasa un `Client` directamente a tus funciones de negocio (`src/checkout.ts`) y monta tus interceptores `createHttpInterceptor` (`withInterceptors(bearerAuth(...))`) en el cliente de prueba. Una sola prueba sin conexión cubre cabeceras de auth, serialización `.alias()` de `submitOrder` y traducción de éxitos y errores declarados (`409`):
 
 <Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
 <Tab>
@@ -68,14 +96,93 @@ Pasa un `Client` a las funciones de orquestación de negocio de tu proyecto (`ch
 </Tab>
 </Tabs>
 
-Para probar la recuperación de `withRetry` ante un `503` transitorio sin esperas reales, mantén un contador `let attempts = 0` dentro de `withHTTPHandle` y configura `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` (`methods: ["POST"]` es necesario al reintentar una operación `POST` como `submitOrder`). El reenvío a nivel de interceptor (como un interceptor de renovación tras `401` que vuelve a invocar `next(...)`) no usa `withRetry`: pruébalo directamente frente a un contador con estado en `withHTTPHandle`.
+### Probar recuperación con `withRetry` y reenvío tras refresco `401`
+
+- **Recuperación ante `503` con `withRetry`**: Mantén `let attempts = 0` fuera de `withHTTPHandle` y configura `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })`. Ojo: pasar `methods` **reemplaza** la lista segura por defecto (`["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]`), así que escribe `methods: ["GET", "POST"]` si el mismo cliente también reintenta `GET`.
+- **Reenvío tras refresco `401` en un interceptor**: Volver a llamar `next(...)` en un interceptor no usa `withRetry`. Pruébalo con un contador con estado dentro de `withHTTPHandle`. Ten en cuenta que si tu código lee `err.data` en un `401`, la operación debe declarar `error: struct(...)`.
+
+```ts
+import {
+  createClient,
+  createHttpInterceptor,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+  withRetry,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+import { submitOrder } from "./src/checkout.ts";
+
+test("reintenta un 503 en POST cuando methods incluye POST", async () => {
+  let attempts = 0;
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] }),
+    withHTTPHandle(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Response.json({ message: "try again" }, { status: 503 });
+      }
+      return Response.json({ id: "ord_2" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "pen", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_2");
+});
+
+test("refresca el token ante 401 y reenvía next() en el interceptor", async () => {
+  let token = "expired-token";
+  let attempts = 0;
+
+  const refreshAuth = createHttpInterceptor(async (req, next) => {
+    const first = await next({
+      ...req,
+      headers: { ...req.headers, authorization: `Bearer ${token}` },
+    });
+    if (first[0]?.code === "HTTP_STATUS" && first[0].status === 401) {
+      token = "fresh-token";
+      return next({
+        ...req,
+        headers: { ...req.headers, authorization: `Bearer ${token}` },
+      });
+    }
+    return first;
+  });
+
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withInterceptors(refreshAuth),
+    withHTTPHandle(async (input, init) => {
+      attempts += 1;
+      const auth = new Request(input, init).headers.get("authorization");
+      if (auth === "Bearer expired-token") {
+        return new Response(null, { status: 401 });
+      }
+      expect(auth).toBe("Bearer fresh-token");
+      return Response.json({ id: "ord_3" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "mug", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_3");
+});
+```
 
 ## 3. Probar tus consumidores SSE y WebSocket
 
-Cuando tu proyecto envuelve `defineEventStream` o `defineWebSocket` en funciones consumidoras o acumuladores de estado, alimenta tramas simuladas en memoria usando `withSSEHandle` o `withWebSocketHandle` y comprueba el resultado de tu función:
+Cuando tu proyecto envuelve `defineEventStream` o `defineWebSocket`, inyecta tramas en memoria usando `withSSEHandle` o `withWebSocketHandle`:
 
-- **SSE (`withSSEHandle`)**: Devuelve una `Response` respaldada por un `ReadableStream<Uint8Array>` con `content-type: "text/event-stream"`.
-- **WebSocket (`withWebSocketHandle`)**: Pasa una clase mínima que extienda `EventTarget` e implemente `WebSocketHandle` (exponiendo `static readonly OPEN = 1`), registre los mensajes enviados y emita `open`, `MessageEvent("message")` y `CloseEvent("close")`.
+- **SSE (`withSSEHandle`)**: Devuelve una `Response` con `ReadableStream<Uint8Array>` y `"content-type": "text/event-stream"`. Para simular un corte a mitad de transmisión, llama a `controller.error(new TypeError("stream dropped"))` tras enviar algunos fragmentos (o devuelve `{ status: 500 }` para fallar al abrir).
+- **WebSocket (`withWebSocketHandle`)**: Pasa una subclase de `EventTarget` que implemente `WebSocketHandle` (`static readonly OPEN = 1` y `readyState`). `FakeQuoteSocket` programa `open` y los mensajes iniciales con `queueMicrotask` para dar tiempo a que el llamador conecte sus listeners o entre en `for await` antes de emitir eventos; hacerlo de forma síncrona en el constructor ocurriría demasiado pronto. Para simular un error a mitad de sesión, emite `new Event("error")` seguido de `new CloseEvent("close", { code: 1011, reason: "boom" })`.
 
 <Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
 <Tab>
@@ -98,21 +205,85 @@ Cuando tu proyecto envuelve `defineEventStream` o `defineWebSocket` en funciones
 
 Seguir la distribución de [Capa API de aplicación](/es-ES/docs/application-api) mantiene todas las pruebas libres de `vi.mock`:
 
-- **Mantén `src/api/request/*.ts` sin cliente**: Exporta solo valores `defineRequest`, `defineEventStream` y `defineWebSocket`. Nunca importes tu `apiClient` de producción en archivos de definición, para que cualquier prueba pueda invocar esas operaciones directamente contra un cliente `with*Handle`.
-- **Acepta `Client` (o `DerivableClient`) como parámetro en tus helpers de negocio**: pasa `client` explícitamente como primer parámetro (`export async function placeOrder(client: Client, input: ...)` si solo se reenvía, o `client: DerivableClient` si se derivan opciones por llamada como `client({ signal })`), o coloca el parámetro con valor por defecto al final (`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`) para que producción escriba `placeOrder(input)` y las pruebas pasen `placeOrder(input, testClient)`. Exporta también tus interceptores y fábricas SSR (`createServerApiClient(token, ...options: ClientOption[])` reenviando las opciones `ClientOption` finales a `createClient(...)`) desde `src/api/client.ts` para adjuntar `withHTTPHandle` en pruebas.
+- **Mantén `src/api/request/*.ts` sin cliente**: Exporta solo `defineRequest`, `defineEventStream` y `defineWebSocket` sin importar jamás `apiClient`.
+- **Acepta `Client` (o `DerivableClient`) en tus helpers de negocio**:
+  - **Cuándo usar `Client` vs `DerivableClient`**: `createClient(...)` devuelve un `DerivableClient`, compatible con `Client`. Pero si el helper llama a `client({ signal })` para derivar opciones por llamada, el parámetro debe tener tipo **`DerivableClient`**.
+  - **Posición de argumentos y fábricas SSR**: Pasa `client` primero (`placeOrder(client: DerivableClient, input: ...)`) o al final con valor por defecto (`placeOrder(input: PlaceOrderInput, client: Client = apiClient)`), y exporta tus interceptores y `createServerApiClient(token, ...options: ClientOption[])` desde `src/api/client.ts`.
+  - **Trampa de `withXSRF()` en pruebas Node / Bun**: `withXSRF()` lee globales del navegador (`globalThis.location`). Si `src/api/client.ts` exporta sin condiciones `apiClient = createClient(..., withXSRF())` en el nivel superior, importar cualquier helper con `= apiClient` fallará al cargar el archivo en Node o Bun. Limita `withXSRF()` con `typeof window !== "undefined"` o constrúyelo dentro de una fábrica.
 - **Inyecta `testClient` en componentes React y Vue**:
-  - **React (`@defjs/react`)**: Envuelve el componente bajo prueba en `<ClientProvider client={testClient}>` (o pasa `testClient` a `useClient(overrideClient)`).
-  - **Vue (`@defjs/vue`)**: Instala `app.use(createClientPlugin(testClient))` (o usa `provide(HTTP_CLIENT, testClient)`) al montar componentes en pruebas.
+
+<Tabs items={["React (Testing Library)", "Vue (Test Utils)"]}>
+<Tab>
+
+```tsx
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+import { render, screen } from "@testing-library/react";
+import { expect, test } from "vitest";
+import { OrderCard } from "./OrderCard.tsx";
+
+test("inyecta testClient mediante ClientProvider", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const { unmount } = render(
+    <ClientProvider client={testClient}>
+      <OrderCard id="ord_1" />
+    </ClientProvider>,
+  );
+
+  expect(await screen.findByText("ord_1")).toBeTruthy();
+  unmount();
+});
+```
+
+</Tab>
+<Tab>
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { createClientPlugin } from "@defjs/vue";
+import { flushPromises, mount } from "@vue/test-utils";
+import { expect, test } from "vitest";
+import OrderView from "./OrderView.vue";
+
+test("inyecta testClient mediante createClientPlugin", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const wrapper = mount(OrderView, {
+    props: { orderId: "ord_1" },
+    global: {
+      plugins: [createClientPlugin(testClient)],
+    },
+  });
+
+  await flushPromises();
+  expect(wrapper.text()).toContain("ord_1");
+});
+```
+
+</Tab>
+</Tabs>
 
 ## 5. Probar límites de tiempo y lógica basada en temporizadores
 
-Para el backoff de reintentos, demoras de reconexión SSE/WebSocket o latidos de WebSocket en tus políticas de aplicación, usa `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` en Vitest (`jest.useFakeTimers()` en Bun test). Los temporizadores simulados de Vitest **no** avanzan el reloj nativo de `AbortSignal.timeout`; para probar un plazo límite determinista en Vitest, aborta un `AbortController` desde un `setTimeout` controlado con la razón `TimeoutError`:
+Para backoff, demoras de reconexión o latidos, usa `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` en Vitest (`jest.useFakeTimers()` en Bun test). Acotar `toFake` deja sin tocar promesas y microtareas para que `async`/`await` no se quede congelado.
+
+Ten en cuenta que **los temporizadores falsos de Vitest no avanzan el reloj nativo de `AbortSignal.timeout`**, porque usa el temporizador nativo del runtime y no el `setTimeout` de JS:
+
+- Para probar una fecha límite `client({ signal })` en Vitest, aborta un `AbortController` desde un `setTimeout` controlado con `new DOMException("request deadline", "TimeoutError")`. Espera siempre a `await ready` antes de llamar a `advanceTimersByTimeAsync` para que el `setTimeout` dentro del handle ya esté programado:
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-En Bun test, `jest.useFakeTimers()` y `jest.advanceTimersByTime()` también controlan `AbortSignal.timeout`. Avanza los temporizadores solo después de que haya iniciado la fase esperada, comprueba transiciones de estado o recuentos de intentos en lugar de tiempo real transcurrido, y restaura los temporizadores reales en `finally`.
+- Como alternativa, `withRetry({ maxRetries: 0, attemptTimeoutMs: 500 })` usa `setTimeout` de JS internamente, de modo que `vi.advanceTimersByTimeAsync(500)` dispara `NET_TIMEOUT` directamente en Vitest.
+- En **Bun test**, `jest.useFakeTimers()` y `jest.advanceTimersByTime()` también controlan `AbortSignal.timeout`. Comprueba transiciones de estado o contadores de intentos y restaura siempre los temporizadores reales en `finally`.
 
 ## Lecturas relacionadas
 

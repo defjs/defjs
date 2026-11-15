@@ -17,7 +17,7 @@ description: 以 Amazon S3 SDK 架構為藍本，為公開 API 設計並發佈�
 
 1. **多環境同沙盒靈活切換**：因為 `@company/s3-sdk` 唔綁定任何 endpoint 或 client，客戶可以將完全相同嘅操作定義指向正式環境（`https://s3.us-east-1.amazonaws.com`）、測試沙盒、Cloudflare R2，或者 CI 測試入面嘅本地 MinIO 容器。
 2. **100% 打包工具 Tree-shaking**：匯出獨立嘅純函數（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）並加上 `"sideEffects": false`，可以確保只呼叫 `getObject` 同 `putObject` 嘅瀏覽器 bundle 自動剔除晒所有其他 endpoint 同模型。
-3. **Runtime 驗證與靜態型別同源**：外部使用方由同一個來源就可以同時攞到編譯期 TypeScript 型別（`Infer<typeof ...>`）同 runtime 回應／錯誤驗證（`struct`），防範非預期嘅網絡 payload，並自動轉換 `snake_case` 欄位或 ISO 日期字串。
+3. **Runtime 驗證與靜態型別同源**：接入方由同一個來源就可以同時攞到編譯期 TypeScript 型別（`Infer<typeof ...>`）同 runtime 回應／錯誤驗證（`struct`），防範非預期嘅網絡 payload，並自動轉換 `snake_case` 欄位或 ISO 日期字串。
 4. **完全掌握認證、重試同觀測**：客戶可以喺自己嘅 `Client` 上面自由掛載憑證輪換攔截器、`withRetry(...)` 策略、跨區域負載平衡器（`withBalancer(...)`），或者伺服器端 OpenTelemetry（`@defjs/opentelemetry-server`）。
 
 ---
@@ -33,7 +33,7 @@ description: 以 Amazon S3 SDK 架構為藍本，為公開 API 設計並發佈�
 │   │   ├── common.ts           #    StorageClass, S3Error
 │   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
 │   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
-│   ├── request/               # 2. 按資源領域劃分嘅純 defineRequest 函數
+│   ├── request/                # 2. 按資源領域劃分嘅純 defineRequest 函數
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. 供根路徑 import 同 tree-shaking 使用嘅匯出入口

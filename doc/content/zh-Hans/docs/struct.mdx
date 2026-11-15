@@ -1,16 +1,16 @@
 ---
 title: "数据结构 / Struct"
-description: 使用 `struct` 声明带类型的数据契约，在 SDK 与调用方之间共享输入、输出与错误校验。
+description: 用 `struct` 声明带类型的数据契约，在接口定义与业务校验之间共用同一套规则。
 ---
 
 # 数据结构 / Struct
 
-`struct` 声明 SDK 与消费方应用共享的网络数据契约：调用方输入、`2xx` 输出、声明的服务错误、SSE 事件和 WebSocket 帧。
+`struct` 用来描述业务入参、`2xx` 正常响应、业务可预期的错误体，以及 SSE 事件和 WebSocket 帧的格式契约：
 
-- **静态推断**：用 `Infer<typeof Schema>` 推导 TypeScript 类型。
-- **错误优先校验**：用 `struct.parse(Schema, value)` 在运行时校验值——返回 `[null, data]` 或 `[StructError, undefined]`，不抛出异常。
+- **直接推出 TS 类型**：用 `Infer<typeof Schema>` 自动推导类型，不用写两遍 interface。
+- **不抛异常的校验**：在边界用 `struct.parse(Schema, value)` 检查未知数据，失败返回 `[StructError, undefined]`，成功返回 `[null, data]`。
 
-## 1. 在 SDK 中定义 schema，在应用中校验
+## 1. 声明结构并校验数据
 
 <Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab>
@@ -36,103 +36,105 @@ description: 使用 `struct` 声明带类型的数据契约，在 SDK 与调用�
 </Tab>
 </Tabs>
 
-解析后的对象只保留声明的字段（未知属性被剔除），并使用 `null` 原型。缺少必填键、基础类型错误或无效分支都会产生 `StructError`，不会返回部分结果。
+校验通过后返回的新对象只保留你声明过的字段（多余字段会被剔除），原型为 `null`。缺少必填键、类型不对或联合分支没匹配上都会直接返回 `StructError`，绝不悄悄补默认值或吐出半截残缺结果。
 
-## 2. 必填、可选与可空字段
+## 2. 必填、可选（`undefined`）与可空（`null`）
 
-Defjs 区分**字段是否存在**（`undefined`）与**是否可为 null**（`null`）。默认情况下，每个 struct 构造器都严格必填且不可为 null：
+Defjs 把**字段可以不传**（`undefined`）和**字段值可以是 `null`**（`null`）区分得很开。默认状态下，每个 `struct` 构造器都要求字段必须存在且不能为 `null`：
 
-| 声明方式                     | 缺失 / 传入 `undefined`            | 传入 `null` | 合法输入值                 |
-| ---------------------------- | ---------------------------------- | ----------- | -------------------------- |
-| `struct.string()`            | 拒绝                               | 拒绝        | 接受 `string`              |
-| `struct.string().optional()` | 接受（序列化对象时该字段将被省略） | 拒绝        | 接受 `string`              |
-| `struct.string().null()`     | 拒绝                               | 接受        | 接受 `string`              |
-| `struct.string().nullish()`  | 接受（序列化对象时该字段将被省略） | 接受        | 接受 `string`              |
-| `struct.null()`              | 拒绝                               | 接受        | 拒绝除 `null` 之外的所有值 |
+| 声明方式                     | 缺失 / 传入 `undefined`            | 传入 `null` | 允许的值               |
+| ---------------------------- | ---------------------------------- | ----------- | ---------------------- |
+| `struct.string()`            | 拒绝                               | 拒绝        | 接受 `string`          |
+| `struct.string().optional()` | 接受（序列化对象时该字段直接省略） | 拒绝        | 接受 `string`          |
+| `struct.string().null()`     | 拒绝                               | 接受        | 接受 `string`          |
+| `struct.string().nullish()`  | 接受（序列化对象时该字段直接省略） | 接受        | 接受 `string`          |
+| `struct.null()`              | 拒绝                               | 接受        | 除 `null` 以外全部拒绝 |
 
 <include cwd lang="typescript">
   examples/struct/required-optional-null.ts#example
 </include>
 
-`struct.any()` 和 `struct.unknown()` 也会拒绝 `null` 与 `undefined`，除非链式调用 `.null()`、`.optional()` 或 `.nullish()`。
+注意：`struct.any()` 和 `struct.unknown()` 默认也会拒绝 `null` 和 `undefined`，只有显式链上 `.null()`、`.optional()` 或 `.nullish()` 后才会放行。
 
-## 3. 双向网络字段别名（`.alias()`）
+## 3. 双向字段别名（`.alias()`）
 
-当后端使用 `snake_case` 或请求头名称，而 TypeScript SDK 使用 `camelCase` 时，使用 `.alias("wire_name")`。别名在字段上声明一次，两个方向都会生效：
+后端接口常用下划线 `snake_case` 或带短横线的请求头，而 TypeScript 里更习惯小驼峰 `camelCase`。在字段上挂一个 `.alias("wire_name")`，发送和接收两个方向就都自动对齐了：
 
-| 边界                                                           | 使用的键                                                 |
-| -------------------------------------------------------------- | -------------------------------------------------------- |
-| 操作 `input` 与 `struct.parse(Schema, value)`                  | 逻辑名称（`customerName`）                               |
-| `builder` 返回的类型化 struct 值（`body`、`query`、`headers`） | 网络别名（`customer_name`）                              |
-| JSON 响应、SSE 事件以及 WebSocket 数据帧的解码过程             | 网络传输的 `customer_name` 自动转为逻辑名 `customerName` |
-| 在 `builder` 中直接手写的匿名对象键名                          | 保持手写的字面量键名不变                                 |
+| 所在环节                                                       | 使用的字段名                                         |
+| -------------------------------------------------------------- | ---------------------------------------------------- |
+| 代码里传给操作的 `input` 或 `struct.parse(Schema, value)`      | 逻辑字段名（`customerName`）                         |
+| `builder` 直接交出的 `struct` 值（`body`、`query`、`headers`） | 自动换成线上别名（`customer_name`）                  |
+| 收到 JSON 响应、SSE 事件或 WebSocket 帧解码时                  | 自动把 `customer_name` 转回逻辑字段名 `customerName` |
+| `builder` 里你手写的匿名普通对象键名                           | 按手写字面量原样发出去                               |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-在 `builder` 中展开类型化对象（`{ ...input.order, extra: 1 }`）会保留其 struct 编码和别名。在同一对象上同时写逻辑键和网络别名会以 `REQ_BUILD_FAILED` 失败。
+如果在 `builder` 里展开一个已绑定 `struct` 的对象（例如 `{ ...input.order, extra: 1 }`），原有的别名和编解码规则会跟着保留下来；但如果在同一个对象里同时塞入逻辑字段名和它的线上别名，会立即报错 `REQ_BUILD_FAILED`。
 
-## 4. 请求放置与表单编解码器
+## 4. 参数放置与表单 / 二进制编码
 
-`input` 声明参数；`builder` 把它们放入 `{ path, query, headers, body }`。对于表单编码的 body，`struct.urlencoded(shape)` 和 `struct.formData(shape)` 会给根对象打上标记，让传输层自动序列化为 `URLSearchParams` 或 `FormData`：
+`input` 只声明有哪些数据，具体放到哪里由 `builder` 返回 `{ path, query, headers, body }` 决定。针对表单提交，可以用 `struct.urlencoded(shape)` 和 `struct.formData(shape)` 给根节点打标，传输层会自动转成 `URLSearchParams` 或 `FormData`：
 
 <include cwd lang="typescript">
   examples/struct/request-placement.ts#example
 </include>
 
-| `builder` 返回的 Body 根节点类型              | 网络传输格式      | 默认 `Content-Type`                               |
+| `builder` 返回的 Body 根节点类型              | 实际发送格式      | 默认 `Content-Type`                               |
 | --------------------------------------------- | ----------------- | ------------------------------------------------- |
-| 类型化的对象、数组、有限数字、布尔值或 `null` | JSON 文本         | `application/json`                                |
+| 类型化对象、数组、有限数字、布尔值或 `null`   | JSON 文本         | `application/json`                                |
 | `string` struct 或原始纯字符串                | UTF-8 纯文本      | `text/plain;charset=UTF-8`                        |
 | 位于 Body 根节点的 `struct.urlencoded(shape)` | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
 | 位于 Body 根节点的 `struct.formData(shape)`   | `FormData`        | `multipart/form-data; boundary=...`               |
 | `Blob` / `File`（`struct.file()`）            | 二进制 Blob       | `blob.type` 或 `application/octet-stream`         |
 | `ArrayBuffer` / 类型化视图 / `ReadableStream` | 原始字节流        | `application/octet-stream`                        |
 
-## 5. 处理 `StructError` 与 issue
+## 5. 处理校验失败（`StructError` 与 `issue`）
 
-校验失败时，`struct.parse(Schema, data, { aliases?, errorMap? })` 返回 `[StructError, undefined]`。`StructError` 继承原生 `Error`，提供 `issues`、`format()`、`flatten()` 和 `prettify()`：
+校验不通过时，`struct.parse(Schema, data, { aliases?, errorMap? })` 会返回 `[StructError, undefined]`。`StructError` 继承自原生 `Error`，自带 `issues` 数组和 `format()`、`flatten()`、`prettify()` 方法：
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-每个 `StructIssue` 包含 `code`（可能为 `invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 以及 `message`。默认消息会省略收到的值，只报告其*类型*，但 path 会保留动态 record 的键，其中可能含有敏感值。`String(err)` 和 `err.prettify()` 不是脱敏边界；写日志时请使用安全字段的允许列表，并把原始 `received` 值以及自定义消息当作敏感信息。
+每条 `StructIssue` 包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 和 `message`。
 
-## 6. 构造器速查表
+**日志打印提醒**：默认的错误消息不会直接输出收到的原始数据本身，只会显示它的*类型*，但 `path` 里仍会保留动态 `record` 的键名（其中可能带业务参数）。注意 `String(err)` 和 `err.prettify()` **不是自动脱敏接口**；往日志里记错误时，请只输出安全字段白名单（例如 `code`、`path`），把原始 `received` 值和自定义报错文本都按敏感数据对待。
+
+## 6. 常用构造器速查表
 
 <include cwd lang="typescript">
   examples/struct/any.ts#example
 </include>
 
-| 构造器                                                     | 接受的输入                                  | 推断输出                                             |
-| ---------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------- |
-| `struct.string()` / `struct.boolean()`                     | 匹配的原生类型                              | `string` / `boolean`                                 |
-| `struct.number()`                                          | 除 `NaN` 外的任意数字                       | `number`（拒绝 `NaN`；JSON Body 中拒绝 `±Infinity`） |
-| `struct.bigint()`                                          | `bigint` 或合法的数字字符串                 | `bigint`                                             |
-| `struct.date()`                                            | 合法的 `Date` 对象、时间戳或 ISO 日期字符串 | `Date`                                               |
-| `struct.literal(value)`                                    | 精确的原生字面量值                          | 字面量类型                                           |
-| `struct.enum(values)`                                      | 声明的字符串或数字枚举成员                  | 字面量联合类型                                       |
-| `struct.array(item)` / `struct.tuple(items)`               | 数组 / 固定长度元组                         | `T[]` / `[...]`                                      |
-| `struct.object(shape)` / `struct.record(val)`              | 普通对象                                    | 类型化对象 / `Record<string, V>`                     |
-| `struct.discriminatedUnion(key, options)`                  | 带有字面量判别键 `key` 的对象               | 对象分支的联合类型                                   |
-| `struct.or(branches)`                                      | 首个匹配的分支                              | 各分支类型的联合类型                                 |
-| `struct.intersection(members)`                             | 同时满足所有成员条件的值                    | 深度合并的交叉类型                                   |
-| `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`             | 二进制对应类型                                       |
+| 构造器                                                     | 接受的输入                           | 推导出的 TS 类型                                     |
+| ---------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------- |
+| `struct.string()` / `struct.boolean()`                     | 原生字符串 / 布尔值                  | `string` / `boolean`                                 |
+| `struct.number()`                                          | 除 `NaN` 外的数字                    | `number`（拒绝 `NaN`；JSON Body 中拒绝 `±Infinity`） |
+| `struct.bigint()`                                          | `bigint` 或合法的数字字符串          | `bigint`                                             |
+| `struct.date()`                                            | 合法 `Date`、时间戳或 ISO 日期字符串 | `Date`                                               |
+| `struct.literal(value)`                                    | 精确匹配的原生字面量值               | 对应字面量类型                                       |
+| `struct.enum(values)`                                      | 声明的字符串或数字枚举成员           | 字面量联合类型                                       |
+| `struct.array(item)` / `struct.tuple(items)`               | 数组 / 固定长度元组                  | `T[]` / `[...]`                                      |
+| `struct.object(shape)` / `struct.record(val)`              | 普通对象                             | 类型化对象 / `Record<string, V>`                     |
+| `struct.discriminatedUnion(key, options)`                  | 带固定判别字段 `key` 的对象          | 对象分支联合类型                                     |
+| `struct.or(branches)`                                      | 匹配首个命中的分支                   | 各分支联合类型                                       |
+| `struct.intersection(members)`                             | 同时满足所有成员条件的值             | 深度合并的交叉类型                                   |
+| `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`      | 对应二进制类型                                       |
 
-### 递归 struct
+### 递归 `struct`
 
-自引用类型通过 shape 上的 getter 属性读取自身。getter 不在定义常量时运行，而是在对象 struct 首次被使用时运行一次，因此常量可以引用自己。请用 `Struct<T>` 标注该常量：TypeScript 无法推断引用自身的类型。
+需要表达树形或嵌套引用自身的结构时，直接在 `shape` 里用 getter 属性返回自己。这个 getter 不会在定义常量时立刻触发，而是等到该对象 schema 第一次实际被使用时求值一次，所以常量可以安全引用自身。记得手动加上 `Struct<T>` 类型标注（TypeScript 无法自动推断自引用类型）：
 
 <include cwd lang="typescript">
   examples/struct/recursive.ts#example
 </include>
 
-### `struct` 不做的事
+### `struct` 不负责哪些事
 
-- `struct` 只声明结构。字符串长度、正则、数值范围和业务规则应在解析之后由应用代码处理。
-- 解析在第一个无效字段处停止。它从不用零值填充缺失字段，也从不返回部分输出。
+- **只声明结构，不管业务验证**：像字符串最短长度、正则格式、数值区间或业务跨字段校验，请放到 `struct.parse` 之后在业务代码里处理。
+- **不补默认值，不吐半截数据**：在第一个无效字段处就会报错结束，绝不悄悄填零值或返回部分通过的对象。
 
 ## 相关阅读
 

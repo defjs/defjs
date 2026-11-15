@@ -5,7 +5,7 @@ description: 說明將 API 定義與 Client 執行分離，為何能讓 SDK 更�
 
 # 核心架構
 
-Defjs 圍繞著一個核心邊界建構：**SDK 定義通訊契約；取用端應用程式掌控請求執行。** `@defjs/core` 中的所有設計原則皆源自這項分離。
+Defjs 圍繞著一個核心邊界建構：**SDK 定義通訊契約；使用端應用程式掌控請求執行。** `@defjs/core` 中的所有設計原則皆源自這項分離。
 
 ## 1. 定義 vs. 執行
 
@@ -44,7 +44,7 @@ SDK 套件匯出各項操作（`defineRequest`、`defineEventStream`、`defineWe
 
 在 Defjs 中，`input` 宣告呼叫端要傳入什麼值，`struct` 控管值如何編碼與解碼，而 `builder` 負責把每個值放到請求的哪個位置（`path`、`query`、`headers`、`body`）。
 
-- **沒有魔法推論**：只要操作宣告了 `input`，就必須提供明確、同步且純粹的 `builder`。欄位放置位置絕不會從參數名稱猜測。
+- **不靠隱式推論**：只要操作宣告了 `input`，就必須提供明確、同步且純粹的 `builder`。欄位放置位置絕不會從參數名稱猜測。
 - **雙向 `.alias(wireName)`**：在 struct 欄位上宣告 `.alias("customer_name")`，TypeScript 端就能保留 `customerName`，同時在傳輸時自動雙向對應 `"customer_name"`。
 
 <include cwd lang="typescript">

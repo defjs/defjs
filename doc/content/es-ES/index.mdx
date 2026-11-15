@@ -9,8 +9,8 @@ description: Diseña y publica SDKs de TypeScript con definiciones de API reutil
 
 Defjs separa los dos lados de un SDK de TypeScript:
 
-- **Definición del SDK (`@defjs/core`)** — Quienes crean el SDK declaran operaciones tipadas de HTTP, SSE y WebSocket junto con sus esquemas `struct`. Una definición es solo dato puro: importarla no inicia ninguna petición de red ni la enlaza a un cliente global.
-- **Ejecución en la aplicación** — Las aplicaciones consumidoras crean su propio `Client` (`createClient(withEndpoint(...))`), configuran credenciales, interceptores y balanceadores de carga, y pasan ese cliente al llamar a cada operación.
+- **Definición del SDK (`@defjs/core`)** — Declara operaciones tipadas de HTTP, SSE y WebSocket junto con sus esquemas `struct`, tanto si publicas un SDK público como si organizas la capa API interna de tu aplicación. Una definición es solo dato puro: importarla no inicia ninguna petición ni enlaza un cliente global.
+- **Ejecución en la aplicación** — Las aplicaciones crean su propio `Client` (`createClient(withEndpoint(...))`), configuran credenciales, interceptores y balanceadores, y pasan ese cliente al llamar a cada operación.
 
 ## Vistazo rápido: definición del SDK frente a ejecución en la aplicación
 
@@ -46,7 +46,8 @@ Al llamar a `getHealth(client)` se realiza la E/S y se resuelve una tupla con el
 1. **[Inicio rápido](/es-ES/docs/start)** — Define una operación, pruébala sin conexión con un handle Fetch local y conéctala a un servicio real.
 2. **[Arquitectura central](/es-ES/docs/design-decisions)** — Comprende las seis reglas de decodificación de respuestas, las tuplas de error por delante y la propiedad de los recursos.
 3. **[Definir SDKs](/es-ES/docs/struct)** — Declara contratos de red con [Struct](/es-ES/docs/struct) y exporta operaciones [HTTP](/es-ES/docs/http), [SSE](/es-ES/docs/sse) y [WebSocket](/es-ES/docs/web-socket).
-4. **[Cliente y ejecución](/es-ES/docs/client)** — Configura [Clientes](/es-ES/docs/client), gestiona [Errores](/es-ES/docs/errors) tipados, añade [Interceptores](/es-ES/docs/interceptors), configura el [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing) y ejecuta [Pruebas](/es-ES/docs/testing) deterministas.
+4. **[Cliente y ejecución](/es-ES/docs/client)** — Configura [Clientes](/es-ES/docs/client), gestiona [Errores](/es-ES/docs/errors) tipados, añade [Interceptores](/es-ES/docs/interceptors) y ajusta el [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing).
+5. **[Buenas prácticas y pruebas](/es-ES/docs/best-practices)** — Sigue las [Convenciones de ingeniería](/es-ES/docs/best-practices), organiza una [Capa API de aplicación](/es-ES/docs/application-api) o un [SDK público](/es-ES/docs/public-sdk), y escribe [Pruebas](/es-ES/docs/testing) deterministas.
 
 ## Transportes compatibles y tuplas de resultado
 

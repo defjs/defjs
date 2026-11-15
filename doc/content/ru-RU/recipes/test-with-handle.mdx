@@ -5,7 +5,7 @@ description: Подмените Fetch для одного клиента чер�
 
 # Тест с локальным Fetch-хэндлом
 
-Функция `withHTTPHandle(...)` подменяет базовую функцию `fetch` для отдельного экземпляра клиента, полностью выполняя весь конвейер Defjs — валидацию входных данных, маппинг в `builder`, разрешение URL, перехватчики, классификацию статусов и декодирование Struct — без открытия реального сетевого сокета:
+Функция `withHTTPHandle(...)` подменяет базовый `fetch` для одного тестового `Client`, прогоняя в памяти весь конвейер Defjs — валидацию входа, `builder`, разрешение URL, перехватчики, классификацию статусов и декодирование `struct` — без открытия сокетов:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
@@ -22,4 +22,13 @@ description: Подмените Fetch для одного клиента чер�
   </Tab>
 </Tabs>
 
-В продакшене вызывайте ту же самую операцию `getOrder` с клиентом, настроенным через `withEndpoint(...)`. См. разделы [Тестирование](/ru-RU/docs/testing) и [Клиент](/ru-RU/docs/client).
+### Три важные детали при написании тестов
+
+- **Зачем оборачивать `(input, init)` в `new Request(input, init)`**: `withHTTPHandle` получает стандартную сигнатуру `fetch(input, init)`, а `new Request(input, init)` даёт единый доступ к `method`, `url`, `headers` и `await request.json()`.
+- **Зачем передавать `withEndpoint("https://fixture.invalid")`**: `createClient` проверяет базовый URL до вызова `withHTTPHandle`; домен `.invalid` зарезервирован по RFC и никогда не уйдёт в реальный DNS.
+- **Как смоделировать три основных исхода HTTP**:
+  - Успех `2xx`: вернуть `Response.json(...)` -> `[null, data, response]`
+  - Ошибка `4xx` / `5xx`: вернуть `Response.json(..., { status: 422 })` -> `err.code === "HTTP_STATUS"`
+  - Сбой сети: отклонить промис или бросить ошибку (`Promise.reject(new TypeError("fetch failed"))`) -> `err.code === "NET_UNREACHABLE"`. **Не** возвращайте `Response.error()`, так как любой `Response` (даже со статусом `0`) считается HTTP-ответом (`HTTP_STATUS`).
+
+В продакшене вызывайте ту же операцию `getOrder` с клиентом, настроенным через `withEndpoint(...)`. См. [Тестирование](/ru-RU/docs/testing) и [Клиент](/ru-RU/docs/client).

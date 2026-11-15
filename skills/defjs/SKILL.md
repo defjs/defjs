@@ -33,7 +33,11 @@ Defjs separates the two sides of an SDK so operation contracts can be shared or 
 4. **`struct` only declares structure.** Struct instances have no `.parse()` method; call `struct.parse(schema, value, options?)`. There is no `struct.encode`, no regex/length validation DSL, and no zero-filling.
 5. **Auth, token refresh, `Retry-After`, and tracing belong in interceptors**, never in `builder`. Use `withRetry` for HTTP, SSE, and WebSocket retries. Attach optional `meta` (such as `{ operation: "orders.get" }`) for interceptor context.
 6. **The caller owns streams and sessions.** After a successful SSE or WebSocket startup, handle runtime errors, close the handle/session, and `await closed` (or use `await using`).
-7. **Write error handling like Go.** Name the tuple's error `err` (a function with several calls names each after its step: `putErr`, `listErr`). Check `if (err)` immediately and return inside it; put `err.code` branches (the counterpart of Go's `errors.Is` and `errors.As`) inside that block, never `if (!err)` or `err?.code` chains. Handle an error once (log, show, or fall back) or return it, never both; only `main` or a UI handler logs. A function that can fail returns an error-first tuple, `Promise<[Error, undefined] | [null, T]>`, never `undefined`/`null`/`false`. With one Defjs call return the fault as-is (`return [err, undefined]`, typed `AnyFault` when the caller branches on `err.code`); with several, wrap it with the step (`new Error("put object", { cause: err })`, lowercase, no trailing punctuation).
+7. **Write error handling like Go.**
+   - Name the tuple's error `err` (when one function runs several calls, name each error after its step: `putErr`, `listErr`).
+   - Check `if (err)` right after the call and `return` inside that block before touching data; place `err.code` branches inside `if (err)`, never `if (!err)` or `err?.code` chains.
+   - Handle an error once (log, render, or fall back) or return it—never both; only `main` or a UI handler logs.
+   - A failable helper returns `Promise<[Error, undefined] | [null, T]>`, never `undefined`/`null`/`false`. With one Defjs call return `[err, undefined]` (typed `AnyFault` if callers inspect `err.code`); with several, wrap with step context (`new Error("put object", { cause: err })`, lowercase, no trailing punctuation).
 
 ## Common habits vs Defjs best practices
 
@@ -116,7 +120,7 @@ void main();
 
 ## Task routing table
 
-Load only the reference file that matches your current task:
+Load only the reference files that match your current task (combine them when tasks cross areas—for instance, load both `http-requests.md` and `integrations-and-testing.md` when testing HTTP retries, auth refresh interceptors, or `HTTP_STATUS` narrowing):
 
 | Task domain                                                                                                                                                         | Reference file                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |

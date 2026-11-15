@@ -5,34 +5,34 @@ description: 使用 Defjs 构建应用内接口请求层与对外公共 SDK 包�
 
 # 工程规范 [#engineering-conventions]
 
-无论是日常在业务项目内部手写 HTTP 请求层，还是代表公司对外发布公共 API 的官方 TypeScript SDK，基于 Defjs 的工程都遵循同一套模块化架构：**共享的schema层（`schema/`）配合纯函数操作定义层（`request/`）**。
+无论是业务项目内部手写的 HTTP 请求层，还是给公司对外 API 发布的官方 TypeScript SDK，Defjs 项目都推荐同一套模块化分层：**共享的 schema 层（`schema/`）搭配纯函数接口定义层（`request/`）**。
 
 ---
 
 ## 1. 两大核心使用场景
 
-在实际工程中，团队通常在以下两种场景中使用 Defjs。两者的 `schema/` 与 `request/` 组织方式完全一致，唯一的区别在于 `createClient(...)` 放在哪里：
+实际开发里，团队主要会在下面两种场景用上 Defjs。两者的 `schema/` 和 `request/` 组织方式完全一样，唯一区别在于 `createClient(...)` 放在谁手里：
 
-| 使用场景                                                                          | 推荐目录结构                                                         | 谁持有 `createClient(...)`？                                               | 专题指南                                    |
+| 使用场景                                                                          | 推荐目录结构                                                         | 谁来创建并持有 `createClient(...)`？                                       | 专题指南                                    |
 | :-------------------------------------------------------------------------------- | :------------------------------------------------------------------- | :------------------------------------------------------------------------- | :------------------------------------------ |
-| **[应用接口层](/zh-Hans/docs/application-api)**（业务项目内手写 HTTP / 实时请求） | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`         | 当前业务项目自身（由 `src/api/client.ts` 导出浏览器单例或 SSR 请求级工厂） | [应用接口层](/zh-Hans/docs/application-api) |
-| **[公共 SDK 设计](/zh-Hans/docs/public-sdk)**（公司对外发布的公共 API npm 包）    | `src/schema/` + `src/request/` + `src/index.ts`（含 `package.json`） | 外部消费方应用（发布的 SDK 包内绝不创建或捕获任何 `Client`）               | [公共 SDK 设计](/zh-Hans/docs/public-sdk)   |
+| **[应用接口层](/zh-Hans/docs/application-api)**（业务项目内手写 HTTP / 实时请求） | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`         | 当前业务项目自己（由 `src/api/client.ts` 导出浏览器单例或 SSR 请求级工厂） | [应用接口层](/zh-Hans/docs/application-api) |
+| **[公共 SDK 设计](/zh-Hans/docs/public-sdk)**（公司对外发布的公共 API npm 包）    | `src/schema/` + `src/request/` + `src/index.ts`（含 `package.json`） | 接入方自己的业务应用（发布的 SDK 包里绝不创建或绑定任何 `Client`）         | [公共 SDK 设计](/zh-Hans/docs/public-sdk)   |
 
 ---
 
 ## 2. 四条核心工程规范
 
-### 规范一：始终导出纯函数操作，摒弃 `Service` 类
+### 规范一：直接导出纯函数接口，不用 `Service` 类
 
-传统 OpenAPI 生成器习惯把接口包装在带状态或静态方法的 `Service` 类中（如 `OrdersService.getOrder(id)` 或 `new S3Client().send(...)`）。而在 Defjs 中，通过 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 创建的每个定义本身就是**可直接调用的独立纯函数**：
+传统的 OpenAPI 生成器习惯把接口包进带状态或静态方法的 `Service` 类（比如 `OrdersService.getOrder(id)` 或 `new S3Client().send(...)`）。但在 Defjs 里，用 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 定义出来的每一个操作，本身就是**可以直接调用的独立纯函数**：
 
 ```ts
-// 反模式：把操作定义包装进 class 或命名空间对象中
+// 反模式：把接口定义塞进 class 或命名空间对象里
 export class OrdersService {
-  // 掩盖了单次调用 client(options) 派生能力，且阻碍打包器按接口粒度 tree-shake
+  // 会遮住 client(options) 的单次派生能力，也让打包器没法按接口粒度 tree-shake
 }
 
-// 最佳实践：在 request/*.ts 中直接导出独立的操作定义纯函数
+// 最佳实践：在 request/*.ts 中直接导出独立的纯函数接口定义
 export const getOrder = defineRequest({
   meta: { operation: "orders.get" },
   method: "GET",
@@ -44,11 +44,11 @@ export const getOrder = defineRequest({
 });
 ```
 
-直接调用导出的操作纯函数（`await getOrder(client, { id: 42 })` 或 `await getOrder(client({ signal }), { id: 42 })`），能让全项目的调用心智与 `@defjs/core` 原生风格保持一致，并在开启 `"sideEffects": false` 时实现 100% 按需 Tree-shaking。
+全项目统一直接调用导出的纯函数（`await getOrder(client, { id: 42 })` 或 `await getOrder(client({ signal }), { id: 42 })`），不仅写法干净一致，只要 `package.json` 配了 `"sideEffects": false`，打包器还能按接口粒度把没用到的定义 100% tree-shake 掉。
 
-### 规范二：在 `schema/` 中同名合并导出 `struct` 与 `Infer`
+### 规范二：在 `schema/` 中同名导出 `struct` 与 `Infer`
 
-在 `schema/*.ts` 中，使用**相同的标识符**同时导出运行时 `struct` schema 与 `Infer<typeof ...>` 静态类型。TypeScript 会自动合并同一作用域内的值声明与类型声明，调用方只需导入一个名字即可同时用于运行时解析和类型标注：
+在 `schema/*.ts` 里，用**同一个名字**同时导出运行时的 `struct` schema 和 `Infer<typeof ...>` 静态类型。TypeScript 会自动把同一作用域里的值声明和类型声明合并到一起，业务代码只需要 `import { Order }` 一次，运行时校验解析和类型标注就全有了：
 
 ```ts
 import { struct, type Infer } from "@defjs/core";
@@ -63,27 +63,27 @@ export type Order = Infer<typeof Order>;
 
 ### 规范三：保持 `request/*.ts` 与 Client 实例解耦
 
-即便是在单个业务仓库内部编写[应用接口层](/zh-Hans/docs/application-api)（`src/api/`），也**不要**在 `src/api/request/*.ts` 里导入 `apiClient` 去二次包装请求函数。让 `request/*.ts` 保持为纯粹的操作定义有三大工程收益：
+哪怕只是在一个业务仓库里写[应用接口层](/zh-Hans/docs/application-api)（`src/api/`），也**不要**在 `src/api/request/*.ts` 里导入 `apiClient` 再二次封装。让 `request/*.ts` 保持纯粹的接口定义有三个实打实的好处：
 
-1. **零 Mock 内存单测**：在单元测试中可直接向任何操作函数传入 `createClient(withEndpoint(...), withHTTPHandle(...))`，无需劫持模块或打补丁。
-2. **天然兼容 SSR 与多租户**：服务端渲染（SSR）或 BFF 路由处理器可以为每个入站请求创建携带当前用户 Cookie/Token 的独立 `Client`，与浏览器组件复用同一份操作定义。
-3. **零成本演进为共享包**：未来若需将 `src/api/schema/` 与 `src/api/request/` 抽离为 Monorepo 子包或对外公共 SDK，定义层代码无需任何改动。
+1. **零 Mock 内存单测**：写单元测试时可以直接给任意接口传入 `createClient(withEndpoint(...), withHTTPHandle(...))`，不用靠 `vi.mock` 劫持模块或给全局打补丁。
+2. **天然兼容 SSR 与多租户**：服务端渲染（SSR）或 BFF 接口可以在每次收到请求时，新建一个只带当前用户 Cookie/Token 的隔离 `Client`，和前端组件共用完全同一份接口定义。
+3. **随时无痛抽成共享包**：以后需要把 `src/api/schema/` 和 `src/api/request/` 拆成 Monorepo 子包或对外公共 SDK 时，定义层一行代码都不用改。
 
 ### 规范四：严格区分 `builder` 参数映射与拦截器策略
 
-将不同维度的逻辑放在各自归属的层次中：
+把不同维度的逻辑放回各自该在的位置：
 
-| 职责维度                                                           | 归属位置                                                  | 原因                                                                                     |
-| :----------------------------------------------------------------- | :-------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
-| 将调用入参分发到 `path`、`query`、`headers`、`body`                | `request/*.ts` 中的 `builder`                             | 仅依赖当前 `input` 的同步纯函数                                                          |
-| 应用为拦截器定义的上下文（`{ operation: "orders.create" }`）       | `request/*.ts` 中的 `meta` 字段                           | `{ [key: string]: unknown }`；只读且按定义共享；从不随请求发送；作为 `defjs.meta.*` 上报 |
-| 基地址、认证请求头（Bearer Token、签名、XSRF）、重试策略、负载均衡 | `client.ts` 中的 `createClient(...)`                      | 与运行环境、会话状态相关的横切执行策略                                                   |
-| 单次调用超时、手动取消（`signal`）与上传/下载进度回调              | 调用处的内联派生 `client({ signal, onDownloadProgress })` | 仅作用于当次请求，不污染共享 Client                                                      |
+| 职责维度                                                        | 归属位置                                                  | 原因                                                                                       |
+| :-------------------------------------------------------------- | :-------------------------------------------------------- | :----------------------------------------------------------------------------------------- |
+| 把调用入参分配到 `path`、`query`、`headers`、`body`             | `request/*.ts` 中的 `builder`                             | 只依赖当前 `input` 的同步纯函数                                                            |
+| 给拦截器透传的业务上下文（如 `{ operation: "orders.create" }`） | `request/*.ts` 中的 `meta` 字段                           | `{ [key: string]: unknown }`；只读且按定义共享；不会发到服务端；会作为 `defjs.meta.*` 上报 |
+| 基地址、鉴权请求头（Bearer Token、签名、XSRF）、重试、负载均衡  | `client.ts` 中的 `createClient(...)`                      | 跟运行环境、会话状态绑定的通用执行策略                                                     |
+| 单次调用超时、手动取消（`signal`）以及上传/下载进度回调         | 调用处的内联派生 `client({ signal, onDownloadProgress })` | 只影响这一次请求，不会污染共享 Client                                                      |
 
 ---
 
 ## 延伸阅读
 
-- 在业务项目内部组织 HTTP 请求层？请阅读 [应用接口层](/zh-Hans/docs/application-api)。
-- 为公司开放平台设计并发布外部 SDK？请阅读 [公共 SDK 设计](/zh-Hans/docs/public-sdk)。
-- 为项目内的 Defjs 请求定义、拦截器、业务函数与 UI 组件编写测试？请阅读 [测试](/zh-Hans/docs/testing)。
+- 想在业务项目内部组织 HTTP 请求层？看 [应用接口层](/zh-Hans/docs/application-api)。
+- 要为公司开放平台设计并发布外部 SDK？看 [公共 SDK 设计](/zh-Hans/docs/public-sdk)。
+- 想给项目里的 Defjs 接口、拦截器、业务函数和 UI 组件写测试？看 [测试](/zh-Hans/docs/testing)。

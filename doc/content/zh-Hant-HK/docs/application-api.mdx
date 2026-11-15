@@ -1,6 +1,6 @@
 ---
 title: "應用程式 API 層"
-description: 喺應用程式程式碼庫入面組織手寫 HTTP 請求、schema同 Client 策略，無需發佈獨立 SDK 套件。
+description: 喺應用程式程式碼庫入面組織手寫 HTTP 請求、schema 同 Client 策略，無需發佈獨立 SDK 套件。
 ---
 
 # 應用程式 API 層 [#application-api-layer]
@@ -18,7 +18,7 @@ src/
 ├── api/
 │   ├── schema/           # 1. 共用 struct schema 同 Infer<typeof ...> 型別
 │   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
-│   ├── request/         # 2. 按業務領域分組嘅純函數操作定義
+│   ├── request/          # 2. 按業務領域分組嘅純函數操作定義
 │   │   └── orders.ts     #    getOrder, listOrders, createOrder
 │   └── client.ts         # 3. 應用程式擁有嘅 Client（端點、認證攔截器、重試策略）
 └── checkout.ts           # 4. 呼叫操作嘅業務邏輯／UI 元件

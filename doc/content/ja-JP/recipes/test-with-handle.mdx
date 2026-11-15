@@ -5,7 +5,7 @@ description: withHTTPHandle で単一クライアントの Fetch 実装を差し
 
 # ローカル Fetch ハンドルによるテスト
 
-`withHTTPHandle(...)` は、単一のクライアントインスタンスに対して基底の `fetch` 関数を差し替えます。実際のネットワークソケットを開くことなく、入力値のバリデーション、`builder` による配置、URL 解決、インターセプター、ステータスに応じた振り分け、Struct デコードといった Defjs のパイプライン全体を実行しながらテストできます。
+`withHTTPHandle(...)` は単一のテスト用 `Client` に対して基底の `fetch` 関数だけを差し替えます。ソケットを開かずに、入力検証・`builder` マッピング・URL 解決・インターセプター・ステータス分類・`struct` デコードまで一連のパイプラインをそのままテストできます：
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
@@ -22,4 +22,13 @@ description: withHTTPHandle で単一クライアントの Fetch 実装を差し
   </Tab>
 </Tabs>
 
-本番環境では、`withEndpoint(...)` で設定したクライアントをまったく同じ `getOrder` 操作に渡して呼び出します。詳細は [テスト](/ja-JP/docs/testing) および [Client](/ja-JP/docs/client) を参照してください。
+### テストを書くときに押さえたい 3 点
+
+- **`new Request(input, init)` で包む理由**：`withHTTPHandle` は標準の `fetch(input, init)` と同じ引数を受け取るため、`new Request(input, init)` にまとめることで `method`・`url`・`headers`・`await request.json()` を一貫して検証できます。
+- **`withEndpoint("https://fixture.invalid")` が必要な理由**：`createClient` は `withHTTPHandle` に届く前にベース URL の解決と検証を行います。`.invalid` は RFC 予約ドメインなので誤設定しても実 DNS に飛びません。
+- **3 パターンの HTTP 結果を再現する方法**：
+  - `2xx` 成功：`Response.json(...)` を返す -> `[null, data, response]`
+  - `4xx` / `5xx` エラー：`Response.json(..., { status: 422 })` を返す -> `err.code === "HTTP_STATUS"`
+  - ネットワーク障害：`Promise.reject(new TypeError("fetch failed"))`（または `throw`）を使う -> `err.code === "NET_UNREACHABLE"`。`Response.error()` はステータス `0` の `Response` として `HTTP_STATUS` 扱いになるため使わないでください。
+
+本番環境では `withEndpoint(...)` を設定したクライアントで同じ `getOrder` 操作を呼び出すだけです。業務ロジックやリトライ、UI テストの詳細は [テスト](/ja-JP/docs/testing) および [Client](/ja-JP/docs/client) を参照してください。

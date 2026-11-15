@@ -5,7 +5,7 @@ description: Fetch für einen einzelnen Client mit withHTTPHandle austauschen un
 
 # Mit lokalem Fetch-Handle testen
 
-`withHTTPHandle(...)` ersetzt die zugrundeliegende `fetch`-Funktion für einen einzelnen Client und durchläuft dabei die gesamte Defjs-Pipeline – Input-Validierung, `builder`-Mapping, URL-Auflösung, Interceptors, Status-Klassifizierung und Struct-Dekodierung – ganz ohne einen Netzwerk-Socket zu öffnen:
+`withHTTPHandle(...)` ersetzt nur die zugrundeliegende `fetch`-Funktion eines einzelnen Test-`Client`, während die komplette Defjs-Pipeline – Input-Validierung, `builder`-Mapping, URL-Auflösung, Interceptors, Status-Dispatching und `struct`-Dekodierung – im Speicher durchläuft, ohne einen Socket zu öffnen:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
@@ -22,4 +22,13 @@ description: Fetch für einen einzelnen Client mit withHTTPHandle austauschen un
   </Tab>
 </Tabs>
 
-In der Produktion rufst du exakt dieselbe `getOrder`-Operation mit einem mit `withEndpoint(...)` konfigurierten Client auf. Siehe [Tests](/de-DE/docs/testing) und [Client](/de-DE/docs/client).
+### Drei praktische Details für den Test
+
+- **Warum `(input, init)` in `new Request(input, init)` verpacken**: `withHTTPHandle` erhält dieselbe Signatur wie `fetch(input, init)`. Mit `new Request(input, init)` greifst du einheitlich auf `method`, `url`, `headers` und `await request.json()` zu.
+- **Warum `withEndpoint("https://fixture.invalid")` nötig ist**: `createClient` prüft die Basis-URL vor `withHTTPHandle`; `.invalid` ist nach RFC reserviert und löst nie echte DNS-Anfragen aus.
+- **Die drei gängigen HTTP-Ausgänge simulieren**:
+  - `2xx`-Erfolg: `Response.json(...)` zurückgeben -> `[null, data, response]`
+  - `4xx` / `5xx`-Fehler: `Response.json(..., { status: 422 })` zurückgeben -> `err.code === "HTTP_STATUS"`
+  - Netzwerkfehler: Promise ablehnen oder werfen (`Promise.reject(new TypeError("fetch failed"))`) -> `err.code === "NET_UNREACHABLE"`. Gib **nicht** `Response.error()` zurück, da jede `Response` (auch Status `0`) als HTTP-Antwort (`HTTP_STATUS`) behandelt wird.
+
+In der Produktion rufst du dieselbe `getOrder`-Operation mit `withEndpoint(...)` auf. Siehe [Tests](/de-DE/docs/testing) und [Client](/de-DE/docs/client) für Business-Helper, Retries, UI-Komponenten und Fake-Timer.

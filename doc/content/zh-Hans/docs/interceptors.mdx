@@ -1,17 +1,17 @@
 ---
 title: "拦截器"
-description: 在应用 Client 上挂载认证与传输策略，无须改动 SDK 的 API 定义。
+description: 在 Client 上统一挂载鉴权、日志、限流退避和异常重试逻辑，不用修改任何接口定义。
 ---
 
 # 拦截器
 
-拦截器为应用的 `Client` 挂载跨切面执行策略——认证请求头、请求签名、维护期短路或 `Retry-After` 处理——而无需修改 SDK 操作定义。
+拦截器让你把认证请求头、签名校验、维护期间直接拦截或 `Retry-After` 等待这类公共逻辑统一挂在应用的 `Client` 上，而不用去改任何一条接口定义。
 
-输入校验和 `builder` 映射在拦截器链**之前**运行；HTTP 状态码分发与 `output` / `error` struct 校验在链**之后**运行。
+**执行顺序位置**：入参校验和 `builder` 拼装请求发生在拦截器**之前**；HTTP 状态码分流和 `output` / `error` 的 `struct` 解码发生在拦截器**之后**。
 
-## 1. 创建并注册拦截器
+## 1. 创建与挂载拦截器
 
-每种传输都有各自的类型化拦截器工厂（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。把任意组合传给 `withInterceptors(...)`：
+每种传输协议都有对应的拦截器工厂函数：`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`。直接按需要传进 `withInterceptors(...)`：
 
 <Tabs items={["基本配置", "洋葱模型执行顺序", "克隆并添加请求头"]}>
 <Tab>
@@ -37,61 +37,63 @@ description: 在应用 Client 上挂载认证与传输策略，无须改动 SDK 
 </Tab>
 </Tabs>
 
-### 拦截器执行链路规则
+### 写拦截器的三个基本原则
 
-- **洋葱顺序**：请求向外走时（`before next(req)`），拦截器按注册顺序执行；返回时（`after await next(req)`）按相反顺序执行。把范围较宽的日志/追踪拦截器放在较窄的认证或重试拦截器外层。
-- **不可变请求约定**：始终克隆 `req.headers`（`new Headers(req.headers)`），并把新的请求对象（`{ ...req, headers }`）传给 `next(...)`，这样外层重试才能看到干净的请求头。
-- **`content-type` 与 `bodyContentType`**：Defjs 把推断出的 body 内容类型放在 `req.bodyContentType` 上，不修改 `req.headers`。请求签名应读取 `req.headers.get("content-type") ?? req.bodyContentType`。如果拦截器用新格式替换了 `req.body`，请显式设置 `content-type` 请求头。
+- **洋葱模型顺序**：发起请求时（`await next(req)` 之前），按 `withInterceptors(...)` 传入顺序从外往里跑；拿到响应后（`await next(req)` 之后），按相反顺序一层层退出来。建议把日志、Trace 这类全局观测拦截器放最外层，把鉴权、Token 刷新放里层。
+- **不要原地改 `req.headers`**：每次都用 `new Headers(req.headers)` 复制一份再传给 `next({ ...req, headers })`，这样外层触发重试时拿到的是干净的原始请求头。
+- **读取内容类型用 `req.bodyContentType`**：Defjs 把自动推断的请求体媒体类型放在 `req.bodyContentType`，不会直接改 `req.headers`。写签名拦截器请读 `req.headers.get("content-type") ?? req.bodyContentType`。如果拦截器自己替换了 `req.body` 格式，记得同步改 `content-type` 头。
 
-## 2. 使用 `makeResponse` 短路请求
+## 2. 用 `makeResponse` 直接短路请求
 
-HTTP 拦截器可以用 `makeResponse(...)` 构造合成响应，而不调用 `next(req)`：
+在 HTTP 拦截器里想实现本地缓存命中、维护开关拦截等场景时，可以用 `makeResponse(...)` 构造响应直接返回，不再向下调用 `next(req)`：
 
 <include cwd lang="typescript">
   examples/interceptors/short-circuit.ts#example
 </include>
 
-`makeResponse` **不是**校验旁路：合成响应仍会经过该操作的媒体类型检查、状态码分支（`2xx` vs 非 `2xx`）以及 `output` / `error` struct 校验。
+注意 `makeResponse` **不是校验豁免通道**：你造出来的响应一样会走后续的媒体类型检查、状态码判断（`2xx` vs 非 `2xx`）以及 `output` / `error` 的 `struct` 校验。
 
-## 3. 重试与 `Retry-After`
+## 3. 重试与处理 `Retry-After`
 
-HTTP 重试默认关闭。要在另一个端点上重试连接失败、超时，或 `502`、`503`、`504`，请使用 [`withRetry()`](/zh-Hans/docs/load-balancing#retries)。退避延迟之后，它会让均衡器再次选择、重新构建请求，并重新运行完整的拦截器链。
+HTTP 重试默认是关着的。遇到连接不通、超时或 `502`/`503`/`504` 时想自动换个节点重试，请用 [`withRetry()`](/zh-Hans/docs/load-balancing#retries)——每次等待完退避时间后会重新经由负载均衡选节点、重新拼请求并跑一遍完整拦截器链。
 
-应用拦截器也可以自行处理同一端点的状态码，例如 `429` 和 `Retry-After`：
+如果需要在同一个节点上处理 `429` + `Retry-After` 这类应用状态码，可以直接在 HTTP 拦截器里写等待重放：
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **两层重试**：这个 `next(request)` 循环始终使用选中的端点，不会重新运行 builder 或外层拦截器。连接失败和 `502`/`503`/`504` 交给 `withRetry`。
-- **`Retry-After` 策略**：Core 的 `withRetry` 不读取这个响应头。配方中 30 秒的上限和 250 ms 的回退值是应用层的选择。对更长的服务器延迟设置上限，可能比服务器要求的时间更早重试；若不能接受，请等待完整延迟或直接返回响应。
-- **401 写操作**：[Bearer 刷新配方](/zh-Hans/recipes/refresh-bearer-once)可能投递同一个 JSON POST 两次。请要求认证在业务处理前拒绝请求，并使用稳定的幂等键与服务端去重；否则不要自动重放写操作。流式请求体不会重放。
-- **处理传输层 rejection**：网络错误发生时 `next(request)` 会 reject（不存在 status 为 0 的响应）。捕获后重新抛出可保留原始 `NET_*` Fault 代码。
-- **无法发送的请求**：在 HTTP 拦截器中，当平台拒绝该请求（无效或被禁止的方法、GET 或 HEAD 的 body、带凭据的 URL、无效的 `Content-Type`），或 `finalizeHeaders` hook 抛出时，`next(request)` 会以平台自己的错误（`TypeError`）或 hook 抛出的值 reject，而不是库的 `BodyFailure` 包装。重新抛出可保留 Fault 代码（`REQ_BUILD_FAILED` 或 `EXT_HOOK_FAILED`）；抛出另一个错误则使这次失败归你所有（`EXT_INTERCEPTOR_FAILED`）。传输周围发现的其他失败仍以 `BodyFailure` 到达 `next(request)`：无法读取、解码或与媒体类型匹配的响应 body、被截断的 body，以及抛出异常的上传进度观察者（`EXT_OBSERVER_FAILED`），后者可能发生在请求发出之前。
-- **在拦截器内抛出异常**：拦截器自身未处理的抛出（或向 `next()` 传入不是 `AbortSignal` 的 `signal`）会让操作元组以 `EXT_INTERCEPTOR_FAILED` 结算，并设置 `err.cause`。抛出 `ERR_ABORTED` 或 `ERR_TIMEOUT` 会结算为 `NET_ABORTED` 或 `NET_TIMEOUT`。
+- **和 `withRetry` 分工不同**：拦截器里的 `next(request)` 循环始终只打当前选好的那一个节点，不会重跑 `builder` 或外层拦截器。像连接超时、`502`/`503`/`504` 请交给外层的 `withRetry`。
+- **`Retry-After` 要自己控制上限**：`@defjs/core` 内置的 `withRetry` 不读 `Retry-After` 响应头。示例里设的 30 秒最大等待和 250 ms 默认等待都是业务代码自己的取舍——如果限制上限短于服务端实际要求，可能提前重打过去；不希望这样就直接等满延迟，或者干脆把响应返回给业务提示用户稍后再试。
+- **`401` 刷新重放写操作的幂等提醒**：参考 [401 自动刷新一次 Bearer Token](/zh-Hans/recipes/refresh-bearer-once) 时请记住，`POST` 重放有可能发两次请求体。请确保后端认证拦截在真正写库之前完成，或者带上幂等键，否则不要自动重放写请求。另外，`ReadableStream` 流式请求体不支持重放。
+- **处理 `next(request)` 抛出的底层异常**：
+  - 断网等传输错误会使 `next(request)` reject（Defjs 里没有 `status: 0` 的假响应），`catch` 后如果发现不是自己要处理的情况直接重新 `throw` 出去，就能原样保留原本的 `NET_*` 错误码。
+  - 若请求连平台校验都过不去（例如 `GET` 带请求体、非法方法、含账密 URL、无效 `Content-Type`），或者 `finalizeHeaders` 钩子抛错，`next(request)` 会直接 reject 平台原始 `TypeError` 或钩子的报错——原样重新抛出就会保留 `REQ_BUILD_FAILED` 或 `EXT_HOOK_FAILED`；如果拦截器吞掉原异常并 `throw new Error(...)`，整个调用就会算成你拦截器自己的错（`EXT_INTERCEPTOR_FAILED`）。
+  - 其余像响应流读失败、JSON 语法损坏、`Content-Type` 对不上或上传进度观察者抛错（`EXT_OBSERVER_FAILED`），在 `next(request)` 返回时会先以 `BodyFailure` 形态出现。
+- **在拦截器里主动 `throw` 会怎样**：拦截器自身没接住的异常（或者给 `next()` 传了非法的 `signal`）会让最终元组返回 `EXT_INTERCEPTOR_FAILED`，原异常挂在 `err.cause`；如果特意抛出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，则会分别映射成 `NET_ABORTED` 或 `NET_TIMEOUT`。
 
-对于 SSE，优先使用 `withRetry`，而不是反复调用 `next()` 的拦截器。多次调用拦截器的 `next()` 会禁用这些替换流的端点归因和重新选择；这与通过迭代器的 `next()` 消费事件无关。
+在 **SSE** 上如果想做断线重连，请用 `withRetry`，不要在 SSE 拦截器里自己写循环反复调 `next()`。在拦截器里多次重调用 `next()` 会让外层均衡器无法准确统计后续重连流的节点归因（注：这和消费者读取流时 `for await` 内部的迭代器毫无关）。
 
-## 4. 包装并扩展 WebSocket 会话
+## 4. 包装与扩展 WebSocket 会话
 
-WebSocket 拦截器**最多只能调用一次** `next(req)`。包装返回的 `WebSocketSessionLike` 时，请委托实时 getter（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive` 和 `[Symbol.asyncDispose]()`，不要用对象展开复制一次性快照：
+WebSocket 拦截器里 **`next(req)` 最多只能调用一次**。如果你想在拦截器里包装返回的 `WebSocketSessionLike`，一定要转发实时 getter（`state`、`connection`、`bufferedAmount`）以及 `close`、`closed`、`receive` 和 `[Symbol.asyncDispose]()`，千万别图省事写 `{ ...session }` 对象展开——那样会把状态冻死成建连瞬间的静态快照：
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. 内置工厂与常用辅助工具
+## 5. 内置工厂与工具函数速查
 
-| 导出                                           | 传输      | 说明                                                                                  |
-| ---------------------------------------------- | --------- | ------------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>`                                  |
-| `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>`                             |
-| `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>`                                   |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 接收同步凭证 Provider（每个请求调用一次），自动注入 `Authorization: Basic ...` 请求头 |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 握手请求阶段自动注入 `Authorization: Basic ...` 请求头                         |
+| 导出函数                                       | 适用协议  | 作用说明                                                                     |
+| ---------------------------------------------- | --------- | ---------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>`                         |
+| `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>`                    |
+| `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>`                          |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 接收同步凭据函数（每次请求调一次），自动加 `Authorization: Basic ...` 请求头 |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 发起握手请求时自动加 `Authorization: Basic ...` 请求头                |
 
 ## 相关阅读
 
-- [401 后刷新一次 Bearer 令牌](/zh-Hans/recipes/refresh-bearer-once)
+- [401 自动刷新一次 Bearer Token](/zh-Hans/recipes/refresh-bearer-once)
 - [ETag 条件请求](/zh-Hans/recipes/etag-revalidate)
 - [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server)

@@ -1,26 +1,32 @@
 ---
 title: "테스트"
-description: 내 프로젝트에서 작성한 Defjs 요청 정의, struct 스키마, 커스텀 인터셉터, 비즈니스 헬퍼, 실시간 스트림 소비자, UI 컴포넌트를 테스트하는 방법을 안내합니다.
+description: 내 프로젝트에서 작성한 Defjs 요청 정의, struct 스키마, 커스텀 인터셉터, 비즈니스 헬퍼, 실시간 스트림 소비자, React/Vue UI 컴포넌트를 테스트하는 방법을 안내합니다.
 ---
 
 # 테스트
 
-`@defjs/core` 자체는 이미 라이브러리 내부의 전송 계층과 코덱 엔진을 테스트하고 있습니다. 애플리케이션이나 SDK 패키지에서 Defjs를 사용할 때 여러분이 작성하는 테스트의 목적은 **직접 작성한 프로젝트 코드**——`src/api/request/`와 `src/api/schema/`의 요청 정의와 스키마, `src/api/client.ts`의 커스텀 인터셉터, `src/checkout.ts`의 비즈니스 로직, 그리고 React / Vue 컴포넌트의 동작을 검증하는 것입니다.
+`@defjs/core` 자체는 이미 라이브러리 내부의 전송 계층과 코덱 엔진을 테스트하고 있습니다. 애플리케이션이나 SDK 패키지에서 Defjs를 사용할 때 여러분이 작성하는 테스트의 목적은 **직접 작성한 프로젝트 코드**——`builder` 위치 매핑, `.alias()` 와이어 키, `struct` 디코딩, 인증/갱신 인터셉터, 도메인 에러 변환, 컴포넌트 언마운트 취소 동작을 검증하는 것입니다.
 
 ## 프로젝트에서 무엇을 테스트할까 — `vi.mock`을 피해야 하는 이유
 
-내보낸 `defineRequest`, `defineEventStream`, `defineWebSocket` 함수를 스텁으로 바꾸거나 `vi.mock(...)`으로 모킹하지 **마세요**. 테스트마다 `withHTTPHandle`, `withSSEHandle`, `withWebSocketHandle`이 주입된 격리된 테스트 `Client`를 만들면, 네트워크 소켓을 열지 않고도 실제 프로젝트 정의와 비즈니스 코드를 메모리 안에서 끝까지 검증할 수 있습니다.
+내보낸 `defineRequest`, `defineEventStream`, `defineWebSocket` 함수를 스텁으로 바꾸거나 `vi.mock(...)`으로 모킹하지 **마세요**. 연산을 모킹하면 직접 작성한 `builder`, `.alias()` 직렬화, 커스텀 인터셉터, 상태 분기, `struct` 디코딩이 모두 건너뛰어져 버그가 테스트를 통과하게 됩니다.
 
-| 프로젝트 레이어                                              | 테스트 검증 대상                                                                      | 테스트 `Client` 연결 방식                                                                |
-| :----------------------------------------------------------- | :------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------------- |
-| 요청 정의와 스키마 (`src/api/request/`, `src/api/schema/`)   | `builder` 위치 매핑(`path`, `query`, `headers`, `body`), `.alias()`, `output`/`error` | 실제 연산 함수를 가져와 `withHTTPHandle` 테스트 `Client`를 전달                          |
-| 비즈니스 함수와 커스텀 인터셉터 (`checkout.ts`, `client.ts`) | 인증 헤더 주입, 다단계 업무 흐름, 도메인 에러 변환, 재시도 정책                       | `withInterceptors(...)`를 장착한 테스트 `Client`를 비즈니스 함수에 전달                  |
-| SSE / WebSocket 소비자 (`src/events/`, `src/quotes/`)        | 스트림 수신 데이터 가공, 송신 프레임 형식, `await using` 종료 정리                    | `withSSEHandle` 또는 `withWebSocketHandle`로 메모리에서 가상 프레임 공급                 |
-| React / Vue UI 컴포넌트 (`OrderCard.tsx`, `OrderView.vue`)   | 로딩 상태, API 데이터 렌더링, 오류 UI, 언마운트 시 `AbortController` 취소             | `<ClientProvider client={testClient}>` 감싸기 또는 `createClientPlugin(testClient)` 설치 |
+테스트마다 `withHTTPHandle`, `withSSEHandle`, `withWebSocketHandle`이 주입된 격리된 `Client`를 만들면, 네트워크 소켓을 열지 않고도 실제 정의와 비즈니스 코드를 메모리 안에서 끝까지 검증할 수 있습니다:
+
+| 프로젝트 레이어                                              | 테스트 검증 대상                                                                 | 테스트 `Client` 연결 방식                                                                |
+| :----------------------------------------------------------- | :------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
+| 요청 정의와 스키마 (`src/api/request/`, `src/api/schema/`)   | `builder` 위치(`path`, `query`, `headers`, `body`), `.alias()`, `output`/`error` | 실제 연산 함수를 가져와 `withHTTPHandle` 테스트 `Client`를 전달                          |
+| 비즈니스 함수와 커스텀 인터셉터 (`checkout.ts`, `client.ts`) | 인증 헤더, `401` 갱신 재전송, 다단계 업무 흐름, 도메인 에러 변환                 | `withInterceptors(...)`를 장착한 테스트 `Client`를 비즈니스 함수에 전달                  |
+| SSE / WebSocket 소비자 (`src/events/`, `src/quotes/`)        | 스트림 수신 데이터 가공, 송신 프레임 형식, `await using` 종료 정리               | `withSSEHandle` 또는 `withWebSocketHandle`로 메모리에서 가상 프레임 공급                 |
+| React / Vue UI 컴포넌트 (`OrderCard.tsx`, `OrderView.vue`)   | 로딩 상태, API 데이터 렌더링, 오류 UI, 언마운트 시 `AbortController` 취소        | `<ClientProvider client={testClient}>` 감싸기 또는 `createClientPlugin(testClient)` 설치 |
 
 ## 1. 프로젝트 내 요청 정의와 스키마 테스트 (`withHTTPHandle`)
 
-프로젝트에서 실제 `defineRequest` 연산을 가져오고, 예약 도메인(예: `https://fixture.invalid`)과 `withHTTPHandle(...)`를 넣은 테스트 `Client`를 만들어 아웃바운드 `Request`가 백엔드 규격과 일치하는지 확인하세요. `withRetry`를 설정하지 않으면 재시도는 기본적으로 비활성화되어 있습니다. 일반 단위 테스트 클라이언트에서는 `withRetry`를 생략해 `502`/`503`/`504` 및 네트워크 오류 테스트가 백오프 대기 없이 한 번의 시도 후 즉시 반환되게 하세요.
+프로젝트에서 실제 `defineRequest` 연산을 가져오고 `withEndpoint("https://fixture.invalid")`와 `withHTTPHandle(...)`를 넣은 테스트 `Client`를 만듭니다:
+
+- **`https://fixture.invalid`를 쓰는 이유**: `createClient`는 요청이 `withHTTPHandle`에 들어가기 전에 URL 형식을 검증합니다. `.invalid`는 RFC 예약 도메인이므로 실수로 실제 DNS를 조회할 일이 없습니다.
+- **전송별 핸들 구분**: `withHTTPHandle`은 HTTP(`defineRequest`)만 가로챕니다. `defineEventStream`은 `withSSEHandle`, `defineWebSocket`은 `withWebSocketHandle`을 사용하세요.
+- **재시도 기본값과 `withRetry(undefined)` 주의**: `withRetry`를 생략하면 재시도는 꺼져 있습니다. 일반 단위 테스트 클라이언트에서는 생략해 `502`/`503`/`504`나 네트워크 오류가 `1s + 2s + 4s` 백오프를 기다리지 않고 1회 시도 후 바로 반환되게 하세요. 주의할 점: `withRetry()` 또는 `withRetry(undefined)`를 호출하면 **기본 3회 재시도가 켜집니다**. 공통 팩토리에서 재시도를 끄려면 `withRetry({ maxRetries: 0 })`을 명시하세요.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -39,17 +45,39 @@ description: 내 프로젝트에서 작성한 Defjs 요청 정의, struct 스키
 </Tab>
 </Tabs>
 
-### 테스트 격리, 전송 형식 검사 및 error-first 튜플
+### 세 가지 핵심: 격리, 요청 바이트 검사, 세 가지 응답 패턴
 
-- **테스트마다 `Client` 격리하기**: 각 `test(...)` 또는 테스트 헬퍼 내부에서 새 `createClient(...)`를 만들어 재시도 예산이나 핸들 상태가 다른 테스트에 영향을 주지 않게 합니다.
-- **실제 전송 바이트 확인하기**: `withHTTPHandle(async (input, init) => ...)` 안에서 `const request = new Request(input, init)`를 만들고 `request.method`, `request.url`, `request.headers`, `await request.text()`(또는 `await request.json()`)를 검사해 직접 작성한 `builder`와 `.alias()`가 API 명세와 정확히 일치하는지 검증합니다.
-- **`[err, data, response]` 튜플 단언하기**:
-  - `2xx` 성공 케이스: `expect(err).toBeNull()` 뒤에 바로 `if (err) throw err;`를 두고 디코딩된 `data` 필드(`.alias()` 매핑 포함)를 검증합니다.
-  - 실패 케이스: 먼저 `if (err)`로 가드한 뒤 그 안에서 `if (err.code === "HTTP_STATUS")`로 좁혀 `err.status`, `err.data`, `err.response`를 단언하고(디코드/사전 검사 오류나 감싼 비즈니스 `Error`에서는 `err.cause` 확인), `if (err)` 블록 안에서 `return`한 뒤 `expect.unreachable(...)`을 둡니다.
+- **테스트마다 새 `Client` 생성**: 각 `test(...)` 또는 헬퍼 안에서 새 `createClient(...)`를 만들어 재시도 예산이나 핸들 상태가 다른 테스트에 번지지 않게 합니다.
+- **실제 전송 포맷 검증**: `withHTTPHandle(async (input, init) => ...)` 안에서 `const request = new Request(input, init)`를 만들고 `request.method`, `request.url`, `request.headers`, `await request.text()`(또는 `json()`)로 `builder`와 `.alias()`를 검증합니다.
+- **대표적인 세 가지 HTTP 결과 검증**:
+  - **`2xx` 성공**: `expect(err).toBeNull()` 뒤에 바로 `if (err) throw err;`를 두고 디코딩된 `data`를 검사합니다.
+  - **`4xx` / `5xx` 오류**: `Response.json(..., { status: 422 })`를 반환하고 `if (err)` 안에서 `err.code === "HTTP_STATUS"`로 좁혀 `err.status`, `err.data`, `err.response`를 검증한 뒤 `return`하고 `expect.unreachable(...)`을 둡니다(`bun:test`에서는 대신 `throw new Error("expected fault")`를 사용하세요).
+  - **네트워크 장애 (`NET_UNREACHABLE`)**: `Response.error()`를 반환하지 **마세요**. 상태가 `0`이어도 `Response` 객체가 반환되면 Defjs는 HTTP 응답으로 처리해 `HTTP_STATUS`를 반환합니다. 네트워크 단절을 시뮬레이션하려면 `Promise.reject(new TypeError("fetch failed"))`(또는 `throw`)를 반환하세요:
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { expect, test } from "vitest";
+import { createOrder } from "./sdk/orders.ts";
+
+test("fetch가 거부되면 NET_UNREACHABLE을 반환한다", async () => {
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() => Promise.reject(new TypeError("fetch failed"))),
+  );
+
+  const [err] = await createOrder(client, { sku: "book", quantity: 1 });
+  if (err) {
+    expect(err.code).toBe("NET_UNREACHABLE");
+    return;
+  }
+
+  expect.unreachable("expected NET_UNREACHABLE fault");
+});
+```
 
 ## 2. 비즈니스 함수와 커스텀 인터셉터 테스트
 
-`src/checkout.ts` 같은 비즈니스 오케스트레이션 함수와 `createHttpInterceptor`로 만든 커스텀 인터셉터를 테스트할 때는 테스트 `Client`를 함수에 직접 넘기고 `withInterceptors(...)`로 인터셉터를 붙이세요. 하나의 오프라인 테스트에서 인증 헤더 주입, `submitOrder`의 `.alias()` 직렬화, 성공 응답 및 `409` 충돌 같은 도메인 오류 매핑까지 한 번에 검증할 수 있습니다.
+`src/checkout.ts` 같은 비즈니스 함수에 `Client`를 직접 넘기고 테스트 클라이언트에 `withInterceptors(bearerAuth(...))`를 장착하세요. 하나의 오프라인 테스트로 인증 헤더 주입, `submitOrder`의 `.alias()` 직렬화, 성공 응답 및 `409` 충돌 같은 도메인 오류 매핑을 한 번에 검증합니다:
 
 <Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
 <Tab>
@@ -68,14 +96,93 @@ description: 내 프로젝트에서 작성한 Defjs 요청 정의, struct 스키
 </Tab>
 </Tabs>
 
-일시적인 `503` 응답에 대한 `withRetry` 복구를 실제 타이머 대기 없이 검증하려면 `withHTTPHandle` 안에 카운터(`let attempts = 0`)를 두고 `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })`를 설정하세요(`submitOrder`처럼 `POST` 연산을 재시도할 때는 `methods: ["POST"]`가 필요합니다). 인터셉터 수준 재전송(`401` 후 인터셉터 내부에서 `next(...)`로 토큰을 갱신해 다시 호출하는 경우 등)은 `withRetry`를 사용하지 않으므로 상태가 있는 `withHTTPHandle` 카운터만으로 직접 테스트합니다.
+### `withRetry` 복구 및 `401` 토큰 갱신 재전송 테스트
+
+- **일시적 `503`에 대한 `withRetry` 복구**: `withHTTPHandle` 밖에 `let attempts = 0` 카운터를 두고 `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })`를 설정하면 대기 없이 재시도를 테스트할 수 있습니다. 주의: `methods`를 지정하면 기본 안전 메서드 목록(`["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]`)이 **덮어써지므로**, 같은 테스트 클라이언트에서 `GET`도 재시도해야 한다면 `methods: ["GET", "POST"]`로 적으세요.
+- **인터셉터 `401` 토큰 갱신 재전송**: 인터셉터 내부에서 `next(...)`를 다시 호출하는 방식은 `withRetry`를 거치지 않습니다. 상태가 있는 `withHTTPHandle` 카운터로 직접 테스트하세요. `401`에서 `err.data`를 읽어야 한다면 연산 정의에 `error: struct(...)`가 선언되어 있어야 합니다.
+
+```ts
+import {
+  createClient,
+  createHttpInterceptor,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+  withRetry,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+import { submitOrder } from "./src/checkout.ts";
+
+test("methods에 POST를 포함하면 일시적 503에서 withRetry로 복구된다", async () => {
+  let attempts = 0;
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] }),
+    withHTTPHandle(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Response.json({ message: "try again" }, { status: 503 });
+      }
+      return Response.json({ id: "ord_2" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "pen", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_2");
+});
+
+test("401 시 인터셉터에서 토큰을 갱신하고 next()를 재전송한다", async () => {
+  let token = "expired-token";
+  let attempts = 0;
+
+  const refreshAuth = createHttpInterceptor(async (req, next) => {
+    const first = await next({
+      ...req,
+      headers: { ...req.headers, authorization: `Bearer ${token}` },
+    });
+    if (first[0]?.code === "HTTP_STATUS" && first[0].status === 401) {
+      token = "fresh-token";
+      return next({
+        ...req,
+        headers: { ...req.headers, authorization: `Bearer ${token}` },
+      });
+    }
+    return first;
+  });
+
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withInterceptors(refreshAuth),
+    withHTTPHandle(async (input, init) => {
+      attempts += 1;
+      const auth = new Request(input, init).headers.get("authorization");
+      if (auth === "Bearer expired-token") {
+        return new Response(null, { status: 401 });
+      }
+      expect(auth).toBe("Bearer fresh-token");
+      return Response.json({ id: "ord_3" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "mug", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_3");
+});
+```
 
 ## 3. 실시간 스트림 소비 로직 테스트 (`SSE` / `WebSocket`)
 
-프로젝트에 `defineEventStream`이나 `defineWebSocket`을 감싸는 스트림 소비 함수가 있다면, `withSSEHandle` 또는 `withWebSocketHandle`로 메모리에서 가상 프레임을 흘려보내 비즈니스 결과와 정리 동작을 테스트하세요.
+프로젝트에 `defineEventStream`이나 `defineWebSocket`을 감싸는 스트림 소비 함수가 있다면, `withSSEHandle` 또는 `withWebSocketHandle`로 메모리에서 가상 프레임을 흘려보내세요:
 
-- **SSE (`withSSEHandle`)**: `ReadableStream<Uint8Array>` 본문과 `content-type: "text/event-stream"` 헤더를 포함한 `Response`를 반환합니다.
-- **WebSocket (`withWebSocketHandle`)**: `EventTarget`을 상속하고 `WebSocketHandle`을 구현(`static readonly OPEN = 1` 제공)한 경량 스텁 클래스를 전달해 송신 메시지를 기록하고 `open`, `MessageEvent("message")`, `CloseEvent("close")`를 발행합니다.
+- **SSE (`withSSEHandle`)**: `ReadableStream<Uint8Array>` 본문과 `"content-type": "text/event-stream"` 헤더를 포함한 `Response`를 반환합니다. 스트림 중간 끊김을 재현하려면 청크 전송 후 `controller.error(new TypeError("stream dropped"))`를 호출하세요(초기 핸드셰이크 실패는 `{ status: 500 }` 반환).
+- **WebSocket (`withWebSocketHandle`)**: `EventTarget`을 상속하고 `WebSocketHandle`(`static readonly OPEN = 1` 및 `readyState`)을 구현한 스텁을 전달합니다. `FakeQuoteSocket`이 `queueMicrotask`로 `open`과 메시지를 발행하는 이유는, 호출 측이 리스너나 `for await`를 등록하기도 전에 생성자에서 동기적으로 이벤트가 발생해 버리는 것을 막기 위해서입니다. 중간 오류 종료는 `new Event("error")` 뒤에 `new CloseEvent("close", { code: 1011, reason: "boom" })`을 발행해 테스트합니다.
 
 <Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
 <Tab>
@@ -96,23 +203,87 @@ description: 내 프로젝트에서 작성한 Defjs 요청 정의, struct 스키
 
 ## 4. 모든 계층을 테스트하기 쉬운 프로젝트 구조 설계
 
-[애플리케이션 API 계층](/ko-KR/docs/application-api) 패턴을 따르면 프로젝트 전체를 `vi.mock` 없이 깔끔하게 테스트할 수 있습니다.
+[애플리케이션 API 계층](/ko-KR/docs/application-api) 패턴을 따르면 프로젝트 전체를 `vi.mock` 없이 테스트할 수 있습니다:
 
-- **`src/api/request/*.ts`에 전역 클라이언트를 두지 않기**: 정의 파일에서는 `defineRequest`, `defineEventStream`, `defineWebSocket`만 내보내고 프로덕션 `apiClient`를 import하지 않아야 어떤 테스트에서도 테스트 `Client`를 바로 넘길 수 있습니다.
-- **비즈니스 함수가 `Client`(또는 `DerivableClient`)를 인자로 받도록 작성하기**: `client`를 명시적 첫 번째 매개변수(`client`를 그대로 넘기면 `client: Client`, `client({ signal })`처럼 호출별 옵션을 파생하면 `client: DerivableClient`)로 받아 `export async function placeOrder(client: Client, input: ...)`로 작성하거나, 기본값이 있는 클라이언트를 마지막 매개변수(`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`)로 두어 프로덕션에서는 `placeOrder(input)`으로, 테스트에서는 `placeOrder(input, testClient)`로 호출할 수 있게 하세요. `src/api/client.ts`에서도 커스텀 인터셉터와 나머지 `ClientOption` 인자를 `createClient(...)`로 전달하는 SSR 팩토리(`createServerApiClient(token, ...options: ClientOption[])`)를 export해 테스트에서 `withHTTPHandle`을 붙일 수 있게 하세요.
-- **React 및 Vue 컴포넌트에 Provider / Plugin으로 `testClient` 주입하기**:
-  - **React (`@defjs/react`)**: 테스트할 컴포넌트를 `<ClientProvider client={testClient}>`로 감싸거나 `useClient(overrideClient)`를 쓰는 훅/컴포넌트에 `testClient`를 전달합니다.
-  - **Vue (`@defjs/vue`)**: 테스트에서 컴포넌트를 마운트할 때 `app.use(createClientPlugin(testClient))`를 설치하거나 `provide(HTTP_CLIENT, testClient)`로 주입합니다.
+- **`src/api/request/*.ts`에 전역 클라이언트를 두지 않기**: 정의 파일에서는 `defineRequest`, `defineEventStream`, `defineWebSocket`만 내보내고 프로덕션 `apiClient`를 import하지 마세요.
+- **비즈니스 함수가 `Client` 또는 `DerivableClient`를 인자로 받도록 작성하기**:
+  - **`Client` vs `DerivableClient`**: `createClient(...)`는 `DerivableClient`를 반환하며 `Client` 매개변수에도 그대로 전달할 수 있습니다. 단, 함수 내부에서 `client({ signal })`처럼 호출별 옵션을 파생해야 한다면 매개변수 타입을 **`DerivableClient`**로 선언해야 합니다.
+  - **매개변수 위치와 SSR 팩토리**: 첫 번째 매개변수(`placeOrder(client: DerivableClient, input: ...)`) 또는 기본값이 있는 마지막 매개변수(`placeOrder(input: PlaceOrderInput, client: Client = apiClient)`)로 받고, `src/api/client.ts`에서 커스텀 인터셉터와 `createServerApiClient(token, ...options: ClientOption[])`을 함께 export하세요.
+  - **Node / Bun 테스트에서의 `withXSRF()` 주의사항**: `withXSRF()`는 브라우저 전역(`globalThis.location` 등)을 읽습니다. `src/api/client.ts` 최상위에서 조건 없이 `export const apiClient = createClient(..., withXSRF())`를 생성해 두면, 테스트가 `= apiClient` 기본 인자를 가진 헬퍼를 import하는 순간 모듈 로드 단계에서 오류가 납니다. `typeof window !== "undefined"`로 가드하거나 브라우저 전용 팩토리 함수 안에서 생성하세요.
+- **React 및 Vue 컴포넌트에 `testClient` 주입하기**:
+
+<Tabs items={["React (Testing Library)", "Vue (Test Utils)"]}>
+<Tab>
+
+```tsx
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+import { render, screen } from "@testing-library/react";
+import { expect, test } from "vitest";
+import { OrderCard } from "./OrderCard.tsx";
+
+test("ClientProvider로 testClient를 주입한다", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const { unmount } = render(
+    <ClientProvider client={testClient}>
+      <OrderCard id="ord_1" />
+    </ClientProvider>,
+  );
+
+  expect(await screen.findByText("ord_1")).toBeTruthy();
+  unmount();
+});
+```
+
+</Tab>
+<Tab>
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { createClientPlugin } from "@defjs/vue";
+import { flushPromises, mount } from "@vue/test-utils";
+import { expect, test } from "vitest";
+import OrderView from "./OrderView.vue";
+
+test("createClientPlugin으로 testClient를 주입한다", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const wrapper = mount(OrderView, {
+    props: { orderId: "ord_1" },
+    global: {
+      plugins: [createClientPlugin(testClient)],
+    },
+  });
+
+  await flushPromises();
+  expect(wrapper.text()).toContain("ord_1");
+});
+```
+
+</Tab>
+</Tabs>
 
 ## 5. 요청 타임아웃과 타이머 기반 동작 테스트
 
-재시도 백오프, SSE/WebSocket 재연결 지연, 하트비트 타이머를 테스트할 때는 Vitest에서 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`(Bun test에서는 `jest.useFakeTimers()`)를 사용하세요. Vitest의 가짜 타이머는 네이티브 `AbortSignal.timeout`을 진행시키지 않으므로, Vitest에서 요청 시간 초과를 테스트할 때는 통제된 `setTimeout`에서 `TimeoutError` 사유로 `AbortController`를 중단하세요.
+재시도 백오프, 재연결 지연, 하트비트 타이머를 테스트할 때는 Vitest에서 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`(Bun test에서는 `jest.useFakeTimers()`)를 사용하세요. `toFake`를 제한하면 Promise와 마이크로태스크가 계속 정상 동작하므로 `async`/`await`가 멈추지 않습니다.
+
+또한 **Vitest의 가짜 타이머는 네이티브 `AbortSignal.timeout`을 진행시키지 않습니다**(JS `setTimeout`이 아닌 런타임 네이티브 타이머를 사용하기 때문입니다):
+
+- Vitest에서 `client({ signal })` 시간 초과를 결정론적으로 테스트하려면, 통제된 `setTimeout`에서 `new DOMException("request deadline", "TimeoutError")`로 `AbortController`를 중단하세요. `await ready`로 핸들 내부의 `setTimeout`이 등록된 것을 확인한 뒤에 `advanceTimersByTimeAsync`를 호출해야 합니다:
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-Bun test의 `jest.useFakeTimers()`와 `jest.advanceTimersByTime()`은 `AbortSignal.timeout`도 함께 제어합니다. 대기 중인 비동기 단계가 시작된 뒤에만 타이머를 진행하고, 실제 경과 시간이 아니라 상태 변화나 시도 횟수를 단언한 뒤 `finally`에서 실제 타이머를 복원하세요.
+- 또는 클라이언트에 `withRetry({ maxRetries: 0, attemptTimeoutMs: 500 })`을 설정하면 Defjs가 내부적으로 JS `setTimeout`을 쓰므로 `vi.advanceTimersByTimeAsync(500)`만으로 바로 `NET_TIMEOUT`을 트리거할 수 있습니다.
+- **Bun test**의 `jest.useFakeTimers()`와 `jest.advanceTimersByTime()`은 `AbortSignal.timeout`도 함께 제어합니다. 상태 변화나 시도 횟수를 단언한 뒤 `finally`에서 실제 타이머를 복원하세요.
 
 ## 관련 문서
 

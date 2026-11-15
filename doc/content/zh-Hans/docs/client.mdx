@@ -1,18 +1,18 @@
 ---
 title: "Client"
-description: 配置应用如何调用导入的 SDK 操作，与 API 定义解耦。
+description: 配置业务应用如何调用接口操作，与接口契约定义彻底解耦。
 ---
 
 # Client
 
-`Client` 承载消费方应用的执行配置：基地址、默认请求头、认证凭据、拦截器、查询序列化器和传输层句柄。
+`Client` 负责把所有和运行环境相关的执行配置收拢到一起：服务域名、公共请求头、认证凭据、拦截器、查询序列化以及单元测试传输句柄。
 
-`createClient(...options)` 返回一个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)：
+调用 `createClient(...options)` 会返回一个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)：
 
-- 当无需传递单次调用的特定请求选项时，直接将 `client` 传给操作函数（如 `getOrder(client, { id: 1 })`）。
-- 调用 `client(requestOptions)` 可派生出一个仅供单次调用生效的 `Client` 值（如 `getOrder(client({ signal }), { id: 1 })`）。派生过程不执行任何网络 I/O，且派生出的值是一个普通对象（不再具备可调用特性）。
+- **日常直接调用**：不需要为单次请求单独覆写参数时，直接传 `client` 给操作就行：`getOrder(client, { id: 1 })`。
+- **单次派生配置**：需要给这一次请求加 `signal` 或进度监听时，调用 `client(requestOptions)` 派生一个一次性 `Client` 值：`getOrder(client({ signal }), { id: 1 })`。注意：派生这一步**不会**发网络请求，返回的新对象是一次性的普通 `Client`（不能再当函数二次调用）。
 
-## 1. 配置 Client 并调用 SDK 操作
+## 1. 创建 Client 并调用操作
 
 <Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab>
@@ -38,86 +38,90 @@ description: 配置应用如何调用导入的 SDK 操作，与 API 定义解耦
 </Tab>
 </Tabs>
 
-### 选项组合规则
+### 配置项叠加顺序
 
-- 选项生效顺序为**从左向右**。
-- 单值覆盖型配置项（`withEndpoint`、`withHeaders`、`withQuerySerializer`、`withCredentials`，以及来自 `@defjs/core/xsrf` 的 `withXSRF`）会直接**替换**之前配置的值。
-- `withInterceptors(...items)` 会**追加**到现有拦截器列表中，并在操作实际执行时按对应的传输协议类型（`http`、`sse`、`web-socket`）自动过滤执行。
+- 配置按参数**从左到右**依次生效。
+- 覆盖型选项（`withEndpoint`、`withHeaders`、`withQuerySerializer`、`withCredentials` 以及 `@defjs/core/xsrf` 的 `withXSRF`）会用后面的配置**直接替换**前面的同款选项。
+- `withInterceptors(...items)` 会不断**追加**到拦截器队列里，调用时只挑当前传输协议对应的拦截器来跑（`http`、`sse` 或 `web-socket`）。
 
-## 2. 派生单次调用的 Client（`client(options)`）
+## 2. 给某一次请求单独加配置（`client(options)`）
 
-当某次请求需要专用的 `signal`、进度监听回调或自定义 WebSocket 会话参数时，请派生出一个全新的单次调用 Client 值：
+遇到要传 `AbortSignal`、上传下载进度回调，或者单次覆盖 WebSocket 连接参数时，先派生一个一次性 Client 再传进操作：
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
 > [!IMPORTANT]
-> 由于 `createClient(...)` 返回的是一个可调用的函数对象（`DerivableClient`），请**切勿**将其直接传入 React 的 `setState(client)` 或 Vue 的 `watch(client)` / `computed(client)` 中，否则会被框架错误识别为状态更新函数或计算属性 Getter。
+> 因为 `createClient(...)` 返回的是一个**可调用的函数对象**（`DerivableClient`），写前端代码时**千万别**把它直接传进 React 的 `setState(client)` 或 Vue 的 `watch(client)` / `computed(client)`，否则框架会把它当成状态更新回调或 getter 直接执行！
 
-### 单次调用 `RequestOptions` 参数速查
+### 单次 `RequestOptions` 支持哪些字段
 
-`RequestOptions` 包含七个扁平属性字段。每种传输协议在运行时只读取与自身相关的字段，其余字段会被自动安全忽略：
+`RequestOptions` 一共 7 个扁平字段，各协议只读取跟自己有关的那几个，无关字段自动忽略：
 
-| 属性字段             | 适用协议             | 行为表现                                                                                                   |
-| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `signal`             | HTTP、SSE、WebSocket | 取消/中断当前调用（`AbortSignal.timeout(ms)` 映射为 `NET_TIMEOUT`；手动调用 abort 映射为 `NET_ABORTED`）。 |
-| `onUploadProgress`   | HTTP                 | 监听流式请求体上传进度。                                                                                   |
-| `onDownloadProgress` | HTTP                 | 监听声明过的响应体下载进度。                                                                               |
-| `beforeConnect`      | WebSocket            | 覆盖当前会话在 Client 级别配置的 `beforeConnect` 钩子。                                                    |
-| `protocols`          | WebSocket            | 覆盖当前会话在 Client 级别配置的子协议列表。                                                               |
-| `heartbeat`          | WebSocket            | 覆盖当前会话在 Client 级别配置的心跳检测策略。                                                             |
-| `retry`              | HTTP、SSE、WebSocket | 为这次调用替换 Client 级的重试策略。HTTP 的 `budget` 仍留在 Client 上。                                    |
+| 字段名称             | 适用协议             | 效果说明                                                                                        |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP、SSE、WebSocket | 中断当前调用（`AbortSignal.timeout(ms)` 对应 `NET_TIMEOUT`；手动 `abort()` 对应 `NET_ABORTED`） |
+| `onUploadProgress`   | HTTP                 | 监听 `ReadableStream` 请求体的上传进度                                                          |
+| `onDownloadProgress` | HTTP                 | 监听响应体的下载进度                                                                            |
+| `beforeConnect`      | WebSocket            | 仅本次连接覆盖 Client 默认的 `beforeConnect` 钩子                                               |
+| `protocols`          | WebSocket            | 仅本次连接覆盖 Client 默认的子协议列表                                                          |
+| `heartbeat`          | WebSocket            | 仅本次连接覆盖 Client 默认的心跳保活策略                                                        |
+| `retry`              | HTTP、SSE、WebSocket | 仅本次调用替换重试策略（注意 HTTP 的全局重试预算 `budget` 仍留在原 Client 上共享）              |
 
-## 3. 浏览器单例模式 vs. 服务端请求作用域
+## 3. 浏览器全局用 vs. SSR 按请求隔离
 
-- **浏览器应用程序**：当服务地址、拦截器和认证凭据在整个浏览器上下文内全局共享时，可直接在模块作用域导出一个单例 `DerivableClient`。
-- **服务端 / SSR 应用程序**：当请求头、Cookie、身份 Token 或租户信息与单个入站请求强绑定时，**务必在每个请求边界内部**创建独立的 Client 实例。切勿在整个进程共用的 Client 上存储单个用户的鉴权信息。
+- **浏览器 SPA**：接口域名、拦截器和认证方式在整页生命周期内都一致时，在模块顶层导出一份共享 `DerivableClient` 即可。
+- **Node 服务端 / SSR**：如果不同请求会带不同的用户 Cookie、Token 或租户信息，**务必在每次请求处理内部单独 `createClient(...)`**。千万别把带某个用户登录态的拦截器写进全进程共享的 Client 里，否则会导致串号！
 
-## 4. 多服务节点与负载均衡 [#multiple-endpoints]
+## 4. 多节点与重试策略 [#multiple-endpoints]
 
-`withEndpoint(...urls)` 支持传入一个或多个候选服务基地址。在默认配置下：
+`withEndpoint(...urls)` 可以传多个候选服务地址，默认规则很克制：
 
-- 每个 Client 默认使用 [`pickFirstBalancer`](/zh-Hans/api/core/pickfirstbalancer)，持续停在首个 URL，直到遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。
-- **重试默认关闭。** 一次调用只做一次尝试。`withRetry()` 与 `withRetry({})` 等价：HTTP、SSE 和 WebSocket 都最多重试三次，并带退避。每次失败后，均衡器会从全部端点中再次选择，因此在 pick-first 下，连接被拒绝之后的重试会到达下一个端点，而只有一个端点时，延迟之后会再次尝试它。HTTP 的 Finagle 重试预算属于 Client 配置，由其派生出的 Client 共享，与均衡器的身份无关。
+- **默认用 [`pickFirstBalancer`](/zh-Hans/api/core/pickfirstbalancer)**：一直盯着第一个可用地址发，只有遇到连不上（`NET_UNREACHABLE`）或 `502`/`503`/`504`（`NET_UNAVAILABLE`）时才会尝试往后面的备选节点切。
+- **默认完全不重试**：不传 `withRetry` 时每次操作只试一次。如果传 `withRetry()` 或 `withRetry({})`，HTTP、SSE 和 WebSocket 都会开启最多 3 次带退避的重试。每次重试都会重新过一遍均衡器挑节点（单节点则在等完退避后重打同一个节点）；HTTP 的 Finagle 重试预算挂在原 `Client` 上，所有派生出的 `client(options)` 共用同一份预算。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-`attemptTimeoutMs` 限制单次尝试：HTTP 计到响应 body 结束，SSE 计到响应头，WebSocket 计到 `open`。只要时间限制、不要重试时，写成 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。重试选项在运行时不会校验。决策顺序，以及从 `withSSEReconnect` 和 `withWebSocketReconnect` 迁移的说明，见 [负载均衡与故障转移](/zh-Hans/docs/load-balancing#retries)。
+**只要单次超时、不想要重试**怎么办？配置 `withRetry({ maxRetries: 0, attemptTimeoutMs })`！其中 `attemptTimeoutMs` 管单次尝试期限：HTTP 计到响应体读完，SSE 计到拿到响应头，WebSocket 计到触发 `open`。详细的优先级和旧选项迁移说明见 [负载均衡与故障转移](/zh-Hans/docs/load-balancing#retries)。
 
-### 被动健康检测与 P2C 算法 [#health-filtering-and-p2c]
+### 异常节点摘除与 P2C 负载均衡 [#health-filtering-and-p2c]
 
-对于多个对等的服务端副本，[`roundRobinBalancer`](/zh-Hans/api/core/roundrobinbalancer) 与 [`p2cBalancer`](/zh-Hans/api/core/p2cbalancer)（基于 PeakEwma 衰减 RTT × 在途负载）可以接收 `outlierDetection` 选项；除非传入对象（默认值用 `{}`），否则它是关闭的。它统计失败并把端点逐出一段时间，也会跳过你自己的 `isHealthy` 函数拒绝的端点；Defjs 不决定什么叫健康。默认情况下，每个带错误码的结果都计为失败（包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`），你可以用 `isFailure` 替换这条规则；原始响应 `status` 只供自定义均衡器使用。
+如果有多个对等后端实例，可以用 [`roundRobinBalancer`](/zh-Hans/api/core/roundrobinbalancer) 或 [`p2cBalancer`](/zh-Hans/api/core/p2cbalancer)（基于 PeakEwma 衰减耗时 × 当前并发负载选路）：
 
-关于重试预算、失败逐出和你自己的健康函数、P2C 负载估算及编写自定义均衡器的详细内容，请参阅专门的[负载均衡与故障转移](/zh-Hans/docs/load-balancing)指南。
+- **默认不开启摘除**：除非在配置里显式传入 `outlierDetection`（用默认阈值只需写 `outlierDetection: {}`），否则节点不会因为失败被暂时踢出候选池。
+- **什么是“失败”**：开启摘除后，默认所有带错误码的结果（包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`）都会计入失败统计，你也可以传自定义 `isFailure` 函数调整判定规则（只有自己实现自定义均衡器时能看到原始响应 `status`）。
+- **搭配主动健康检查**：还可以同时传 `isHealthy` 钩子接入自己的健康状态判断，Defjs 不会代替你规定“什么叫健康”。
 
-## 5. 注入测试传输层
+关于重试预算、摘除冷却时长和自定义均衡器，继续看 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)。
 
-通过 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 替换 Client 内部的平台原生 `fetch` 或 `WebSocket`，即可在纯离线环境下对整个 SDK 契约进行完整的自动化测试：
+## 5. 换成本地传输句柄做测试
+
+单元测试里传进 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle`，就能在不开网包的前提下把整套业务代码测通：
 
 <include cwd lang="typescript">
   examples/client/inject-test-transport.ts#example
 </include>
 
-完整的测试模式与最佳实践请参阅[测试](/zh-Hans/docs/testing)。
+完整测试写法直接看 [测试指南](/zh-Hans/docs/testing)。
 
-## 6. Client 配置辅助函数速查
+## 6. 常用 `with*` 配置项速查表
 
-| 辅助函数                                                                           | 作用说明                                                                                                                                                                                                                                                         |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                            | 设置一个或多个候选服务基地址（直接替换原有列表）。                                                                                                                                                                                                               |
-| `withHeaders(HeadersInit)`                                                         | 为 HTTP 和 SSE 配置静态默认请求头（会被 builder 返回的 headers 覆盖）。                                                                                                                                                                                          |
-| `withInterceptors(...items)`                                                       | 按洋葱模型追加 HTTP、SSE 及 WebSocket 拦截器。                                                                                                                                                                                                                   |
-| `withQuerySerializer(fn)`                                                          | 自定义将带有别名的 Query 对象序列化为查询字符串的算法。                                                                                                                                                                                                          |
-| `withCredentials(boolean)`                                                         | 当为 `true` 时，为 HTTP 和 SSE 请求开启 Fetch `credentials: "include"`。                                                                                                                                                                                         |
-| `withXSRF(options?)`                                                               | 来自 `@defjs/core/xsrf`。在浏览器中，于同源且产生数据变更的 HTTP 请求上，自动将 XSRF Cookie 拷贝注入至对应请求头中。调用 `withXSRF()` 时，若缺少 `location` 或 `document`（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。 |
-| `withBalancer(balancer)`                                                           | 替换服务节点选择策略（如 `pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。                                                                                                                                                                            |
-| `withRetry(options?)`                                                              | 为 HTTP、SSE 和 WebSocket 配置可选开启的重试：重试次数、退避、方法、单次尝试超时、`shouldRetry` 函数，以及归 HTTP Client 所有的预算。                                                                                                                            |
-| `withSSEOnInvalidEvent`                                                            | 观察没有 struct 或校验失败的 SSE 事件。                                                                                                                                                                                                                          |
-| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 配置 WebSocket 会话的默认行为。                                                                                                                                                                                                                                  |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | 注入自定义或 Mock 的传输层实现，用于离线单测。                                                                                                                                                                                                                   |
+| 配置项                                                                             | 一句话说明                                                                                                                          |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                            | 设置一个或多个服务基础地址（覆盖之前的值）                                                                                          |
+| `withHeaders(HeadersInit)`                                                         | 为 HTTP 和 SSE 设置默认请求头（会被操作里的 `builder` 覆盖）                                                                        |
+| `withInterceptors(...items)`                                                       | 按洋葱模型追加 HTTP、SSE 或 WebSocket 拦截器                                                                                        |
+| `withQuerySerializer(fn)`                                                          | 自定义 Query 序列化格式（例如支持嵌套方括号写法）                                                                                   |
+| `withCredentials(boolean)`                                                         | 为 `true` 时给 HTTP 和 SSE 开启 `credentials: "include"`                                                                            |
+| `withXSRF(options?)`                                                               | 来自 `@defjs/core/xsrf`。浏览器内自动将 XSRF Cookie 带到同源变更请求头里；在 Node/Bun/Worker 里会抛错，同构项目注意判断环境后再挂载 |
+| `withBalancer(balancer)`                                                           | 切换节点选择策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）                                                        |
+| `withRetry(options?)`                                                              | 配置 HTTP / SSE / WebSocket 的重试次数、退避、方法白名单、单次尝试超时与重试预算                                                    |
+| `withSSEOnInvalidEvent`                                                            | 监听 SSE 推过来但未过 `struct` 校验的异常事件                                                                                       |
+| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 设置 WebSocket 默认心跳、子协议和建连前钩子                                                                                         |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | 在测试环境替换底层传输实现                                                                                                          |
 
 ## 相关阅读
 

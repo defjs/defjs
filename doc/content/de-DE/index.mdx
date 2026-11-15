@@ -9,8 +9,8 @@ description: TypeScript-SDKs mit wiederverwendbaren API-Definitionen und anwendu
 
 Defjs trennt die beiden Seiten eines TypeScript-SDKs sauber voneinander:
 
-- **SDK-Definition (`@defjs/core`)** — Als SDK-Autor deklarierst du typisierte HTTP-, SSE- und WebSocket-Operationen zusammen mit ihren `struct`-Schemas. Eine Definition ist reine Daten: Ihr Import startet weder einen Netzwerkaufruf noch bindet er einen globalen Client.
-- **Anwendungsausführung** — Konsumierende Anwendungen erstellen ihren eigenen `Client` (`createClient(withEndpoint(...))`), hängen Anmeldedaten und Interceptors an, konfigurieren Load-Balancing und übergeben diesen Client beim Aufruf einer Operation.
+- **SDK-Definition (`@defjs/core`)** — Deklariere typisierte HTTP-, SSE- und WebSocket-Operationen samt ihrer `struct`-Schemas – egal ob für ein öffentliches SDK oder die interne API-Schicht deiner App. Eine Definition ist reine Daten: Ihr Import startet weder einen Netzwerkaufruf noch bindet er einen globalen Client.
+- **Anwendungsausführung** — Anwendungen erstellen ihren eigenen `Client` (`createClient(withEndpoint(...))`), hängen Anmeldedaten und Interceptors an, konfigurieren Load-Balancing und übergeben diesen Client beim Aufruf einer Operation.
 
 ## Kurzer Blick: SDK-Definition vs. Anwendungsausführung
 
@@ -46,7 +46,8 @@ Der Aufruf `getHealth(client)` führt I/O aus und liefert ein Error-first-Tupel 
 1. **[Schnellstart](/de-DE/docs/start)** — Definiere eine Operation, teste sie offline mit einem lokalen Fetch-Handle und richte sie auf einen echten Dienst aus.
 2. **[Kernarchitektur](/de-DE/docs/design-decisions)** — Verstehe die sechs Regeln zur Response-Dekodierung, Error-first-Tupel und die Verantwortung für Ressourcen.
 3. **[SDKs definieren](/de-DE/docs/struct)** — Deklariere Datenverträge mit [Struct](/de-DE/docs/struct) und exportiere [HTTP](/de-DE/docs/http)-, [SSE](/de-DE/docs/sse)- und [WebSocket](/de-DE/docs/web-socket)-Operationen.
-4. **[Client & Ausführung](/de-DE/docs/client)** — Konfiguriere [Clients](/de-DE/docs/client), behandle typisierte [Fehler](/de-DE/docs/errors), binde [Interceptors](/de-DE/docs/interceptors) ein, richte [Lastverteilung & Failover](/de-DE/docs/load-balancing) ein und führe deterministische [Tests](/de-DE/docs/testing) aus.
+4. **[Client & Ausführung](/de-DE/docs/client)** — Konfiguriere [Clients](/de-DE/docs/client), behandle typisierte [Fehler](/de-DE/docs/errors), binde [Interceptors](/de-DE/docs/interceptors) ein und richte [Lastverteilung & Failover](/de-DE/docs/load-balancing) ein.
+5. **[Best Practices & Tests](/de-DE/docs/best-practices)** — Befolge [Engineering-Konventionen](/de-DE/docs/best-practices), strukturiere eine [Anwendungs-API-Schicht](/de-DE/docs/application-api) oder ein [Öffentliches SDK](/de-DE/docs/public-sdk) und schreibe deterministische [Tests](/de-DE/docs/testing).
 
 ## Unterstützte Transporte und Ergebnis-Tupel
 

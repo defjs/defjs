@@ -1,11 +1,11 @@
 ---
 title: "本地 HTTP 测试"
-description: 使用 withHTTPHandle 仅为单个测试 Client 替换底层 Fetch，无须改动任何 SDK 操作定义。
+description: 用 withHTTPHandle 在测试中拦截单个 Client 的请求，零改动代码即可跑通整条 Defjs 请求与解码链路。
 ---
 
 # 用本地 Fetch 句柄测试
 
-`withHTTPHandle(...)` 为单个 Client 替换底层 `fetch`，同时完整跑通 Defjs 流水线——输入校验、`builder` 映射、URL 解析、拦截器、状态码分类和 struct 解码——而无需打开网络 socket：
+`withHTTPHandle(...)` 只会替换单个测试 `Client` 底层的 `fetch`，你的请求定义、拦截器、状态码分派和 `struct` 解码逻辑全部照常执行，整个过程不需要真正发起网络请求：
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -24,4 +24,13 @@ description: 使用 withHTTPHandle 仅为单个测试 Client 替换底层 Fetch�
 </Tab>
 </Tabs>
 
-在生产环境中，用配置了 `withEndpoint(...)` 的 Client 调用完全相同的 `getOrder` 操作。见 [测试](/zh-Hans/docs/testing) 与 [Client](/zh-Hans/docs/client)。
+### 写测试时用得上的三个细节
+
+- **为什么在句柄里包一层 `new Request(input, init)`**：`withHTTPHandle` 拿到的签名和标准 `fetch(input, init)` 一样，可能是 URL 字符串加配置对象，也可能是 `Request` 实例；统一包成 `new Request(input, init)` 后，就能直接读 `method`、`url`、`headers` 和 `await request.json()`。
+- **为什么要配 `withEndpoint("https://fixture.invalid")`**：客户端在把请求交给 `withHTTPHandle` 之前会先做 URL 拼接与校验；`.invalid` 是 RFC 保留域名，就算线上误用也不会发出真实 DNS 查询。
+- **三种常见返回怎么造**：
+  - `2xx` 成功：`Response.json(...)` -> 得到 `[null, data, response]`。
+  - `4xx` / `5xx` 接口报错：`Response.json(..., { status: 422 })` -> 得到 `err.code === "HTTP_STATUS"`。
+  - 断网 / 连接失败：直接 `Promise.reject(new TypeError("fetch failed"))`（或抛出异常）-> 得到 `err.code === "NET_UNREACHABLE"`。注意**不要**用 `Response.error()`，Defjs 会把返回的 `Response`（哪怕 `status` 是 `0`）当作收到 HTTP 响应来处理。
+
+上线时把 `withHTTPHandle(...)` 去掉，只保留指向真实接口的 `withEndpoint(...)`，`getOrder` 等操作代码一行都不用改。更多项目测试写法（业务函数、自定义拦截器、React/Vue 组件、假定时器）请看 [测试指南](/zh-Hans/docs/testing) 与 [Client 配置](/zh-Hans/docs/client)。

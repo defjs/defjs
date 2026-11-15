@@ -9,8 +9,8 @@ description: Concevoir et publier des SDK TypeScript avec des définitions d'API
 
 Defjs sépare les deux facettes d'un SDK TypeScript :
 
-- **Définition du SDK (`@defjs/core`)** — Les auteurs de SDK déclarent des opérations typées HTTP, SSE et WebSocket ainsi que leurs schémas `struct`. Une définition est une donnée pure : son importation ne déclenche aucun appel réseau et ne lie aucun client global.
-- **Exécution applicative** — Les applications consommatrices créent leur propre `Client` (`createClient(withEndpoint(...))`), y associent identifiants, intercepteurs et répartiteurs, et transmettent ce client lors de l'appel d'une opération.
+- **Définition du SDK (`@defjs/core`)** — Déclarez des opérations typées HTTP, SSE et WebSocket ainsi que leurs schémas `struct`, que vous publiiez un SDK public ou structuriez la couche API interne d'une application. Une définition est une donnée pure : son importation ne déclenche aucun appel réseau et ne lie aucun client global.
+- **Exécution applicative** — Les applications créent leur propre `Client` (`createClient(withEndpoint(...))`), y associent identifiants, intercepteurs et répartiteurs, puis transmettent ce client lors de l'appel d'une opération.
 
 ## Aperçu rapide : définition de SDK vs exécution applicative
 
@@ -46,7 +46,8 @@ L'appel `getHealth(client)` effectue les E/S et résout un tuple error-first. V�
 1. **[Démarrage rapide](/fr-FR/docs/start)** — Définissez une opération, testez-la hors ligne avec un handle Fetch local et pointez un client vers un service réel.
 2. **[Architecture du cœur](/fr-FR/docs/design-decisions)** — Comprenez les six règles de décodage des réponses, les tuples error-first et la gestion des ressources.
 3. **[Définir des SDK](/fr-FR/docs/struct)** — Déclarez vos contrats de données avec [Struct](/fr-FR/docs/struct) et exportez des opérations [HTTP](/fr-FR/docs/http), [SSE](/fr-FR/docs/sse) et [WebSocket](/fr-FR/docs/web-socket).
-4. **[Client & exécution](/fr-FR/docs/client)** — Configurez vos [Clients](/fr-FR/docs/client), traitez les [Erreurs](/fr-FR/docs/errors) typées, associez des [Intercepteurs](/fr-FR/docs/interceptors), configurez la [Répartition de charge & basculement](/fr-FR/docs/load-balancing) et lancez des [Tests](/fr-FR/docs/testing) déterministes.
+4. **[Client & exécution](/fr-FR/docs/client)** — Configurez vos [Clients](/fr-FR/docs/client), traitez les [Erreurs](/fr-FR/docs/errors) typées, associez des [Intercepteurs](/fr-FR/docs/interceptors) et configurez la [Répartition de charge & basculement](/fr-FR/docs/load-balancing).
+5. **[Bonnes pratiques & tests](/fr-FR/docs/best-practices)** — Appliquez les [Conventions d'ingénierie](/fr-FR/docs/best-practices), organisez une [Couche API applicative](/fr-FR/docs/application-api) ou un [SDK public](/fr-FR/docs/public-sdk), et écrivez des [Tests](/fr-FR/docs/testing) déterministes.
 
 ## Transports pris en charge et formes de tuples
 

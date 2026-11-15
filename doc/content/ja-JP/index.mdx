@@ -9,8 +9,8 @@ description: 再利用可能な API 定義と、アプリケーションが所�
 
 Defjs は、TypeScript SDK における 2 つの責務を明確に分離します。
 
-- **SDK の定義 (`@defjs/core`)** — SDK 開発者は、`struct` スキーマとともに、型付けされた HTTP、SSE、WebSocket の各操作を宣言します。定義自体は純粋なデータであり、import してもネットワーク通信は開始されず、グローバルクライアントにもバインドされません。
-- **アプリケーションでの実行** — 利用側アプリケーションは独自の `Client` を作成し（`createClient(withEndpoint(...))`）、認証情報、インターセプター、ロードバランサーを構成した上で、操作を呼び出す際にそのクライアントを渡します。
+- **SDK の定義 (`@defjs/core`)** — 公開 SDK を作る場合でも、アプリ内部の API レイヤーを整える場合でも、`struct` スキーマとともに型付けされた HTTP・SSE・WebSocket の操作を宣言できます。定義自体は純粋なデータであり、import してもネットワーク通信は始まらず、グローバルクライアントにも結び付きません。
+- **アプリケーションでの実行** — アプリケーション側は独自の `Client` を作成し（`createClient(withEndpoint(...))`）、認証情報・インターセプター・ロードバランサーを構成して操作呼び出し時に渡します。
 
 ## クイックビュー: SDK の定義 vs アプリケーションでの実行
 
@@ -46,7 +46,8 @@ Defjs は、TypeScript SDK における 2 つの責務を明確に分離しま�
 1. **[クイックスタート](/ja-JP/docs/start)** — 操作を定義し、ローカル Fetch ハンドルを使ってオフラインでテストした上で、実際のライブサービスに接続してみましょう。
 2. **[コアアーキテクチャ](/ja-JP/docs/design-decisions)** — 6 つのレスポンスデコード規則、エラーファーストのタプル、リソース所有権の考え方を理解します。
 3. **[SDK の定義](/ja-JP/docs/struct)** — [Struct](/ja-JP/docs/struct) で通信契約を宣言し、[HTTP](/ja-JP/docs/http)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) の各操作を export します。
-4. **[クライアントと実行](/ja-JP/docs/client)** — [Client](/ja-JP/docs/client) の構成、型付けされた [エラーハンドリング](/ja-JP/docs/errors)、[インターセプター](/ja-JP/docs/interceptors) の追加、[ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) の設定、決定論的な [テスト](/ja-JP/docs/testing) の手法を学びます。
+4. **[クライアントと実行](/ja-JP/docs/client)** — [Client](/ja-JP/docs/client) の構成、型付けされた [エラーハンドリング](/ja-JP/docs/errors)、[インターセプター](/ja-JP/docs/interceptors) の追加、[ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) の設定を学びます。
+5. **[ベストプラクティスとテスト](/ja-JP/docs/best-practices)** — [エンジニアリング規約](/ja-JP/docs/best-practices)に沿って [アプリケーション API レイヤー](/ja-JP/docs/application-api) や [公開 SDK](/ja-JP/docs/public-sdk) を設計し、再現性の高い [テスト](/ja-JP/docs/testing) を書きます。
 
 ## サポートされているトランスポートと結果タプル
 

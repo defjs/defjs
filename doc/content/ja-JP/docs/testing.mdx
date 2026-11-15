@@ -9,18 +9,24 @@ description: 自分のプロジェクト内で書いた Defjs のリクエスト
 
 ## プロジェクトの何をテストすべきか（`vi.mock` を使わない理由）
 
-エクスポートした `defineRequest`、`defineEventStream`、`defineWebSocket` 関数をスタブ化したり `vi.mock(...)` で差し替えたり**しないでください**。テストごとに `withHTTPHandle`、`withSSEHandle`、`withWebSocketHandle` を注入したテスト用 `Client` を作成すれば、ネットワークソケットを開かずに自分の操作定義と業務ロジックをインメモリで丸ごと検証できます。
+エクスポートした `defineRequest`、`defineEventStream`、`defineWebSocket` 関数をスタブ化したり `vi.mock(...)` で差し替えたり**しないでください**。操作をモックすると、`builder` のパラメータ配置、`.alias()` の変換、カスタムインターセプター、ステータス振り分け、`struct` デコードが丸ごとスキップされてしまいます。
 
-| プロジェクト内のレイヤー                                                 | テストで検証する対象                                                                                  | テスト用 `Client` の渡し方                                                                    |
-| :----------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
-| 操作定義とスキーマ（`src/api/request/`、`src/api/schema/`）              | `builder` のパラメータ配置（`path`, `query`, `headers`, `body`）、`.alias()`、`output`/`error`        | 本番と同じ操作をインポートし、`withHTTPHandle` を付けた `Client` を渡す                       |
-| ビジネスヘルパーとカスタムインターセプター（`checkout.ts`, `client.ts`） | 認証ヘッダーの注入、複数ステップの業務フロー、ドメインエラー変換、リトライ方針                        | `withInterceptors(...)` を付けたテスト用 `Client` を業務関数へそのまま渡す                    |
-| SSE・WebSocket コンシューマー（`src/events/`, `src/quotes/`）            | ストリームから読み取ったデータの業務変換、送信フレーム、`await using` によるクリーンアップ            | `withSSEHandle` / `withWebSocketHandle` で模擬フレームをインメモリ供給する                    |
-| React / Vue コンポーネント（`OrderCard.tsx`, `OrderView.vue`）           | ローディング表示、取得結果の描画、エラー表示、アンマウント時の `AbortController` によるキャンセル処理 | `<ClientProvider client={testClient}>` で囲む、または `createClientPlugin(testClient)` を登録 |
+代わりにテストごとに `withHTTPHandle`・`withSSEHandle`・`withWebSocketHandle` を注入したテスト用 `Client` を作成し、自分の定義と業務ロジックをインメモリで通して検証します：
+
+| プロジェクト内のレイヤー                                                 | テストで検証する対象                                                                           | テスト用 `Client` の渡し方                                                                    |
+| :----------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
+| 操作定義とスキーマ（`src/api/request/`、`src/api/schema/`）              | `builder` のパラメータ配置（`path`, `query`, `headers`, `body`）、`.alias()`、`output`/`error` | 本番と同じ操作をインポートし、`withHTTPHandle` を付けた `Client` を渡す                       |
+| ビジネスヘルパーとカスタムインターセプター（`checkout.ts`, `client.ts`） | 認証ヘッダー注入、`401` 再認証リプレイ、複数ステップ業務フロー、ドメインエラー変換             | `withInterceptors(...)` を付けたテスト用 `Client` を業務関数へそのまま渡す                    |
+| SSE・WebSocket コンシューマー（`src/events/`, `src/quotes/`）            | ストリームデータの変換処理、送信フレーム、`await using` クリーンアップ                         | `withSSEHandle` / `withWebSocketHandle` で模擬フレームをインメモリ供給する                    |
+| React / Vue コンポーネント（`OrderCard.tsx`, `OrderView.vue`）           | ローディング表示、取得結果の描画、エラー表示、アンマウント時の `AbortController` キャンセル    | `<ClientProvider client={testClient}>` で囲む、または `createClientPlugin(testClient)` を登録 |
 
 ## 1. プロジェクト内の操作定義とスキーマをテストする（`withHTTPHandle`）
 
-プロジェクトから実際の `defineRequest` をインポートし、予約ドメイン（例：`https://fixture.invalid`）と `withHTTPHandle(...)` を持つ独立したテスト用 `Client` を作って、送信される `Request` がバックエンドの仕様どおりかを検証します。`withRetry` を設定しない限りリトライは無効です。通常のユニットテスト用クライアントでは `withRetry` を省略し、`502`/`503`/`504` やネットワークエラーのテストがバックオフ待ちなしで 1 回目の試行後に即座に返るようにしてください。
+プロジェクトから実際の `defineRequest` をインポートし、`withEndpoint("https://fixture.invalid")` と `withHTTPHandle(...)` を持つテスト用 `Client` を作成します：
+
+- **`https://fixture.invalid` を指定する理由**：`createClient` は `withHTTPHandle` に渡る前に URL を検証します。`.invalid` は RFC 予約ドメインのため誤って公開 DNS に飛ぶ心配がありません。
+- **プロトコルごとに専用のハンドルを使用**：`withHTTPHandle` は HTTP（`defineRequest`）のみを扱います。SSE は `withSSEHandle`、WebSocket は `withWebSocketHandle` を使います。
+- **リトライの既定値と `withRetry(undefined)` の罠**：`withRetry` を省略するとリトライは無効になります。通常の単体テストでは省略し、`502`/`503`/`504` やネットワークエラーが `1s + 2s + 4s` のバックオフを待たず 1 回で返るようにしてください。なお `withRetry()` や `withRetry(undefined)` は既定の **3 回リトライを有効にする**ため、明示的にオフにする場合は `withRetry({ maxRetries: 0 })` を渡してください。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -39,17 +45,39 @@ description: 自分のプロジェクト内で書いた Defjs のリクエスト
 </Tab>
 </Tabs>
 
-### テスト分離・送信フォーマット検証・エラーファーストタプル
+### 3 つの要点：テスト分離・送信内容の確認・3 パターンの応答
 
-- **テストごとに `Client` を分離する**: 各 `test(...)` やテストヘルパーの中で新しく `createClient(...)` を作り、リトライ予算やハンドル状態がテスト間で漏れないようにします。
-- **実際の送信フォーマットを検証する**: `withHTTPHandle(async (input, init) => ...)` 内で `const request = new Request(input, init)` を作り、`request.method`、`request.url`、`request.headers`、`await request.text()`（または `await request.json()`）をアサートして、`builder` と `.alias()` が API 仕様どおりのワイヤ表現を出力しているか確かめます。
-- **`[err, data, response]` タプルを検証する**:
-  - `2xx` 正常系では `expect(err).toBeNull()` に続けて `if (err) throw err;` を書き、その後デコードされた `data` フィールド（`.alias()` 変換後の論理フィールドを含む）を検証します。
-  - エラー系ではまず `if (err)` でガードし、その内側で `if (err.code === "HTTP_STATUS")` に絞り込んで `err.status`、`err.data`、`err.response` を検証（デコード／事前検証エラーやラップ済みビジネス `Error` では `err.cause` を確認）し、`if (err)` ブロック内から `return` したうえで末尾に `expect.unreachable(...)` を置きます。
+- **テストごとに `Client` を作り直す**：リトライ予算やクロージャ状態が別テストへ漏れないよう、各 `test(...)` やヘルパー内で新しく `createClient(...)` を生成します。
+- **実際の送信内容を検証する**：`withHTTPHandle(async (input, init) => ...)` 内で `const request = new Request(input, init)` を作り、`request.method`・`request.url`・`request.headers`・`await request.text()`（または `json()`）で `builder` と `.alias()` を確認します。
+- **よくある 3 種類の HTTP 結果を再現・アサートする**：
+  - **`2xx` 成功**：`expect(err).toBeNull()` の直後に `if (err) throw err;` を置いてからデコード済み `data` を検証します。
+  - **`4xx` / `5xx` エラー**：`Response.json(..., { status: 422 })` を返し、`if (err)` 内で `err.code === "HTTP_STATUS"` に絞って `err.status`・`err.data`・`err.response` を検証し、`return` のあとに `expect.unreachable(...)` を置きます（`bun:test` では代わりに `throw new Error("expected fault")` を使います）。
+  - **ネットワーク障害（`NET_UNREACHABLE`）**：`Response.error()` は**使わないでください**。ステータス `0` でも `Response` オブジェクトを返すと Defjs は HTTP 応答として `HTTP_STATUS` を返します。断線や `fetch` 失敗を再現するには `Promise.reject(new TypeError("fetch failed"))`（または `throw`）を使います：
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { expect, test } from "vitest";
+import { createOrder } from "./sdk/orders.ts";
+
+test("fetch が拒否された場合は NET_UNREACHABLE を返す", async () => {
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() => Promise.reject(new TypeError("fetch failed"))),
+  );
+
+  const [err] = await createOrder(client, { sku: "book", quantity: 1 });
+  if (err) {
+    expect(err.code).toBe("NET_UNREACHABLE");
+    return;
+  }
+
+  expect.unreachable("expected NET_UNREACHABLE fault");
+});
+```
 
 ## 2. ビジネスロジックとカスタムインターセプターをテストする
 
-`src/checkout.ts` のような業務ヘルパーと `createHttpInterceptor` で書いたカスタムインターセプターをテストするときは、業務関数にテスト用 `Client` を渡し、テストクライアントへ `withInterceptors(bearerAuth(...))` を装着します。1 本のインメモリテストで、インターセプターの認証ヘッダー付与、`submitOrder` の `.alias()` エンコード、そして成功レスポンスや `409` 競合などのドメインエラー変換をまとめて確認できます。
+`src/checkout.ts` のような業務ヘルパーに `Client` を渡し、テスト用クライアントへ `withInterceptors(bearerAuth(...))` を付けます。1 本のインメモリテストで認証ヘッダー付与、`submitOrder` の `.alias()` シリアライズ、成功値と `409` 等のドメインエラー変換をまとめて確認できます：
 
 <Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
 <Tab>
@@ -68,14 +96,93 @@ description: 自分のプロジェクト内で書いた Defjs のリクエスト
 </Tab>
 </Tabs>
 
-一時的な `503` に対する `withRetry` の復旧を実時間待ちなしでテストするには、`withHTTPHandle` 内にカウンター（`let attempts = 0`）を持ち、`withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` を設定します（`submitOrder` のような `POST` 操作をリトライする場合は `methods: ["POST"]` が必要です）。インターセプターレベルの再送（`401` 応答後にインターセプター内から `next(...)` でトークン更新・再送する場合など）は `withRetry` を使わないため、状態を持つ `withHTTPHandle` カウンターだけでそのままテストできます。
+### `withRetry` 復旧と `401` トークン更新リプレイのテスト
+
+- **一時的な `503` からの `withRetry` 復旧**：`withHTTPHandle` の外に `let attempts = 0` を置き、`withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` を設定すれば待ち時間なしで検証できます。注意：`methods` を指定すると既定の安全メソッド一覧（`["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]`）が**上書き**されるため、同じテストクライアントで `GET` もリトライする場合は `methods: ["GET", "POST"]` としてください。
+- **インターセプターでの `401` 更新・再送**：`next(...)` を再度呼ぶリプレイは `withRetry` を使いません。状態付き `withHTTPHandle` カウンターでそのままテストできます。なお `401` で `err.data` を読む場合は操作定義に `error: struct(...)` が必要です。
+
+```ts
+import {
+  createClient,
+  createHttpInterceptor,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+  withRetry,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+import { submitOrder } from "./src/checkout.ts";
+
+test("methods に POST を含めると一時的な 503 から withRetry で復旧する", async () => {
+  let attempts = 0;
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] }),
+    withHTTPHandle(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Response.json({ message: "try again" }, { status: 503 });
+      }
+      return Response.json({ id: "ord_2" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "pen", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_2");
+});
+
+test("401 時にトークンを更新してインターセプター内から next() を再送する", async () => {
+  let token = "expired-token";
+  let attempts = 0;
+
+  const refreshAuth = createHttpInterceptor(async (req, next) => {
+    const first = await next({
+      ...req,
+      headers: { ...req.headers, authorization: `Bearer ${token}` },
+    });
+    if (first[0]?.code === "HTTP_STATUS" && first[0].status === 401) {
+      token = "fresh-token";
+      return next({
+        ...req,
+        headers: { ...req.headers, authorization: `Bearer ${token}` },
+      });
+    }
+    return first;
+  });
+
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withInterceptors(refreshAuth),
+    withHTTPHandle(async (input, init) => {
+      attempts += 1;
+      const auth = new Request(input, init).headers.get("authorization");
+      if (auth === "Bearer expired-token") {
+        return new Response(null, { status: 401 });
+      }
+      expect(auth).toBe("Bearer fresh-token");
+      return Response.json({ id: "ord_3" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "mug", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_3");
+});
+```
 
 ## 3. リアルタイムストリームの消費コードをテストする（SSE / WebSocket）
 
-プロジェクト内に `defineEventStream` や `defineWebSocket` をラップしたストリーム消費ヘルパーがある場合は、`withSSEHandle` や `withWebSocketHandle` で模擬フレームをメモリ上から流し込み、業務ロジックの出力やリソース解放を検証します。
+`defineEventStream` や `defineWebSocket` を使うストリーム消費ヘルパーがある場合は、`withSSEHandle` または `withWebSocketHandle` で模擬フレームをメモリ上から供給します：
 
-- **SSE（`withSSEHandle`）**: `ReadableStream<Uint8Array>` と `content-type: "text/event-stream"` を持つ `Response` を返します。
-- **WebSocket（`withWebSocketHandle`）**: `EventTarget` を継承して `WebSocketHandle` を実装（`static readonly OPEN = 1` を定義）した軽量スタブクラスを渡し、送信データを記録して `open`、`MessageEvent("message")`、`CloseEvent("close")` をディスパッチします。
+- **SSE（`withSSEHandle`）**：`ReadableStream<Uint8Array>` と `"content-type": "text/event-stream"` を含む `Response` を返します。途中切断を再現するにはチャンク送信後に `controller.error(new TypeError("stream dropped"))` を呼びます（ハンドシェイク失敗は `{ status: 500 }` を返します）。
+- **WebSocket（`withWebSocketHandle`）**：`EventTarget` を継承し `WebSocketHandle`（`static readonly OPEN = 1` と `readyState`）を実装したスタブを渡します。`FakeQuoteSocket` が `queueMicrotask` で `open` とメッセージを送るのは、操作呼び出しの直後にリスナーや `for await` が登録されるため（同期送信だとリスナー登録前に発火してしまうため）です。異常終了を試すときは `new Event("error")` に続けて `new CloseEvent("close", { code: 1011, reason: "boom" })` を発火させます。
 
 <Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
 <Tab>
@@ -96,23 +203,87 @@ description: 自分のプロジェクト内で書いた Defjs のリクエスト
 
 ## 4. テストしやすいプロジェクト構造の作り方
 
-[アプリケーション API レイヤー](/ja-JP/docs/application-api) の構成に従うと、`vi.mock` なしで全レイヤーをきれいにテストできます。
+[アプリケーション API レイヤー](/ja-JP/docs/application-api) の構成に従うと、`vi.mock` なしで全レイヤーをテストできます：
 
-- **`src/api/request/*.ts` にグローバルクライアントを持ち込まない**: `defineRequest`・`defineEventStream`・`defineWebSocket` の定義だけをエクスポートし、本番用 `apiClient` をインポートしないことで、どのテストからもテスト用 `Client` をそのまま渡せます。
-- **業務関数は `Client`（または `DerivableClient`）を引数で受け取る**：`client` を明示的な第 1 引数（そのまま渡す場合は `client: Client`、`client({ signal })` のように呼び出し単位の派生を行う場合は `client: DerivableClient`）にして `export async function placeOrder(client: Client, input: ...)` と書くか、デフォルト値付きクライアントを末尾引数に置いて `export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)` と書きます。後者なら本番コードは `placeOrder(input)` と呼べ、テストでは `placeOrder(input, testClient)` を渡せます。`src/api/client.ts` からはカスタムインターセプターや末尾の `ClientOption` を `createClient(...)` へ転送する SSR ファクトリ（例：`createServerApiClient(token, ...options: ClientOption[])`）もエクスポートし、テストで `withHTTPHandle` を付けられるようにします。
-- **React / Vue コンポーネントには Provider / Plugin で `testClient` を注入する**:
-  - **React（`@defjs/react`）**: テスト対象コンポーネントを `<ClientProvider client={testClient}>` で囲みます（`useClient(overrideClient)` を使う構成なら引数に `testClient` を直接渡せます）。
-  - **Vue（`@defjs/vue`）**: テストでコンポーネントをマウントする際に `app.use(createClientPlugin(testClient))` を適用するか、`provide(HTTP_CLIENT, testClient)` で注入します。
+- **`src/api/request/*.ts` にグローバルクライアントを持ち込まない**：操作定義だけをエクスポートし、本番 `apiClient` をインポートしないでおきます。
+- **業務関数は `Client`（または `DerivableClient`）を引数で受け取る**：
+  - **`Client` と `DerivableClient` の使い分け**：`createClient(...)` は `DerivableClient` を返し、`Client` 引数にもそのまま渡せます。ただし関数内で `client({ signal })` のように呼び出し単位のオプションを派生する場合は、引数型を **`DerivableClient`** にする必要があります。
+  - **引数配置と SSR ファクトリ**：第 1 引数（`placeOrder(client: DerivableClient, input: ...)`）またはデフォルト付き末尾引数（`placeOrder(input: PlaceOrderInput, client: Client = apiClient)`）として受け取り、`src/api/client.ts` からインターセプターや `createServerApiClient(token, ...options: ClientOption[])` をエクスポートします。
+  - **Node / Bun テストでの `withXSRF()` の注意点**：`withXSRF()` はブラウザ専用グローバル（`globalThis.location` 等）を参照します。`src/api/client.ts` のモジュールトップレベルで無条件に `export const apiClient = createClient(..., withXSRF())` を実行すると、`= apiClient` をデフォルト引数に持つ関数をテストファイルがインポートした時点でロードエラーになります。`typeof window !== "undefined"` で分岐するかブラウザ専用ファクトリ内に閉じ込めてください。
+- **React / Vue コンポーネントに `testClient` を注入する**：
+
+<Tabs items={["React (Testing Library)", "Vue (Test Utils)"]}>
+<Tab>
+
+```tsx
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+import { render, screen } from "@testing-library/react";
+import { expect, test } from "vitest";
+import { OrderCard } from "./OrderCard.tsx";
+
+test("ClientProvider 経由で testClient を注入する", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const { unmount } = render(
+    <ClientProvider client={testClient}>
+      <OrderCard id="ord_1" />
+    </ClientProvider>,
+  );
+
+  expect(await screen.findByText("ord_1")).toBeTruthy();
+  unmount();
+});
+```
+
+</Tab>
+<Tab>
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { createClientPlugin } from "@defjs/vue";
+import { flushPromises, mount } from "@vue/test-utils";
+import { expect, test } from "vitest";
+import OrderView from "./OrderView.vue";
+
+test("createClientPlugin で testClient を注入する", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const wrapper = mount(OrderView, {
+    props: { orderId: "ord_1" },
+    global: {
+      plugins: [createClientPlugin(testClient)],
+    },
+  });
+
+  await flushPromises();
+  expect(wrapper.text()).toContain("ord_1");
+});
+```
+
+</Tab>
+</Tabs>
 
 ## 5. タイムアウトとタイマー依存の振る舞いをテストする
 
-リトライバックオフ、SSE/WebSocket の再接続待機、ハートビートなどのタイマー処理をテストするには、Vitest では `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`（Bun test では `jest.useFakeTimers()`）を使います。Vitest のフェイクタイマーはネイティブの `AbortSignal.timeout` を進めないため、Vitest で期限切れテストを再現したい場合は、制御された `setTimeout` から `AbortController` を `TimeoutError` で中断します。
+リトライバックオフ、再接続待機、ハートビートのテストには、Vitest で `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`（Bun test では `jest.useFakeTimers()`）を使います。`toFake` を絞ることで Promise とマイクロタスクが止まらず `async`/`await` がそのまま動きます。
+
+なお **Vitest のフェイクタイマーはネイティブの `AbortSignal.timeout` を進めません**（JS の `setTimeout` ではなくランタイム固有タイマーを使うため）：
+
+- Vitest で `client({ signal })` の期限切れテストを行うには、制御された `setTimeout` から `AbortController` を `new DOMException("request deadline", "TimeoutError")` で中断してください。`await ready` でハンドル側の `setTimeout` 登録を待ってから `advanceTimersByTimeAsync` を呼ぶのがポイントです：
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-Bun test の `jest.useFakeTimers()` と `jest.advanceTimersByTime()` は `AbortSignal.timeout` も制御します。待機中の処理が始まってからタイマーを進め、実時間ではなく状態変化や試行回数をアサートし、`finally` で必ず本物のタイマーに戻してください。
+- あるいは `withRetry({ maxRetries: 0, attemptTimeoutMs: 500 })` を設定すれば Defjs 内部で JS `setTimeout` が使われるため、`vi.advanceTimersByTimeAsync(500)` だけで直接 `NET_TIMEOUT` を発生させられます。
+- **Bun test** では `jest.useFakeTimers()` と `jest.advanceTimersByTime()` が `AbortSignal.timeout` も制御します。状態遷移や試行回数をアサートし、`finally` で必ず本物のタイマーに戻してください。
 
 ## 関連ドキュメント
 

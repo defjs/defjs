@@ -5,7 +5,7 @@ description: 使用 Defjs 建構應用程式內部 API 請求層與對外公開 
 
 # 工程規範 [#engineering-conventions]
 
-無論是在應用程式專案內部手寫 HTTP 請求層，還是代表公司對外發布公開 API 的官方 TypeScript SDK，基於 Defjs 的專案都遵循同一套模組化架構：**共用schema層（`schema/`）搭配純函式操作定義層（`request/`）**。
+無論是在應用程式專案內部手寫 HTTP 請求層，還是代表公司對外發布公開 API 的官方 TypeScript SDK，基於 Defjs 的專案都遵循同一套模組化架構：**共用 schema 層（`schema/`）搭配純函式操作定義層（`request/`）**。
 
 ---
 
@@ -16,13 +16,13 @@ description: 使用 Defjs 建構應用程式內部 API 請求層與對外公開 
 | 使用情境                                                                               | 建議目錄結構                                                         | 誰持有 `createClient(...)`？                                                     | 專題指南                                            |
 | :------------------------------------------------------------------------------------- | :------------------------------------------------------------------- | :------------------------------------------------------------------------------- | :-------------------------------------------------- |
 | **[應用程式 API 層](/zh-Hant-TW/docs/application-api)**（專案內部手寫 HTTP／即時請求） | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`         | 你的應用程式本身（由 `src/api/client.ts` 匯出瀏覽器單例或 SSR 單一請求工廠函式） | [應用程式 API 層](/zh-Hant-TW/docs/application-api) |
-| **[公開 SDK 設計](/zh-Hant-TW/docs/public-sdk)**（對外發布的公開 API npm 套件）        | `src/schema/` + `src/request/` + `src/index.ts`（含 `package.json`） | 外部取用端應用程式（發布的 SDK 套件內絕不建立或捕捉任何 `Client`）               | [公開 SDK 設計](/zh-Hant-TW/docs/public-sdk)        |
+| **[公開 SDK 設計](/zh-Hant-TW/docs/public-sdk)**（對外發布的公開 API npm 套件）        | `src/schema/` + `src/request/` + `src/index.ts`（含 `package.json`） | 接入方自己的應用程式（發布的 SDK 套件內絕不建立或捕捉任何 `Client`）             | [公開 SDK 設計](/zh-Hant-TW/docs/public-sdk)        |
 
 ---
 
 ## 2. 四條核心工程規範
 
-### 規範一：始終匯出純函式操作，摒棄 `Service` 類別
+### 規範一：直接匯出純函式操作，不用 `Service` 類別
 
 傳統 OpenAPI 產生器習慣將端點包裝在有狀態或靜態方法的 `Service` 類別中（例如 `OrdersService.getOrder(id)` 或 `new S3Client().send(...)`）。而在 Defjs 中，透過 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 建立的每個操作本身就是**可直接呼叫的獨立純函式**：
 
@@ -48,7 +48,7 @@ export const getOrder = defineRequest({
 
 ### 規範二：在 `schema/` 中以相同名稱合併匯出 `struct` 與 `Infer`
 
-在 `schema/*.ts` 中，使用**相同的識別字**同時匯出執行時期的 `struct` schema 與其推導出的 `Infer<typeof ...>` TypeScript 型別。TypeScript 會自動合併同一作用域內的值宣告與型別宣告，呼叫端只需匯入一個名稱即可同時用於執行時期驗證與靜態型別標註：
+在 `schema/*.ts` 中，使用**相同的名稱**同時匯出執行時期的 `struct` schema 與其推導出的 `Infer<typeof ...>` TypeScript 型別。TypeScript 會自動合併同一作用域內的值宣告與型別宣告，呼叫端只需匯入一個名稱即可同時用於執行時期驗證與靜態型別標註：
 
 ```ts
 import { struct, type Infer } from "@defjs/core";
@@ -65,7 +65,7 @@ export type Order = Infer<typeof Order>;
 
 即使是在單一專案儲存庫內撰寫[應用程式 API 層](/zh-Hant-TW/docs/application-api)（`src/api/`），也**不要**在 `src/api/request/*.ts` 裡匯入 `apiClient` 來二次包裝定義。讓 `request/*.ts` 保持為純粹的操作定義能帶來三大工程效益：
 
-1. **決定性的離線單元測試**：單元測試可直接將本機的 `createClient(withEndpoint(...), withHTTPHandle(...))` 傳入任何操作函式，無須模擬（mock）模組。
+1. **零 Mock 決定性離線單元測試**：單元測試可直接將本機的 `createClient(withEndpoint(...), withHTTPHandle(...))` 傳入任何操作函式，無須動用 `vi.mock` 劫持模組。
 2. **SSR 與多租戶安全**：伺服器端載入器（loader）可以為每個進入的請求建立帶有當前使用者 Cookie 或租戶 Token 的專屬 `Client`，並與瀏覽器元件共用同一份操作定義。
 3. **零成本升級為共用套件**：若團隊日後決定將 `src/api/schema/` 與 `src/api/request/` 抽離為 Monorepo 子套件或公開 npm SDK，操作定義檔案無須修改任何一行程式碼。
 

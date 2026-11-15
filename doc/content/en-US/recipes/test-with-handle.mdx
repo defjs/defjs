@@ -5,7 +5,7 @@ description: Swap Fetch for one client with withHTTPHandle and keep the operatio
 
 # Test with a local Fetch handle
 
-`withHTTPHandle(...)` replaces the underlying `fetch` function for a single client while exercising the entire Defjs pipeline—input validation, `builder` mapping, URL resolution, interceptors, status classification, and Struct decoding—without opening a network socket:
+`withHTTPHandle(...)` replaces the underlying `fetch` function for a single test `Client` while running the entire Defjs pipeline—input validation, `builder` mapping, URL resolution, interceptors, status dispatch, and `struct` decoding—without opening a network socket:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
@@ -22,4 +22,13 @@ description: Swap Fetch for one client with withHTTPHandle and keep the operatio
   </Tab>
 </Tabs>
 
-In production, call the exact same `getOrder` operation with a client configured with `withEndpoint(...)`. See [Testing](/docs/testing) and [Client](/docs/client).
+### Three details worth knowing
+
+- **Why wrap `(input, init)` in `new Request(input, init)`**: `withHTTPHandle` follows the standard `fetch(input, init)` signature. Wrapping both arguments in `new Request(input, init)` gives one consistent interface for reading `method`, `url`, `headers`, and `await request.json()`.
+- **Why pass `withEndpoint("https://fixture.invalid")`**: `createClient` resolves and validates the base URL before invoking `withHTTPHandle`; `.invalid` is RFC-reserved so accidental misconfiguration never resolves real DNS.
+- **How to simulate the three HTTP outcomes**:
+  - `2xx` success: return `Response.json(...)` -> `[null, data, response]`.
+  - `4xx` / `5xx` error status: return `Response.json(..., { status: 422 })` -> `err.code === "HTTP_STATUS"`.
+  - Network failure: reject or throw (for example `Promise.reject(new TypeError("fetch failed"))`) -> `err.code === "NET_UNREACHABLE"`. Do **not** return `Response.error()`, because any returned `Response` (even status `0`) is treated as an HTTP response (`HTTP_STATUS`).
+
+In production, call the exact same `getOrder` operation with a client configured with `withEndpoint(...)`. See [Testing](/docs/testing) and [Client](/docs/client) for business helpers, retry/refresh interceptors, UI components, and fake timers.

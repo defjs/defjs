@@ -5,7 +5,7 @@ description: withHTTPHandle로 단일 클라이언트의 Fetch를 교체하고 �
 
 # 로컬 Fetch 핸들로 테스트하기
 
-`withHTTPHandle(...)`은 네트워크 소켓을 열지 않고도 단일 클라이언트 인스턴스의 기반 `fetch` 함수를 교체하여 입력값 검증, `builder` 매핑, URL 해석, 인터셉터, 상태 코드 분류, Struct 디코딩 등 전체 Defjs 파이프라인을 그대로 실행합니다:
+`withHTTPHandle(...)`은 네트워크 소켓을 열지 않고도 단일 테스트 `Client`의 기반 `fetch`만 교체하여 입력 검증, `builder` 매핑, URL 해석, 인터셉터, 상태 코드 분류, `struct` 디코딩까지 전체 Defjs 파이프라인을 그대로 실행합니다:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
@@ -22,4 +22,13 @@ description: withHTTPHandle로 단일 클라이언트의 Fetch를 교체하고 �
   </Tab>
 </Tabs>
 
-프로덕션 환경에서는 완전히 동일한 `getOrder` 작업을 `withEndpoint(...)`로 구성된 클라이언트로 호출하기만 하면 됩니다. 자세한 내용은 [테스트](/ko-KR/docs/testing) 및 [Client](/ko-KR/docs/client) 문서를 참조하세요.
+### 테스트 작성 시 알아둘 세 가지 포인트
+
+- **`new Request(input, init)`로 감싸는 이유**: `withHTTPHandle`은 표준 `fetch(input, init)` 인자를 그대로 받으므로, `new Request(input, init)`로 통일해 두면 `method`, `url`, `headers`, `await request.json()`을 일관되게 검사할 수 있습니다.
+- **`withEndpoint("https://fixture.invalid")`를 지정하는 이유**: `createClient`는 `withHTTPHandle`에 들어가기 전에 기본 URL을 검증합니다. `.invalid`는 RFC 예약 도메인이라 실수로 실제 DNS를 조회하지 않습니다.
+- **대표적인 세 가지 결과 시뮬레이션**:
+  - `2xx` 성공: `Response.json(...)` 반환 -> `[null, data, response]`
+  - `4xx` / `5xx` 오류: `Response.json(..., { status: 422 })` 반환 -> `err.code === "HTTP_STATUS"`
+  - 네트워크 오류: `Promise.reject(new TypeError("fetch failed"))` 또는 `throw` -> `err.code === "NET_UNREACHABLE"`. 상태가 `0`이더라도 `Response.error()`는 `Response` 객체이므로 `HTTP_STATUS`로 처리되니 사용하지 마세요.
+
+프로덕션에서는 `withEndpoint(...)`를 설정한 클라이언트로 동일한 `getOrder` 작업을 호출하면 됩니다. 비즈니스 함수, 재시도, UI 테스트는 [테스트](/ko-KR/docs/testing)와 [Client](/ko-KR/docs/client)를 참조하세요.

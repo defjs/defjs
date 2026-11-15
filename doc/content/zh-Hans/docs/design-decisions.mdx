@@ -1,15 +1,15 @@
 ---
 title: "设计决策"
-description: 了解为何将 API 定义与 Client 执行分离，能让 TypeScript SDK 的设计、发布与复用更简单。
+description: 了解为何将 API 定义与 Client 执行分离，能让接口定义、项目测试、复用与发布更简单。
 ---
 
 # 核心架构设计
 
-Defjs 构建在一条根本边界之上：**SDK 定义网络契约，消费方应用负责执行。** `@defjs/core` 的每条设计规则都源自这条边界。
+Defjs 所有设计都围绕着一条核心边界：**接口定义只声明网络契约，具体怎么发请求由应用在运行时决定。** `@defjs/core` 里的每条约束都源于这一原则。
 
-## 1. 定义与执行
+## 1. 定义与执行分开
 
-SDK 包导出操作（用 `defineRequest`、`defineEventStream`、`defineWebSocket` 创建）和数据契约（`struct`）。它绝不调用 `createClient`、不保存单例 Client，也不读取环境变量。
+操作定义模块只导出操作（`defineRequest`、`defineEventStream`、`defineWebSocket`）和数据结构（`struct`）。它从不调用 `createClient`，不保留全局单例，也不读取 `process.env`。
 
 <Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab>
@@ -35,88 +35,92 @@ SDK 包导出操作（用 `defineRequest`、`defineEventStream`、`defineWebSock
 </Tab>
 </Tabs>
 
-因为 `getOrder` 不捕获任何 Client 状态：
+正因为 `getOrder` 自身不绑定任何 `Client` 状态：
 
-- 浏览器 UI、后台任务、SSR 请求处理器和单元测试，都可以用不同的 `Client` 配置调用同一个 `getOrder` 操作。
-- 框架插件（`@defjs/react`、`@defjs/vue`）和可观测性中间件插件（`@defjs/opentelemetry-server`）挂载在应用的 `Client` 上，从而让发布的 SDK 包保持 100% 零依赖。
+- 浏览器组件、定时任务、SSR 服务端接口处理器和离线单元测试，都能拿着各自配置好的 `Client` 去调用同一个 `getOrder`。
+- 框架插件（`@defjs/react`、`@defjs/vue`）与服务端可观测性工具（`@defjs/opentelemetry-server`）只需挂到应用侧的 `Client` 上，定义模块本身可以保持 100% 零运行时依赖。
 
-## 2. 显式放置输入与双向别名
+## 2. 参数怎么放置由 `builder` 显式决定，字段名靠 `.alias()` 双向映射
 
-在 Defjs 中，`input` 声明调用方传入的值，`struct` 控制值如何编码与解码，`builder` 把每个值放到请求上（`path`、`query`、`headers`、`body`）。
+在 Defjs 里，`input` 只负责声明业务入参类型，`struct` 负责编码解码格式，而参数具体放到 URL、请求头还是请求体，全由 `builder` 明确写出（`path`、`query`、`headers`、`body`）。
 
-- **没有隐式推断**：操作声明了 `input`，就必须提供显式、同步、纯的 `builder`。字段放置绝不根据参数名猜测。
-- **双向 `.alias(wireName)`**：在 struct 字段上声明 `.alias("customer_name")`，TypeScript 中保持 `customerName`，网络上自动与 `"customer_name"` 双向映射。
+- **绝不猜字段名**：只要声明了 `input`，就必须写一个显式、同步、无副作用的纯函数 `builder`，Defjs 不会按字段名自动推断放在 path 还是 query 里。
+- **`.alias(wireName)` 双向自动转换**：在 `struct` 字段上写一次 `.alias("customer_name")`，TypeScript 代码里始终使用驼峰 `customerName`，发出和收到的网络报文自动按 `"customer_name"` 转换。
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-当 `builder` 把带类型的 struct 对象交给 `body`、`query` 或 `headers` 时，字段别名和 `Date` / `bigint` 编解码会自动生效。你在匿名包装对象中直接写出的键（例如上面的 `account_id` 或 `x-api-version`）保持字面量。
+当 `builder` 直接把带类型声明的 `struct` 对象传给 `body`、`query` 或 `headers` 时，字段别名和 `Date` / `bigint` 编码会自动生效；如果你自己手写了一层外包对象（比如上面例子里的 `account_id` 或 `x-api-version`），手写的这几个键名会按字面量原样发出去。
 
 ## 3. 声明即断言 [#declaration-is-an-assertion]
 
-Defjs 在读取 HTTP 响应时严格遵循以下六大规则：
+Defjs 解析 HTTP 响应时严格遵循六条铁律：
 
-### 规则 1：声明什么就断言什么
+### 规则 1：声明了结构就会在运行时校验
 
-`output` 断言 `2xx` body 的结构。`error` 断言非 `2xx` body 的结构。声明是运行时保证，不是尽力而为的提示。
+`output` 校验 `2xx` 响应体，`error` 校验非 `2xx` 响应体。这不只是 TypeScript 类型提示，而是真正在运行时执行的契约断言。
 
 ### 规则 2：`ok`（`200..299`）是唯一分流点
 
-`2xx` 响应只用 `output` 解码。其他所有状态码（`3xx`、`4xx`、`5xx`）只用 `error` 解码。Defjs 绝不从一侧回退到另一侧。
+`2xx` 响应只会用 `output` 解码，其余所有状态码（`3xx`、`4xx`、`5xx`）只会用 `error` 解码，两条路绝不互相降级回退。
 
-### 规则 3：任何偏离声明都是明确的 Fault
+### 规则 3：只要偏离声明就明确报 Fault
 
-Defjs 用 `response.ok` 选择响应的一侧：`2xx` 用 `output`，非 `2xx` 用 `error`。只有该侧声明了 JSON struct 才会触发解码，并可能产生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 会**首先**校验，在读取或查找 body 之前。没有内容的响应（`HEAD`、`204`、`205`、`304`）同样接受这项检查：声明了 JSON 表示形式但没有 JSON `Content-Type` 时，以 `RES_MEDIA_TYPE_INVALID` 失败；有 JSON `Content-Type` 时则解析空字节，并以 `RES_DECODE_FAILED` 失败。非 `2xx` 的 HTML 网关页只有在声明了 JSON `error` struct 时才会产生 `RES_MEDIA_TYPE_INVALID`。当前响应一侧没有声明时，不会读取 body；非 `2xx` 响应返回未解码的 `HTTP_STATUS`。SSE 握手遵循同样的规则：非 `2xx` 握手中，声明的 `error` body 无法解码时，启动阶段返回该解码 Fault，状态码在其元数据中；而拦截器、重连策略以及一次重连的 `closed` 仍看到 `HTTP_STATUS`。
+Defjs 先看 `response.ok` 决定走 `output`（`2xx`）还是 `error`（非 `2xx`），随后按下面的规则执行：
 
-| 读取响应时出现的失败                   | 返回的 Fault                                                          |
-| -------------------------------------- | --------------------------------------------------------------------- |
-| 媒体类型与所声明的 JSON 表示形式不匹配 | `RES_MEDIA_TYPE_INVALID`（最先检查；从不读取 body，有没有内容都一样） |
-| 底层字节无法按所声明的表示形式解码     | `RES_DECODE_FAILED`（包括空的 JSON 字节）                             |
-| 解码后的值未能通过 `struct` 校验       | `RES_STRUCT_MISMATCH`                                                 |
-| 非 `2xx` 状态，且解码了 `error` struct | `HTTP_STATUS`，附带强类型的 `err.data`                                |
-| 非 `2xx` 状态，但省略了 `error`        | `HTTP_STATUS`，此时 `err.data: undefined`                             |
+- **声明了 JSON `struct` 时先查 `Content-Type`**：在读取 body 字节之前就检查媒体类型。即使是没有响应体的响应（`HEAD`、`204`、`205`、`304`）也同样检查：声明了 JSON 但缺少 JSON `Content-Type` 会报 `RES_MEDIA_TYPE_INVALID`；若带有 JSON `Content-Type`，再去读空字节则会报 `RES_DECODE_FAILED`。
+- **非 `2xx` HTML 错误网关页的行为**：只有当你给非 `2xx` 侧声明了 JSON `error` struct，网关返回的 HTML 错误页才会触发 `RES_MEDIA_TYPE_INVALID`；如果没有声明 `error`，Defjs 根本不会去读响应体，而是直接返回不带 `data` 的 `HTTP_STATUS`。
+- **SSE 非 `2xx` 握手的行为**：如果 SSE 握手返回了非 `2xx`，且声明了 `error` struct 但解码失败，那么启动调用直接返回对应的解码 Fault（状态码保留在它的响应元数据里）；而拦截器、重连逻辑以及单次重连的 `closed` 看到的仍然是 `HTTP_STATUS`。
 
-### 规则 4：解码失败则无 Body 数据
+| 读取响应时遇到的情况                   | 最终返回的 Fault                                                    |
+| -------------------------------------- | ------------------------------------------------------------------- |
+| 媒体类型与所声明的 JSON 格式不匹配     | `RES_MEDIA_TYPE_INVALID`（最先检查；绝不读 body，有没有内容都一样） |
+| 响应流读取失败，或字节解析成 JSON 失败 | `RES_DECODE_FAILED`（包括返回空内容却按 JSON 解析的场景）           |
+| 解出来的值不符合 `struct` 规则         | `RES_STRUCT_MISMATCH`                                               |
+| 非 `2xx` 且成功解码了 `error` struct   | `HTTP_STATUS`，`err.data` 带完整强类型错误信息                      |
+| 非 `2xx` 且未声明 `error` struct       | `HTTP_STATUS`，`err.data` 为 `undefined`                            |
 
-只有通过解码与校验之后才存在 body。解码失败时，Fault 的 `response` 类型是 `HttpMeta`（没有 `body` 属性），解析或校验错误挂在 `err.cause` 上。
+### 规则 4：解码失败就没有 `body` 数据
 
-### 规则 5：省略声明即代表主动放弃读取
+只有通过解析与 `struct` 校验的响应才会有解码后的 body。一旦解码失败，Fault 上的 `response` 类型只是响应元信息 `HttpMeta`（没有 `body` 属性），真正的底层错误原因放在 `err.cause` 上。
 
-省略 `output` 意味着 `2xx` body 从不读取。省略 `error` 意味着非 `2xx` body 从不读取——即使服务端在 `500` 上返回了非法 JSON。
+### 规则 5：不声明就完全不读取
 
-### 规则 6：`3xx` 不属于成功状态区间
+省略 `output` 意味着收到 `2xx` 时根本不会去读响应体；省略 `error` 意味着哪怕服务端 `500` 返回了一段坏 JSON，Defjs 也直接跳过响应体读取，干净返回 `HTTP_STATUS`。
 
-`ok` 意味着 `200 <= status < 300`。`304 Not Modified` 不是 `2xx`：保持 `error` 未声明并处理 `HTTP_STATUS`（参见 [ETag 条件请求](/zh-Hans/recipes/etag-revalidate)），或者在期望空文本 body 时声明 `struct.string()`。
+### 规则 6：`3xx` 不算成功响应
 
-## 4. 传输专属的返回结果元组
+`ok` 严格指 `200 <= status < 300`。像 `304 Not Modified` 属于非 `2xx` 分支：平时只要不写 `error` schema，然后捕获 `HTTP_STATUS` 即可（见 [ETag 条件请求](/zh-Hans/recipes/etag-revalidate)）；如果确实希望接收空文本 body，可以把 `error` 设为 `struct.string()`。
 
-三种传输都返回三项错误优先元组，而不是在调用处抛出异常：
+## 4. 不同协议各自返回什么结果元组
 
-- **HTTP** → `[err, data, response]` —— 解码后的载荷 + `DecodedResponse<T>`（未声明 `output` 时为 `HttpMeta`）。
-- **SSE** → `[err, stream, open]` —— `EventStreamHandle` + 初始握手快照。
-- **WebSocket** → `[err, session, connection]` —— `WebSocketSession` + 初始连接快照。
+三种传输协议都不在调用处抛异常，而是各自返回一套贴合自身生命周期的三元素元组：
 
-Client 承载配置，不承载活跃连接。发起 HTTP 请求、SSE 流或 WebSocket 会话的调用方负责取消或关闭它（HTTP 用 `AbortSignal`；SSE 和 WebSocket 用 `await using` 或 `.close()` + `await .closed`）。
+- **HTTP** → `[err, data, response]` —— 解码后的数据 + `DecodedResponse<T>`（未声明 `output` 时是 `HttpMeta`）。
+- **SSE** → `[err, stream, open]` —— 流控制句柄 `EventStreamHandle` + 首次握手快照。
+- **WebSocket** → `[err, session, connection]` —— 会话对象 `WebSocketSession` + 建立连接时的快照。
 
-## 5. Defjs 不提供的能力
+`Client` 只存放静态配置，不持有活跃连接。发起请求的业务代码自己负责清理资源：HTTP 用 `AbortSignal` 取消，SSE 与 WebSocket 用 `await using` 或 `.close()` 配 `await .closed` 释放连接。
 
-其他 HTTP 客户端中的若干模式在 Defjs 中被有意省略。请使用右列的替代做法。
+## 5. Defjs 刻意不提供哪些能力（及替代写法）
 
-| 不提供                                         | 替代做法                                                           |
-| ---------------------------------------------- | ------------------------------------------------------------------ |
-| 全局 Client 单例                               | 由应用拥有、并传给操作的 `createClient(...)`                       |
-| 由 Client 方法执行操作                         | 直接调用操作：`getOrder(client, input)`                            |
-| Client 级默认超时，或 `timeout` / `abort` 选项 | `client({ signal: AbortSignal.timeout(ms) })` 或 `AbortController` |
-| `defineRequest` 上的 `responseType` 字段       | `output` 的 struct 种类（`string`、`blob`、`arrayBuffer` 或 JSON） |
-| struct 实例上的 `.parse()`，或 `struct.encode` | `struct.parse(schema, value)` 与 `builder` 放置                    |
-| 自定义 WebSocket 握手头                        | Cookie、短期查询票据或 `protocols`                                 |
-| WebSocket 消息映射或类型信封                   | `struct.discriminatedUnion` 与 `session.onRuntimeError`            |
-| OpenAPI 代码生成                               | 把 OpenAPI 保留为外部规范，或在边界处用 `struct` 校验              |
+下面这些在其他客户端里常见的模式，Defjs 都刻意去掉了，对应的替代做法也很直接：
+
+| 刻意不提供                                      | 在 Defjs 里该怎么写                                                    |
+| ----------------------------------------------- | ---------------------------------------------------------------------- |
+| 全局 Client 单例                                | 由应用自己用 `createClient(...)` 创建，调用时传给操作                  |
+| 把操作挂在 Client 方法上（`client.getOrder()`） | 直接调用函数：`getOrder(client, input)`                                |
+| Client 级全局超时或 `timeout` / `abort` 配置项  | 传 `client({ signal: AbortSignal.timeout(ms) })` 或 `AbortController`  |
+| `defineRequest` 上的 `responseType` 选项        | 通过 `output` 的 struct 类型决定（`string`/`blob`/`arrayBuffer`/JSON） |
+| struct 实例上的 `.parse()` 或 `struct.encode`   | 统一使用 `struct.parse(schema, value)` 和 `builder` 映射               |
+| 自定义 WebSocket 握手请求头                     | 走 Cookie、短期查询参数票据或 `protocols`                              |
+| WebSocket 消息自动包装或路由信封                | 使用 `struct.discriminatedUnion` 配合 `session.onRuntimeError`         |
+| OpenAPI 代码生成器                              | 把 OpenAPI 当外部接口规范文档，在边界处用 `struct` 做契约校验          |
 
 ## 相关阅读
 
 - [数据结构 / Struct](/zh-Hans/docs/struct)
-- [HTTP 操作](/zh-Hans/docs/http)
+- [HTTP 请求](/zh-Hans/docs/http)
 - [错误处理](/zh-Hans/docs/errors)
 - [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)

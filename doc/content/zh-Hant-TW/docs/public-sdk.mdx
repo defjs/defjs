@@ -16,8 +16,8 @@ description: 以 Amazon S3 SDK 架構為藍本，為公開 API 設計並發布�
 傳統 SDK 通常會把厚重的 Client 類別（如 `new S3Client({ region, credentials })`）與命令類別或靜態服務類別緊密耦合在一起。使用 `@defjs/core` 撰寫公開 SDK 能為外部使用者解決四個常見痛點：
 
 1. **多環境與沙盒彈性切換**：因為 `@company/s3-sdk` 不綁定任何端點或 Client，客戶可以將完全相同的操作定義指向正式環境（`https://s3.us-east-1.amazonaws.com`）、測試沙盒、Cloudflare R2，或 CI 測試期間的本機 MinIO 容器。
-2. **100% 打包工具 Tree-shaking**：匯出獨立的純函式（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）並設定 `"sideEffects": false`，能確保只呼叫 `getObject` 與 `putObject` 的瀏覽器打包產物自動剔除所有其他端點與schema。
-3. **執行時期驗證與靜態型別同源**：外部取用端從單一來源即可同時獲得編譯期 TypeScript 型別（`Infer<typeof ...>`）與執行時期回應／錯誤驗證（`struct`），能防範非預期的網路酬載，並自動轉換 `snake_case` 欄位或 ISO 日期字串。
+2. **100% 打包工具 Tree-shaking**：匯出獨立的純函式（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）並設定 `"sideEffects": false`，能確保只呼叫 `getObject` 與 `putObject` 的瀏覽器打包產物自動剔除所有其他端點與 schema。
+3. **執行時期驗證與靜態型別同源**：接入方從單一來源即可同時獲得編譯期 TypeScript 型別（`Infer<typeof ...>`）與執行時期回應／錯誤驗證（`struct`），能防範非預期的網路酬載，並自動轉換 `snake_case` 欄位或 ISO 日期字串。
 4. **完整掌控驗證、重試與遙測**：客戶可在自己的 `Client` 上自由掛載憑證輪替攔截器、`withRetry(...)` 策略、多區域負載平衡器（`withBalancer(...)`），或伺服器端 OpenTelemetry（`@defjs/opentelemetry-server`）。
 
 ---
@@ -33,7 +33,7 @@ description: 以 Amazon S3 SDK 架構為藍本，為公開 API 設計並發布�
 │   │   ├── common.ts           #    StorageClass, S3Error
 │   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
 │   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
-│   ├── request/               # 2. 按資源領域劃分的純 defineRequest 函式
+│   ├── request/                # 2. 按資源領域劃分的純 defineRequest 函式
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. 供根路徑匯入與 Tree-shaking 使用的匯出入口

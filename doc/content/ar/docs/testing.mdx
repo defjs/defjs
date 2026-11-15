@@ -1,26 +1,32 @@
 ---
 title: "الاختبارات"
-description: كيفية كتابة حالات الاختبار داخل مشروعك لتعريفات طلبات Defjs ومخططات struct والمعترضات المخصصة ودوال الأعمال ومستهلكي التدفق ومكونات الواجهة.
+description: كيفية كتابة حالات الاختبار داخل مشروعك لتعريفات طلبات Defjs ومخططات struct والمعترضات المخصصة ودوال الأعمال ومستهلكي التدفق ومكونات React / Vue.
 ---
 
 # الاختبارات
 
-تختبر مكتبة `@defjs/core` محرك النقل والترميز الخاص بها بالفعل. عند استخدام Defjs في تطبيقك أو حزمة SDK الخاصة بك، فإن اختباراتك مخصّصة للتحقق من **الشيفرة التي كتبتها أنت** — تعريفات الطلبات ومخططات `struct` (`src/api/request/` و`src/api/schema/`)، والمعترضات المخصصة (`src/api/client.ts`)، ودوال تنسيق الأعمال (`src/checkout.ts`)، ومكونات واجهة المستخدم.
+تختبر مكتبة `@defjs/core` محرك النقل والترميز الخاص بها بالفعل. عند استخدام Defjs في تطبيقك أو حزمة SDK الخاصة بك، فإن اختباراتك تتحقق من **الشيفرة التي كتبتها أنت**: مواضع `builder` ومفاتيح `.alias()` وفك ترميز `struct` ومعترضات المصادقة وتحويل أخطاء الأعمال وإلغاء الطلبات عند تفكيك المكونات.
 
 ## ما الذي تختبره في مشروعك — ولماذا تتجنب `vi.mock`
 
-**لا** تقم بمحاكاة أو استبدال دوال `defineRequest` أو `defineEventStream` أو `defineWebSocket` المصدّرة باستخدام `vi.mock(...)`. بدلاً من ذلك، أنشئ `Client` اختبارياً معزولاً لكل اختبار عبر `withHTTPHandle` أو `withSSEHandle` أو `withWebSocketHandle`. بهذه الطريقة تختبر تعريفات مشروعك الحقيقية وسياسات التطبيق بالكامل داخل الذاكرة دون فتح مقبس شبكي:
+**لا** تقم بمحاكاة أو استبدال دوال `defineRequest` أو `defineEventStream` أو `defineWebSocket` المصدّرة باستخدام `vi.mock(...)`. استبدال العملية يتجاوز `builder` الخاص بك وترميز `.alias()` والمعترضات وتوزيع الحالات وفك ترميز `struct`.
+
+بدلاً من ذلك، أنشئ `Client` اختبارياً معزولاً لكل اختبار عبر مقبض في الذاكرة (`withHTTPHandle` أو `withSSEHandle` أو `withWebSocketHandle`). هكذا تعمل تعريفاتك الحقيقية ومنطق أعمالك في الذاكرة دون فتح أي مقبس شبكي:
 
 | طبقة في مشروعك                                                    | ما الذي يتحقق منه اختبارك                                                               | كيف توصل عميل الاختبار `Client`                                                                 |
 | :---------------------------------------------------------------- | :-------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
 | تعريفات الطلبات والمخططات (`src/api/request/`، `src/api/schema/`) | مواضع `builder` (`path`، `query`، `headers`، `body`)، و`.alias()`، وفك `output`/`error` | استورد العملية الحقيقية ومرّر لها عميلاً جديداً مزوداً بـ `withHTTPHandle`                      |
-| دوال الأعمال والمعترضات المخصصة (`checkout.ts`، `client.ts`)      | ترويسات المصادقة، التدفقات متعددة الخطوات، تحويل أخطاء الأعمال، وإعادة المحاولة         | مرّر `testClient` (مع تثبيت `withInterceptors(...)`) مباشرة إلى دالة الأعمال                    |
+| دوال الأعمال والمعترضات المخصصة (`checkout.ts`، `client.ts`)      | ترويسات المصادقة، إعادة الإرسال بعد `401`، التدفقات متعددة الخطوات، تحويل أخطاء الأعمال | مرّر `testClient` (مع تثبيت `withInterceptors(...)`) مباشرة إلى دالة الأعمال                    |
 | مستهلكو SSE وWebSocket (`src/events/`، `src/quotes/`)             | معالجة الأحداث الواردة في منطق الأعمال، الرسائل الصادرة، وإغلاق `await using`           | غذِّ إطارات محاكاة في الذاكرة عبر `withSSEHandle` أو `withWebSocketHandle`                      |
 | مكونات React / Vue (`OrderCard.tsx`، `OrderView.vue`)             | حالة التحميل، عرض البيانات، واجهة الخطأ، وإلغاء `AbortController` عند التفكيك           | غلّف المكوّن بـ `<ClientProvider client={testClient}>` أو ثبّت `createClientPlugin(testClient)` |
 
 ## 1. اختبار تعريفات الطلبات والمخططات في مشروعك (`withHTTPHandle`)
 
-استورد عمليات `defineRequest` الحقيقية من مشروعك، وأنشئ `Client` اختبارياً معزولاً بعنوان أساس محجوز (مثل `https://fixture.invalid`) و`withHTTPHandle(...)`، ثم افحص كائن `Request` الصادر. إعادة المحاولة معطّلة افتراضياً ما لم يتم إعداد `withRetry`؛ احذف `withRetry` من عملاء اختبارات الوحدة العاديين حتى تعود اختبارات `502`/`503`/`504` وأخطاء الشبكة فوراً بعد محاولة واحدة دون انتظار فترات التراجع.
+استورد عمليات `defineRequest` الحقيقية من مشروعك وأنشئ `Client` اختبارياً عبر `withEndpoint("https://fixture.invalid")` و`withHTTPHandle(...)`:
+
+- **لماذا `https://fixture.invalid`**: تتحقق `createClient` من صحة رابط الأساس قبل وصول الطلب إلى `withHTTPHandle`؛ والنطاق `.invalid` محجوز حسب RFC ولا يستعلم DNS عاماً أبداً حتى مع خطأ في الإعدادات.
+- **مقبض مستقل لكل بروتوكول**: يعترض `withHTTPHandle` طلبات HTTP (`defineRequest`) فقط. استخدم `withSSEHandle` مع `defineEventStream` و`withWebSocketHandle` مع `defineWebSocket`.
+- **الإعدادات الافتراضية لإعادة المحاولة وفخ `withRetry(undefined)`**: إعادة المحاولة معطّلة عند حذف `withRetry` — اتركها معطلة في اختبارات الوحدة العادية كي تعود حالات `502`/`503`/`504` وأخطاء الشبكة بعد محاولة واحدة دون انتظار تراجع `1s + 2s + 4s`. انتبه: استدعاء `withRetry()` أو `withRetry(undefined)` يفعّل **3 محاولات افتراضية**. لتعطيلها صراحةً مرّر `withRetry({ maxRetries: 0 })`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
@@ -39,17 +45,39 @@ description: كيفية كتابة حالات الاختبار داخل مشرو
 </Tab>
 </Tabs>
 
-### عزل الاختبارات، وفحص البايتات الصادرة، ومصفوفة الخطأ أولاً
+### ثلاث ركائز: العزل، فحص الطلب الصادر، والنتائج الثلاثة الشائعة
 
-- **اعزل عميلاً لكل اختبار**: أنشئ `createClient(...)` جديداً داخل كل `test(...)` أو دالة مساعدة حتى لا تتسرب ميزانية إعادة المحاولة أو حالة المقبض بين الاختبارات.
-- **تحقق من الصيغة السلكية الصادرة**: داخل `withHTTPHandle(async (input, init) => ...)`، أنشئ `const request = new Request(input, init)` وتحقّق من `request.method` و`request.url` و`request.headers` و`await request.text()` (أو `await request.json()`) للتأكد من مطابقة `builder` و`.alias()` لعقد الواجهة الخلفية.
-- **أكّد على مصفوفة `[err, data, response]`**:
-  - لاستجابات `2xx`، أكّد `expect(err).toBeNull()` متبوعةً بـ `if (err) throw err;` قبل فحص حقول `data` المفكوكة (بما في ذلك تحويل `.alias()`).
-  - لحالات الفشل، احرس أولاً بـ `if (err)` ثم ضيّق داخله عبر `if (err.code === "HTTP_STATUS")` للتحقق من `err.status` و`err.data` و`err.response` (أو افحص `err.cause` في أخطاء فك الترميز/الفحص المسبق وأخطاء الأعمال المغلفة بـ `Error`)، ثم نفّذ `return` داخل `if (err)` وأتبعه بـ `expect.unreachable(...)`.
+- **اعزل عميلاً لكل اختبار**: أنشئ `createClient(...)` جديداً داخل كل `test(...)` أو دالة مساعدة كي لا تتسرب ميزانية إعادة المحاولة أو العدادات بين الاختبارات.
+- **تحقق من الصيغة الصادرة**: داخل `withHTTPHandle(async (input, init) => ...)` أنشئ `const request = new Request(input, init)` وتحقّق من `request.method` و`request.url` و`request.headers` و`await request.text()` (أو `await request.json()`).
+- **محاكاة نتائج HTTP الثلاثة الشائعة والتحقق منها**:
+  - **نجاح `2xx`**: أكّد `expect(err).toBeNull()` متبوعاً فوراً بـ `if (err) throw err;` ثم افحص حقول `data` المفكوكة.
+  - **خطأ API `4xx` / `5xx`**: أعد `Response.json(..., { status: 422 })`، احرس بـ `if (err)` ثم ضيّق عبر `if (err.code === "HTTP_STATUS")` للتحقق من `err.status` و`err.data` و`err.response` ثم `return` وأتبعها بـ `expect.unreachable(...)` (وفي `bun:test` ارمِ `new Error("expected fault")`).
+  - **فشل الشبكة (`NET_UNREACHABLE`)**: **لا** تعد `Response.error()`. أي `Response` مُعاد (حتى بالحالة `0`) يمر عبر معالجة حالة HTTP وينتج `HTTP_STATUS`. ارفض الوعد بدلاً من ذلك — مثل `Promise.reject(new TypeError("fetch failed"))` — لتفعيل `NET_UNREACHABLE`:
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { expect, test } from "vitest";
+import { createOrder } from "./sdk/orders.ts";
+
+test("يعيد NET_UNREACHABLE عند رفض fetch", async () => {
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(() => Promise.reject(new TypeError("fetch failed"))),
+  );
+
+  const [err] = await createOrder(client, { sku: "book", quantity: 1 });
+  if (err) {
+    expect(err.code).toBe("NET_UNREACHABLE");
+    return;
+  }
+
+  expect.unreachable("expected NET_UNREACHABLE fault");
+});
+```
 
 ## 2. اختبار دوال الأعمال والمعترضات المخصصة في مشروعك
 
-مرّر `Client` إلى دوال تنسيق الأعمال في مشروعك (`checkout.ts`) وثبّت معترضات `createHttpInterceptor` الخاصة بك (`withInterceptors(bearerAuth(...))`) مباشرة على عميل الاختبار. في اختبار واحد دون اتصال، تتحقق من ترويسة المصادقة التي أضافها المعترض، وترميز `.alias()` الناتج عن `submitOrder`، وكيفية ترجمة دالتك لكل من النجاح وأخطاء الأعمال المعلنة (مثل تضارب `409`):
+مرّر `Client` مباشرةً إلى دوال الأعمال (`src/checkout.ts`) وثبّت معترضات `createHttpInterceptor` (`withInterceptors(bearerAuth(...))`) على عميل الاختبار. في اختبار واحد دون اتصال تتحقق من ترويسات المصادقة وترميز `.alias()` من `submitOrder` وترجمة النجاح والأخطاء المعلنة (`409`):
 
 <Tabs items={["src/checkout.ts", "test/checkout.spec.ts"]}>
 <Tab>
@@ -68,14 +96,93 @@ description: كيفية كتابة حالات الاختبار داخل مشرو
 </Tab>
 </Tabs>
 
-لاختبار تعافي `withRetry` عند خطأ `503` مؤقت دون انتظار مؤقتات حقيقية، احتفظ بعداد `let attempts = 0` داخل `withHTTPHandle` واضبط `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` (يلزم `methods: ["POST"]` عند إعادة محاولة عملية `POST` مثل `submitOrder`). أما إعادة الإرسال على مستوى المعترض (مثل معترض تجديد الرمز بعد `401` الذي يعيد استدعاء `next(...)` داخله) فلا تستخدم `withRetry` — اختبرها مباشرة مقابل عداد ذي حالة داخل `withHTTPHandle`.
+### اختبار استعادة `withRetry` وإعادة الإرسال بعد تجديد `401`
+
+- **التعافي من `503` عبر `withRetry`**: احتفظ بعداد `let attempts = 0` خارج `withHTTPHandle` واضبط `withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] })` لتجربة الإعادة دون انتظار. انتبه: تمرير `methods` **يستبدل** القائمة الآمنة الافتراضية (`["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]`)، لذا استخدم `methods: ["GET", "POST"]` إذا كان العميل نفسه يعيد `GET` أيضاً.
+- **إعادة الإرسال بعد تجديد `401` في المعترض**: استدعاء `next(...)` مجدداً داخل المعترض لا يستخدم `withRetry`. اختبره مباشرةً عبر عداد في `withHTTPHandle`. وإذا قرأت `err.data` عند `401` فيلزم تعريف `error: struct(...)` على العملية.
+
+```ts
+import {
+  createClient,
+  createHttpInterceptor,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+  withRetry,
+} from "@defjs/core";
+import { expect, test } from "vitest";
+import { submitOrder } from "./src/checkout.ts";
+
+test("يعيد محاولة 503 لطلبات POST عند تضمين POST في methods", async () => {
+  let attempts = 0;
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withRetry({ maxRetries: 2, delayMs: 0, methods: ["POST"] }),
+    withHTTPHandle(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return Response.json({ message: "try again" }, { status: 503 });
+      }
+      return Response.json({ id: "ord_2" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "pen", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_2");
+});
+
+test("يجدد الرمز عند 401 ويعيد استدعاء next() داخل المعترض", async () => {
+  let token = "expired-token";
+  let attempts = 0;
+
+  const refreshAuth = createHttpInterceptor(async (req, next) => {
+    const first = await next({
+      ...req,
+      headers: { ...req.headers, authorization: `Bearer ${token}` },
+    });
+    if (first[0]?.code === "HTTP_STATUS" && first[0].status === 401) {
+      token = "fresh-token";
+      return next({
+        ...req,
+        headers: { ...req.headers, authorization: `Bearer ${token}` },
+      });
+    }
+    return first;
+  });
+
+  const client = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withInterceptors(refreshAuth),
+    withHTTPHandle(async (input, init) => {
+      attempts += 1;
+      const auth = new Request(input, init).headers.get("authorization");
+      if (auth === "Bearer expired-token") {
+        return new Response(null, { status: 401 });
+      }
+      expect(auth).toBe("Bearer fresh-token");
+      return Response.json({ id: "ord_3" }, { status: 201 });
+    }),
+  );
+
+  const [err, order] = await submitOrder(client, { sku: "mug", quantity: 1 });
+  expect(err).toBeNull();
+  if (err) throw err;
+
+  expect(attempts).toBe(2);
+  expect(order.id).toBe("ord_3");
+});
+```
 
 ## 3. اختبار مستهلكي SSE وWebSocket في مشروعك
 
-عندما يغلّف مشروعك `defineEventStream` أو `defineWebSocket` بدوال استهلاك أو مجمّعات حالة، مرّر إطارات خادم محاكاة في الذاكرة عبر `withSSEHandle` أو `withWebSocketHandle` وتحقق من مخرجات دالة الاستهلاك:
+عندما يغلّف مشروعك `defineEventStream` أو `defineWebSocket`، مرّر إطارات محاكاة في الذاكرة عبر `withSSEHandle` أو `withWebSocketHandle`:
 
-- **SSE (`withSSEHandle`)**: أعد `Response` مدعوماً بـ `ReadableStream<Uint8Array>` مع الترويسة `content-type: "text/event-stream"`.
-- **WebSocket (`withWebSocketHandle`)**: مرّر فئة خفيفة ترث `EventTarget` وتطبّق `WebSocketHandle` (مع `static readonly OPEN = 1`) تسجل الرسائل المرسلة وتُطلق `open` و`MessageEvent("message")` و`CloseEvent("close")`.
+- **SSE (`withSSEHandle`)**: أعد `Response` مدعوماً بـ `ReadableStream<Uint8Array>` مع `"content-type": "text/event-stream"`. لمحاكاة انقطاع البث في منتصفه استدعِ `controller.error(new TypeError("stream dropped"))` بعد إرسال بعض الأجزاء (أو أعد `{ status: 500 }` لفشل البداية).
+- **WebSocket (`withWebSocketHandle`)**: مرّر فئة فرعية من `EventTarget` تطبّق `WebSocketHandle` (`static readonly OPEN = 1` و`readyState`). يرسل `FakeQuoteSocket` أحداث `open` والرسائل الأولية عبر `queueMicrotask` كي يتمكن المستدعي من ربط المستمعات أو دخول `for await` قبل الإطلاق؛ الإرسال المتزامن في الباني يحدث مبكراً جداً. لمحاكاة خطأ أثناء الجلسة أطلق `new Event("error")` ثم `new CloseEvent("close", { code: 1011, reason: "boom" })`.
 
 <Tabs items={["test/sse.spec.ts", "test/websocket.spec.ts"]}>
 <Tab>
@@ -96,23 +203,87 @@ description: كيفية كتابة حالات الاختبار داخل مشرو
 
 ## 4. كيف تنظّم مشروعك لتظل كل طبقة سهلة الاختبار
 
-اتباع البنية الموضحة في [طبقة API للتطبيق](/ar/docs/application-api) يُبقي كل اختباراتك خالية من `vi.mock`:
+اتباع البنية الموضحة في [طبقة API للتطبيق](/ar/docs/application-api) يُبقي اختباراتك خالية من `vi.mock`:
 
-- **أبقِ `src/api/request/*.ts` خالياً من العميل**: صدّر فقط قيم `defineRequest` و`defineEventStream` و`defineWebSocket`. لا تستورد `apiClient` الإنتاجي داخل ملفات التعريف أبداً، ليتمكن أي اختبار من تمرير عميل `with*Handle` مباشرة.
-- **استقبل `Client` (أو `DerivableClient`) كمعامل في دوال الأعمال**: إما أن تمرّر `client` صراحةً كمعامل أول (`export async function placeOrder(client: Client, input: ...)` عند تمريره فقط، أو `client: DerivableClient` عند اشتقاق خيارات لكل استدعاء مثل `client({ signal })`)، أو أن تضع المعامل ذا القيمة الافتراضية في النهاية (`export async function placeOrder(input: PlaceOrderInput, client: Client = apiClient)`) لكي يكتب كود الإنتاج `placeOrder(input)` وتمرّر اختبارات الوحدة `placeOrder(input, testClient)`. صدّر أيضاً المعترضات المخصصة ومصانع SSR (`createServerApiClient(token, ...options: ClientOption[])` التي تمرّر معاملات `ClientOption` اللاحقة إلى `createClient(...)`) من `src/api/client.ts` لتركيب `withHTTPHandle` عليها في الاختبارات.
+- **أبقِ `src/api/request/*.ts` خالياً من العميل**: صدّر فقط قيم `defineRequest` و`defineEventStream` و`defineWebSocket` ولا تستورد `apiClient` أبداً.
+- **استقبل `Client` (أو `DerivableClient`) في دوال الأعمال**:
+  - **الفرق بين `Client` و`DerivableClient`**: تعيد `createClient(...)` قيمة `DerivableClient` المتوافقة مع `Client`. لكن إذا اشتقت الدالة خيارات لكل استدعاء عبر `client({ signal })` فيجب أن يكون نوع المعامل **`DerivableClient`**.
+  - **موضع المعاملات ومصانع SSR**: مرّر `client` أولاً (`placeOrder(client: DerivableClient, input: ...)`) أو أخيراً بقيمة افتراضية (`placeOrder(input: PlaceOrderInput, client: Client = apiClient)`)، وصدّر المعترضات مع `createServerApiClient(token, ...options: ClientOption[])` من `src/api/client.ts`.
+  - **فخ `withXSRF()` في اختبارات Node / Bun**: تقرأ `withXSRF()` متغيرات المتصفح العامة (`globalThis.location`). إذا أنشأت `src/api/client.ts` عميل `apiClient = createClient(..., withXSRF())` دون شرط في أعلى الملف، فسيُخفق استيراد أي دالة ذات `= apiClient` فوراً عند التحميل في Node أو Bun. قيّد `withXSRF()` بشرط `typeof window !== "undefined"` أو ابنِ العميل داخل دالة مصنع.
 - **احقن `testClient` في مكونات React وVue**:
-  - **React (`@defjs/react`)**: غلّف المكوّن قيد الاختبار بـ `<ClientProvider client={testClient}>` (أو مرّر `testClient` إلى `useClient(overrideClient)`).
-  - **Vue (`@defjs/vue`)**: ثبّت `app.use(createClientPlugin(testClient))` (أو استخدم `provide(HTTP_CLIENT, testClient)`) عند تركيب المكونات في الاختبارات.
+
+<Tabs items={["React (Testing Library)", "Vue (Test Utils)"]}>
+<Tab>
+
+```tsx
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+import { render, screen } from "@testing-library/react";
+import { expect, test } from "vitest";
+import { OrderCard } from "./OrderCard.tsx";
+
+test("يحقن testClient عبر ClientProvider", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const { unmount } = render(
+    <ClientProvider client={testClient}>
+      <OrderCard id="ord_1" />
+    </ClientProvider>,
+  );
+
+  expect(await screen.findByText("ord_1")).toBeTruthy();
+  unmount();
+});
+```
+
+</Tab>
+<Tab>
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { createClientPlugin } from "@defjs/vue";
+import { flushPromises, mount } from "@vue/test-utils";
+import { expect, test } from "vitest";
+import OrderView from "./OrderView.vue";
+
+test("يحقن testClient عبر createClientPlugin", async () => {
+  const testClient = createClient(
+    withEndpoint("https://fixture.invalid"),
+    withHTTPHandle(async () => Response.json({ id: "ord_1", total: 1200 })),
+  );
+
+  const wrapper = mount(OrderView, {
+    props: { orderId: "ord_1" },
+    global: {
+      plugins: [createClientPlugin(testClient)],
+    },
+  });
+
+  await flushPromises();
+  expect(wrapper.text()).toContain("ord_1");
+});
+```
+
+</Tab>
+</Tabs>
 
 ## 5. اختبار المهل الزمنية والسلوك المعتمد على المؤقتات
 
-لاختبار تراجع إعادة المحاولة، أو تأخيرات إعادة اتصال SSE/WebSocket، أو نبضات قلب WebSocket في سياسات تطبيقك، استخدم `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` في Vitest (`jest.useFakeTimers()` في Bun test). لا تقدّم مؤقتات Vitest الوهمية ساعة `AbortSignal.timeout` الأصلية؛ لاختبار مهلة طلب قطعية في Vitest، ألغِ `AbortController` من `setTimeout` مضبوط بسبب `TimeoutError`:
+لاختبار تراجع إعادة المحاولة أو تأخيرات إعادة الاتصال أو نبضات القلب، استخدم `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` في Vitest (`jest.useFakeTimers()` في Bun test). تحديد `toFake` يترك الوعود والمهام الدقيقة تعمل بشكل طبيعي فلا تتجمد `async`/`await`.
+
+لاحظ أن **مؤقتات Vitest الوهمية لا تقدّم ساعة `AbortSignal.timeout` الأصلية** لأنها تعتمد على مؤقت وقت التشغيل الأصلي لا على `setTimeout` في JS:
+
+- لاختبار مهلة `client({ signal })` في Vitest، ألغِ `AbortController` من `setTimeout` مضبوط مع `new DOMException("request deadline", "TimeoutError")`. انتظر دائماً `await ready` قبل استدعاء `advanceTimersByTimeAsync` لضمان جدولة `setTimeout` داخل المقبض أولاً:
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-في Bun test، يتحكم `jest.useFakeTimers()` و`jest.advanceTimersByTime()` أيضاً في `AbortSignal.timeout`. قدّم المؤقتات فقط بعد بدء المرحلة المنتظرة، وتحقق من تغيرات الحالة أو عدد المحاولات بدل الوقت الحقيقي المنقضي، وأعد المؤقتات الحقيقية في `finally`.
+- بديلاً عن ذلك، يعتمد `withRetry({ maxRetries: 0, attemptTimeoutMs: 500 })` داخلياً على `setTimeout` في JS، لذا يفعّل `vi.advanceTimersByTimeAsync(500)` خطأ `NET_TIMEOUT` مباشرةً في Vitest.
+- في **Bun test**، يتحكم `jest.useFakeTimers()` و`jest.advanceTimersByTime()` في `AbortSignal.timeout` أيضاً. تحقق من تغيرات الحالة أو عدد المحاولات وأعد المؤقتات الحقيقية دائماً في `finally`.
 
 ## قراءات ذات صلة
 

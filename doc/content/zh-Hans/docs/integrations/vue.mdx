@@ -1,27 +1,27 @@
 ---
 title: "Vue"
-description: 用应用提供的 Vue Client 使用与框架无关的 SDK，并由调用方负责清理。
+description: 通过 Vue 注入的 Client 调用与框架无关的 SDK，并由组件或作用域管好请求清理。
 ---
 
 # Vue
 
-`@defjs/vue` 通过 `createClientPlugin(client)`、`HTTP_CLIENT` 与 `injectClient()`，把应用自有的 `@defjs/core` Client 接入 Vue 3 或更高版本的应用。SDK 定义保持为纯 `@defjs/core` 模块，不依赖 Vue。插件本身只需要 `provide` / `inject`；下面的示例使用了 `<script setup>` 和 `onScopeDispose`，它们需要 Vue 3.2 或更高版本。
+`@defjs/vue` 通过 `createClientPlugin(client)`、`HTTP_CLIENT` 和 `injectClient()`，把应用自己的 `@defjs/core` Client 接入 Vue 3+ 应用。SDK 定义本身依然是纯 `@defjs/core` 模块，不依赖 Vue。插件底层只用到 `provide` / `inject`；下面例子里的 `<script setup>` 和 `onScopeDispose` 需要 Vue 3.2+。
 
 ```sh
 bun add @defjs/core @defjs/vue vue
 ```
 
-## `@defjs/vue` 负责什么，应用负责什么
+## `@defjs/vue` 管什么，应用管什么
 
-- **由 `@defjs/vue` 提供**：`createClientPlugin(client)`、`HTTP_CLIENT`（`InjectionKey<DerivableClient>`）和 `injectClient(key?)`。
-- **由应用负责**：创建 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)，在 watcher（`onCleanup`）或组合式函数（`onScopeDispose`）中中止在途工作，关闭 SSE/WebSocket 句柄，以及接入 Vue Query 等查询库。
-- **重要**：`injectClient()` 返回 `DerivableClient` 函数对象。在操作运行处调用 `client({ signal })`（例如 `getOrder(client({ signal }), input)`）。不要把 `client` 作为第一个参数传给 `watch(client, ...)` 或 `computed(client)`，因为 Vue 会把函数参数当作响应式 getter。
+- **`@defjs/vue` 提供**：`createClientPlugin(client)`、`HTTP_CLIENT`（`InjectionKey<DerivableClient>`）和 `injectClient(key?)`。
+- **应用自己负责**：创建 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)、在 watcher（`onCleanup`）或组合式函数（`onScopeDispose`）里中止未完成的请求、关闭 SSE / WebSocket 句柄，以及对接 Vue Query 等查询库。
+- **注意避坑**：`injectClient()` 返回的 `DerivableClient` 本身是个可调用对象（带函数签名），发请求时调用 `client({ signal })` 就好（比如 `getOrder(client({ signal }), input)`）。**千万别**把 `client` 直接作为第一个参数传给 `watch(client, ...)` 或 `computed(client)`，因为 Vue 会把函数参数当成响应式 getter 来执行。
 
 ---
 
-## 1. 安装插件并在 Watcher 中发起请求
+## 1. 安装插件并在 Watcher 中发请求
 
-在应用入口创建 Client，安装 `createClientPlugin(client)`，并在 watcher 内启动异步工作前注册 `onCleanup`：
+在应用入口创建 Client 并安装 `createClientPlugin(client)`，然后在 watcher 里发起异步请求前先用 `onCleanup` 注册取消逻辑：
 
 <Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab>
@@ -36,41 +36,41 @@ bun add @defjs/core @defjs/vue vue
   </Tab>
 </Tabs>
 
-- `createClientPlugin(client)` 在 `HTTP_CLIENT` 下提供同一个 `DerivableClient` 实例，不克隆它，也不注册卸载清理 Hook。
-- `onCleanup` 在 watcher 重新执行前和组件卸载时运行。
+- `createClientPlugin(client)` 会把同一个 `DerivableClient` 实例挂在 `HTTP_CLIENT` 下，不会克隆它，也不会帮你注册卸载清理逻辑。
+- `onCleanup` 会在 watcher 重新执行前以及组件卸载时自动运行。
 
 ---
 
 ## 2. 在子树中注入与覆盖 Client
 
-`injectClient(key?)` 查找 `key` 最近的 Provider（默认 `HTTP_CLIENT`）。在活跃的 Vue 注入上下文（`setup()` 或 `app.runWithContext()`）之外调用，或该 key 没有提供 Client 时，抛出 `Error`。
+`injectClient(key?)` 会顺着组件树向上找最近一次提供的 `key`（默认 `HTTP_CLIENT`）。如果在活跃的 Vue 注入上下文（`setup()` 或 `app.runWithContext()`）之外调用，或者根本没提供这个 key，就会抛出 `Error`。
 
-你可以通过 Vue 原生的 `provide(HTTP_CLIENT, childClient)` 为某个组件子树单独覆盖 Client：
+你可以直接用 Vue 原生的 `provide(HTTP_CLIENT, childClient)` 给某棵子树单独换一个 Client：
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 
-- 后代组件读取到 `childClient`，兄弟子树仍使用根 Client。
-- 如果辅助函数接受可选的显式 Client（`explicitClient ?? injectClient()`），只有回退分支需要活跃的 Vue 注入上下文。请在 `setup()` 中同步捕获 Client，不要在任何 `await` 之后调用。
+- 这棵子树下的组件拿到的是 `childClient`，隔壁兄弟子树还是拿根部那个 Client。
+- 如果工具函数支持传一个可选的 `explicitClient`（`explicitClient ?? injectClient()`），就只有兜底分支需要活跃的 Vue 注入上下文。记得在 `setup()` 里同步拿到 Client，别等到 `await` 之后才去调用 `injectClient()`。
 
 ---
 
 ## 3. 在作用域销毁时清理 SSE 与 WebSocket 流
 
-对于在 watcher 之外（组合式函数或组件中）启动的工作，把 `AbortController` 与 `onScopeDispose` 配合使用。该 signal 覆盖启动阶段和已打开的流，因此中止它就是全部的清理。消费唯一的异步迭代器，然后在 `finally` 中关闭句柄并等待 `.closed`：
+对于放在 watcher 外面（比如组合式函数或组件初始化里）的流式任务，把 `AbortController` 和 `onScopeDispose` 配起来用就行。传进去的 `signal` 同时管着建连阶段和已打开的流，所以清理时只要调一下 `abort()` 就够了。消费完它唯一的异步迭代器后，在 `finally` 里关闭句柄并等待 `.closed`：
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
-- 元组的错误分支显示初始握手失败（包括 HTTP 503）。迭代器的 `catch` 显示启动后的失败；`finally` 块仍会关闭并等待流。
-- 停止作用域会让 SSE 的 `for await` 循环正常结束。
-- 取消 WebSocket 会话会使其以 `aborted` 终结，并使 `session.receive` 以 `AbortError` 报错。因此在销毁后请保护好 `catch` 块，并在 `finally` 中注销 `onStateChange` 与 `onRuntimeError` 监听器。
+- 元组里的 `err` 分支拿的是握手建连阶段的失败（包括 HTTP 503）。迭代器外面的 `catch` 抓的是连上之后出现的异常；无论哪种情况，`finally` 都会把流关掉并等它彻底结束。
+- 销毁作用域后，SSE 的 `for await` 循环会直接正常结束。
+- 取消 WebSocket 会话会让它按 `aborted` 结束，同时让 `session.receive` 抛出 `AbortError`。清理时记得在 `catch` 里判断下是不是已经主动销毁，并在 `finally` 里注销 `onStateChange` 和 `onRuntimeError` 监听器。
 
 ---
 
 ## 4. SSR 与应用作用域
 
-- **浏览器**：当端点与拦截器与具体请求无关时，每个 Vue 应用共享一个 Client。
-- **SSR**：当请求头、cookie、租户或凭据因请求而异时，为每个 SSR 请求创建并安装新 Client。
-- 卸载 Vue 应用或销毁组件作用域**不会**中止 HTTP 请求、关闭 SSE/WebSocket 流或销毁核心 Client。
+- **浏览器**：域名和拦截器不随单个请求变化时，每个 Vue 应用共享一个 Client 就够了。
+- **SSR**：请求头、Cookie、租户或凭据随每个请求变化时，就为每个 SSR 请求新建并安装独立的 Client。
+- 卸载 Vue 应用或销毁组件作用域**不会**自动中止还没完成的 HTTP 请求，也不会关掉 SSE/WebSocket 流或销毁 Client。
 
 ---
 
@@ -78,6 +78,6 @@ bun add @defjs/core @defjs/vue vue
 
 - `HTTP_CLIENT` —— 供原生 `provide` / `inject` 使用的 `InjectionKey<DerivableClient>`。
 - `createClientPlugin(client)` —— 在 `HTTP_CLIENT` 下提供 `client` 的 Vue `Plugin`。
-- `injectClient(key?)` —— 解析 `key` 最近的 Client（默认 `HTTP_CLIENT`）。
-- 相关指南：[Client](/zh-Hans/docs/client)、[HTTP 请求](/zh-Hans/docs/http)、[拦截器](/zh-Hans/docs/interceptors)、[SSE 事件流](/zh-Hans/docs/sse)、[WebSocket 会话](/zh-Hans/docs/web-socket)。
-- 相关配方：[处理声明的 404](/zh-Hans/recipes/get-declared-404)、[取消 HTTP 调用](/zh-Hans/recipes/cancel-http)、[消费 SSE 流](/zh-Hans/recipes/consume-sse)、[打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)。
+- `injectClient(key?)` —— 读取离当前作用域最近提供的 Client（默认 `HTTP_CLIENT`）。
+- 相关指南：[Client](/zh-Hans/docs/client)、[HTTP 请求](/zh-Hans/docs/http)、[拦截器](/zh-Hans/docs/interceptors)、[SSE 事件流](/zh-Hans/docs/sse)、[WebSocket 会话](/zh-Hans/docs/web-socket)、[测试](/zh-Hans/docs/testing)。
+- 常见场景示例：[处理声明的 404](/zh-Hans/recipes/get-declared-404)、[取消 HTTP 调用](/zh-Hans/recipes/cancel-http)、[消费 SSE 流](/zh-Hans/recipes/consume-sse)、[打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)。
