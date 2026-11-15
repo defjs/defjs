@@ -10,16 +10,9 @@ import {
   withHTTPHandle,
   withInterceptors,
 } from "@defjs/core";
+import { SpanStatusCode } from "@opentelemetry/api";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
-  context,
-  diag,
-  ROOT_CONTEXT,
-  SpanStatusCode,
-  trace,
-} from "@opentelemetry/api";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  createMockLogger,
   createMockMetrics,
   createMockPropagator,
   createMockTracer,
@@ -31,119 +24,6 @@ import { createOpenTelemetryHttpInterceptor } from "./http";
 import { method } from "../../test/method";
 
 let mockPropagator: ReturnType<typeof createMockPropagator>;
-
-describe("HTTP client diagnostic logs", () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  test.each([false, true])(
-    "records the saved context and original cause with tracer=%s",
-    async (tracing) => {
-      const { logger, records } = createMockLogger();
-      const { tracer, spans } = createMockTracer();
-      const parent = trace.setSpanContext(ROOT_CONTEXT, {
-        traceId: "11111111111111111111111111111111",
-        spanId: "2222222222222222",
-        traceFlags: 0,
-      });
-      const active = vi.spyOn(context, "active").mockReturnValue(parent);
-      const interceptor = createOpenTelemetryHttpInterceptor({
-        logger,
-        tracer: tracing ? tracer : undefined,
-        propagator: createMockPropagator(),
-      });
-      const cause = new TypeError("private network detail");
-      await expect(
-        interceptor.fn(makeHttpRequest(), () => {
-          active.mockReturnValue(ROOT_CONTEXT);
-          return Promise.reject(cause);
-        }),
-      ).rejects.toBe(cause);
-      expect(records).toHaveLength(1);
-      const record = records[0];
-      if (!record?.context)
-        throw new Error("Expected a log record with explicit context");
-      expect(record).toMatchObject({
-        eventName: "http.client.request.exception",
-        severityNumber: 13,
-        severityText: "WARN",
-        attributes: { "defjs.phase": "request", "exception.type": "TypeError" },
-      });
-      if (tracing) expect(trace.getSpan(record.context)).toBe(spans[0]);
-      else expect(record.context).toBe(parent);
-    },
-  );
-
-  test.each([
-    ERR_ABORTED,
-    new DOMException("cancelled", "AbortError"),
-    createNetworkFault(ERR_ABORTED),
-  ])("does not log cancellation: %s", async (cause) => {
-    const { logger, records } = createMockLogger();
-    const interceptor = createOpenTelemetryHttpInterceptor({
-      logger,
-      propagator: createMockPropagator(),
-    });
-    await expect(
-      interceptor.fn(makeHttpRequest(), () => Promise.reject(cause)),
-    ).rejects.toBe(cause);
-    expect(records).toEqual([]);
-  });
-
-  test("still logs a timeout when the request signal is aborted", async () => {
-    const { logger, records } = createMockLogger();
-    const interceptor = createOpenTelemetryHttpInterceptor({
-      logger,
-      propagator: createMockPropagator(),
-    });
-    await expect(
-      interceptor.fn(
-        { ...makeHttpRequest(), signal: AbortSignal.abort(ERR_TIMEOUT) },
-        () => Promise.reject(ERR_TIMEOUT),
-      ),
-    ).rejects.toBe(ERR_TIMEOUT);
-    expect(records).toHaveLength(1);
-    expect(records[0]?.severityNumber).toBe(13);
-  });
-
-  test.each([200, 404, 500, 0])(
-    "does not manufacture an exception log for status %s",
-    async (status) => {
-      const { logger, records } = createMockLogger();
-      const interceptor = createOpenTelemetryHttpInterceptor({
-        logger,
-        propagator: createMockPropagator(),
-      });
-      const response = { ...makeHttpResponse(), status };
-      await expect(
-        interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
-      ).resolves.toBe(response);
-      expect(records).toEqual([]);
-    },
-  );
-
-  test("logger failure preserves the original rejection and other telemetry", async () => {
-    const { logger } = createMockLogger();
-    logger.emit.mockImplementation(() => {
-      throw new Error("logger failed");
-    });
-    vi.spyOn(diag, "error").mockImplementation(() => undefined);
-    const { tracer, spans } = createMockTracer();
-    const metrics = createMockMetrics();
-    const cause = new Error("network failed");
-    const interceptor = createOpenTelemetryHttpInterceptor({
-      logger,
-      tracer,
-      metrics,
-      propagator: createMockPropagator(),
-    });
-    await expect(
-      interceptor.fn(makeHttpRequest(), () => Promise.reject(cause)),
-    ).rejects.toBe(cause);
-    expect(logger.emit).toHaveBeenCalledTimes(1);
-    expect(spans[0]?.ended).toBe(true);
-    expect(metrics.requestDuration.record).toHaveBeenCalledTimes(1);
-  });
-});
 
 describe("createOpenTelemetryHttpInterceptor", () => {
   beforeEach(() => {
@@ -206,12 +86,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
 
     const [baseFault] = await readInventory(base);
     expect(baseFault).toBeNull();
-    expect(spans).toHaveLength(1);
+    expect(spans.map((span) => span.name)).toEqual(["GET /inventory", "GET"]);
     expect(requestHook).toHaveBeenCalledTimes(1);
 
     const [derivedFault] = await readInventory(derived);
     expect(derivedFault).toBeNull();
-    expect(spans).toHaveLength(2);
+    expect(spans).toHaveLength(4);
     expect(requestHook).toHaveBeenCalledTimes(2);
   });
 
@@ -369,14 +249,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       },
     ],
   ])(
-    "normalizes http.request.method on the span, the metric and the log for method %s",
+    "normalizes http.request.method on the span and the metric for method %s",
     async (requestMethod, name, expected) => {
       const { tracer, spans } = createMockTracer();
-      const { logger, records } = createMockLogger();
       const metrics = createMockMetrics();
       const interceptor = createOpenTelemetryHttpInterceptor({
         tracer,
-        logger,
         metrics,
         propagator: mockPropagator,
       });
@@ -405,9 +283,6 @@ describe("createOpenTelemetryHttpInterceptor", () => {
           "server.port": 443,
           "error.type": "TypeError",
         },
-      );
-      expect(records[0]?.attributes?.["http.request.method"]).toBe(
-        expected["http.request.method"],
       );
     },
   );
@@ -801,23 +676,6 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     expect(calls[0]?.[0].method).toBe("GET");
     expect(calls[0]?.[0].endpoint).toBe("/test");
     expect(calls[0]?.[0].headers).toBeInstanceOf(Headers);
-  });
-
-  test("should skip span creation when requireParentSpan and no active span", async () => {
-    const { tracer, spans } = createMockTracer();
-    const interceptor = createOpenTelemetryHttpInterceptor({
-      tracer,
-      propagator: mockPropagator,
-      requireParentSpan: true,
-    });
-
-    const next = vi.fn((_req: HttpRequest) =>
-      Promise.resolve(makeHttpResponse()),
-    );
-    await interceptor.fn(makeHttpRequest(), next);
-
-    expect(spans).toHaveLength(0);
-    expect(next).toHaveBeenCalledTimes(1);
   });
 
   test("should call requestHook before request", async () => {

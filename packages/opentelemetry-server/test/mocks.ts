@@ -9,6 +9,7 @@ import type {
 } from "@defjs/core";
 import { makeResponse } from "@defjs/core";
 import type {
+  Attributes,
   Context,
   Exception,
   Link,
@@ -21,6 +22,7 @@ import type {
   TextMapPropagator,
   TextMapSetter,
   TimeInput,
+  Meter,
   Tracer,
 } from "@opentelemetry/api";
 import { vi } from "vitest";
@@ -193,6 +195,32 @@ export function createMockMetrics() {
     connectionDuration: { record: vi.fn() },
     active: { add: vi.fn() },
   };
+}
+
+/** A Meter whose histograms keep every sample they record, by instrument name. */
+export function createRecordingMeter() {
+  const samples: Array<{
+    name: string;
+    value: number;
+    attributes: Attributes | undefined;
+  }> = [];
+  const observable = () => ({ addCallback: vi.fn(), removeCallback: vi.fn() });
+  const meter: Meter = {
+    createCounter: vi.fn(() => ({ add: vi.fn() })),
+    createHistogram: vi.fn((name: string) => ({
+      record: (value: number, attributes?: Attributes) => {
+        samples.push({ name, value, attributes });
+      },
+    })),
+    createGauge: vi.fn(() => ({ record: vi.fn() })),
+    createUpDownCounter: vi.fn(() => ({ add: vi.fn() })),
+    createObservableCounter: vi.fn(observable),
+    createObservableGauge: vi.fn(observable),
+    createObservableUpDownCounter: vi.fn(observable),
+    addBatchObservableCallback: vi.fn(),
+    removeBatchObservableCallback: vi.fn(),
+  };
+  return { meter, samples };
 }
 
 export function makeHttpRequest(headers?: Headers): HttpRequest {

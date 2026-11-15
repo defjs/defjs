@@ -2,12 +2,12 @@ import type { Attributes, Context } from "@opentelemetry/api";
 import { diag } from "@opentelemetry/api";
 import type { Logger } from "@opentelemetry/api-logs";
 import { SeverityNumber } from "@opentelemetry/api-logs";
-import { getExceptionType } from "./trace";
+import { describeError, getExceptionType } from "./trace";
 
 const CLIENT_EXCEPTIONS = {
-  http: {
-    eventName: "http.client.request.exception",
-    body: "HTTP client request failed",
+  operation: {
+    eventName: "defjs.client.operation.exception",
+    body: "Defjs operation failed",
   },
   sse: {
     eventName: "defjs.client.sse.exception",
@@ -20,19 +20,17 @@ const CLIENT_EXCEPTIONS = {
 } as const;
 
 interface ClientExceptionLog {
-  transport: "http" | "sse" | "websocket";
-  phase: "request" | "connect" | "connection";
+  /** A failed operation call, or an SSE or WebSocket connection that failed after it opened. */
+  kind: "operation" | "sse" | "websocket";
   context: Context;
   error: unknown;
-  /** The attributes the call shares with its span and metrics. */
+  /** The record's attributes; `exception.*` is added from `error`. */
   attributes: Attributes;
-  /** The request's `meta` as `defjs.meta.<key>` attributes. */
-  meta: Attributes;
-  /** What the transport knows about this failure: the request method, a fault code, a close code. */
-  extra?: Attributes;
+  /** Adds `exception.message` and `exception.stacktrace`. */
+  includeErrorDiagnostics: boolean;
 }
 
-/** Logs a failure. Caller cancellation is not one: the caller decides that with `isCallerCancellation` and logs nothing. */
+/** Logs a failure. Caller cancellation is not one: the caller decides that and logs nothing. */
 export function emitClientException(
   logger: Logger | undefined,
   details: ClientExceptionLog,
@@ -40,26 +38,16 @@ export function emitClientException(
   if (!logger) return;
 
   try {
-    const { error, transport } = details;
-    if (
-      transport === "http" &&
-      error instanceof Error &&
-      "code" in error &&
-      error.code === "HTTP_STATUS"
-    )
-      return;
-
+    const { error } = details;
     logger.emit({
-      ...CLIENT_EXCEPTIONS[transport],
+      ...CLIENT_EXCEPTIONS[details.kind],
       context: details.context,
       severityNumber: SeverityNumber.WARN,
       severityText: "WARN",
       attributes: {
-        ...details.meta,
         ...details.attributes,
-        ...details.extra,
-        "defjs.phase": details.phase,
         "exception.type": getExceptionType(error),
+        ...(details.includeErrorDiagnostics && exceptionText(error)),
       },
     });
   } catch {
@@ -71,4 +59,12 @@ export function emitClientException(
       // Diagnostic reporting must not replace the transport outcome either.
     }
   }
+}
+
+/** `exception.message` and `exception.stacktrace`, the second only when the error has a stack. */
+function exceptionText(error: unknown): Attributes {
+  const { message, stack } = describeError(error);
+  return stack === undefined
+    ? { "exception.message": message }
+    : { "exception.message": message, "exception.stacktrace": stack };
 }

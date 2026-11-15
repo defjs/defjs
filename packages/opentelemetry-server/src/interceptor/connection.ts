@@ -12,7 +12,7 @@ import {
   endSpanAborted,
   endSpanWithError,
 } from "../telemetry/trace";
-import type { ClientCall, ClientCallOptions } from "./call";
+import type { ClientCall, ConnectionCallOptions } from "./call";
 
 /** How a connection ended, as plain data: what to record and how the span ends. */
 export type Outcome =
@@ -44,6 +44,7 @@ interface ConnectionRecord {
   call: ClientCall;
   logger: Logger | undefined;
   metrics: ConnectionClientMetrics | undefined;
+  includeErrorDiagnostics: boolean;
   signal: AbortSignal | undefined;
   connectedAtMs: number;
 }
@@ -56,7 +57,15 @@ function settle(signal: AbortSignal | undefined, outcome: Outcome): Outcome {
 }
 
 function finishConnection(
-  { transport, call, logger, metrics, signal, connectedAtMs }: ConnectionRecord,
+  {
+    transport,
+    call,
+    logger,
+    metrics,
+    includeErrorDiagnostics,
+    signal,
+    connectedAtMs,
+  }: ConnectionRecord,
   recorded: Outcome,
 ): void {
   const outcome = settle(signal, recorded);
@@ -66,13 +75,11 @@ function finishConnection(
   let attributes = outcome.attributes;
   if (failed) {
     emitClientException(logger, {
-      transport,
-      phase: "connection",
+      kind: transport,
       context: call.context,
       error: outcome.error,
-      attributes: call.attributes,
-      meta: call.meta,
-      extra: outcome.extra,
+      attributes: { ...call.meta, ...call.attributes, ...outcome.extra },
+      includeErrorDiagnostics,
     });
     attributes = { ...attributes, "error.type": getErrorType(outcome.error) };
   }
@@ -83,13 +90,13 @@ function finishConnection(
     ...attributes,
   });
   if (!span) return;
-  if (failed) endSpanWithError(span, outcome.error);
+  if (failed) endSpanWithError(span, outcome.error, includeErrorDiagnostics);
   else span.end();
 }
 
 /**
- * The lifecycle SSE and WebSocket share. `connect()` opens the connection; a failure is recorded and
- * rethrown. A connection that opened is observed until its `closed` settles, which
+ * The lifecycle SSE and WebSocket share. `connect()` opens the connection; a failure is recorded on
+ * the span and the connect metrics and rethrown, and the operation call logs it. A connection that opened is observed until its `closed` settles, which
  * {@link finishConnection} records once: `outcomeOf` maps a fulfilled close, a rejection is an
  * error.
  */
@@ -98,14 +105,19 @@ export function observeConnection<
   TClosed,
 >(
   transport: "sse" | "websocket",
-  options: ClientCallOptions<THandle, ConnectionClientMetrics>,
+  options: ConnectionCallOptions<THandle, ConnectionClientMetrics>,
   call: ClientCall,
   req: HttpRequest,
   connect: () => Promise<THandle>,
   outcomeOf: (closed: TClosed) => Outcome,
 ): Promise<THandle> {
   const { span } = call;
-  const { logger, metrics, responseHook } = options;
+  const {
+    logger,
+    metrics,
+    responseHook,
+    includeErrorDiagnostics = false,
+  } = options;
   const connectStartMs = performance.now();
 
   // With a client span, the rest of the chain runs with it active.
@@ -115,8 +127,11 @@ export function observeConnection<
 
       if (span) {
         if (responseHook) {
-          runSpanHook(span, "responseHook", () =>
-            responseHook(span, handle, req),
+          runSpanHook(
+            span,
+            "responseHook",
+            () => responseHook(span, handle, req),
+            includeErrorDiagnostics,
           );
         }
         span.addEvent(`${transport}.connected`);
@@ -132,6 +147,7 @@ export function observeConnection<
         call,
         logger,
         metrics,
+        includeErrorDiagnostics,
         signal: req.signal,
         connectedAtMs,
       };
@@ -148,17 +164,10 @@ export function observeConnection<
         attributes["defjs.result"] = "aborted";
         if (span) endSpanAborted(span, transport);
       } else {
-        emitClientException(logger, {
-          transport,
-          phase: "connect",
-          context: call.context,
-          error,
-          attributes: call.attributes,
-          meta: call.meta,
-        });
+        // The operation call reports this failure; its log is the one log of the call.
         attributes["defjs.result"] = "error";
         attributes["error.type"] = getErrorType(error);
-        if (span) endSpanWithError(span, error);
+        if (span) endSpanWithError(span, error, includeErrorDiagnostics);
       }
       metrics?.connectDuration.record(durationS, attributes);
       throw error;

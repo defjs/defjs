@@ -70,8 +70,9 @@ describe("caller cancellation across two @defjs/core instances", () => {
     expect(fault?.code).toBe("NET_TIMEOUT");
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({
-      eventName: "http.client.request.exception",
+      eventName: "defjs.client.operation.exception",
       severityText: "WARN",
+      attributes: { "error.type": "NET_TIMEOUT" },
     });
   });
 });

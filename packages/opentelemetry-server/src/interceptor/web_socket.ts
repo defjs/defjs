@@ -1,15 +1,14 @@
 import type { WebSocketCloseInfo, WebSocketSessionLike } from "@defjs/core";
 import { createWebSocketInterceptor } from "@defjs/core";
-import { trace } from "@opentelemetry/api";
 import { carrierSetter } from "../propagation/carrier";
 import type { ConnectionClientMetrics } from "../telemetry/metrics";
 import { resolveWebSocketUrl } from "../telemetry/url";
-import type { ClientCallOptions } from "./call";
-import { requiresActiveSpan, startClientCall } from "./call";
+import type { ConnectionCallOptions } from "./call";
+import { startClientCall } from "./call";
 import type { Outcome } from "./connection";
 import { observeConnection } from "./connection";
 
-export interface WebSocketInterceptorOptions extends ClientCallOptions<
+export interface WebSocketInterceptorOptions extends ConnectionCallOptions<
   WebSocketSessionLike,
   ConnectionClientMetrics
 > {
@@ -33,13 +32,8 @@ export function createOpenTelemetryWebSocketInterceptor(
   options: WebSocketInterceptorOptions,
 ): ReturnType<typeof createWebSocketInterceptor> {
   const { propagator, queryPropagation } = options;
-  const needsActiveSpan = requiresActiveSpan(options);
 
   return createWebSocketInterceptor(async (req, next) => {
-    if (needsActiveSpan && !trace.getActiveSpan()) {
-      return next(req);
-    }
-
     // The opening handshake is always a GET (RFC 6455 section 4.1).
     const call = startClientCall(
       options,

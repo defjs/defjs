@@ -4,6 +4,11 @@ const DURATION_BUCKETS = [
   0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10,
 ];
 
+/** The instrument every operation call records, whatever its transport. */
+export interface OperationClientMetrics {
+  operationDuration: Histogram;
+}
+
 export interface HttpClientMetrics {
   requestDuration: Histogram;
 }
@@ -13,6 +18,22 @@ export interface ConnectionClientMetrics {
   connectDuration: Histogram;
   connectionDuration: Histogram;
   active: UpDownCounter;
+}
+
+export function createOperationClientMetrics(
+  meter: Meter,
+): OperationClientMetrics {
+  return {
+    operationDuration: meter.createHistogram(
+      "defjs.client.operation.duration",
+      {
+        description:
+          "Duration of Defjs operation calls, from the call to its result",
+        unit: "s",
+        advice: { explicitBucketBoundaries: [...DURATION_BUCKETS] },
+      },
+    ),
+  };
 }
 
 export function createHttpClientMetrics(meter: Meter): HttpClientMetrics {

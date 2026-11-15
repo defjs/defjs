@@ -117,7 +117,7 @@ const fullOption = withOpenTelemetryServer({
   tracer: makeTracer(),
   meter: makeMeter(),
   propagator: makePropagator(),
-  requireParentSpan: true,
+  includeErrorDiagnostics: true,
   http: {
     enabled: true,
     startSpanHook: (_request) => ({ "app.transport": "http" }),
@@ -265,8 +265,10 @@ type WebSocketResponseHookResult = Expect<
 // Tracing and metrics are independently optional.
 withOpenTelemetryServer({});
 withOpenTelemetryServer({ meter: makeMeter() });
+withOpenTelemetryServer({ propagator: makePropagator() });
+
 withOpenTelemetryServer({
-  propagator: makePropagator(),
+  // @ts-expect-error requireParentSpan was removed; a call without a parent span starts its own trace
   requireParentSpan: true,
 });
 
