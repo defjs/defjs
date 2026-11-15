@@ -26,13 +26,13 @@ Defjs separa el contrato de API que publica el equipo de autoría del SDK de la 
 - [Tratamiento de errores](/es-ES/docs/errors)
 - [Interceptores](/es-ES/docs/interceptors)
 - [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing)
-- [Pruebas](/es-ES/docs/testing)
 
 ## Buenas prácticas [#best-practices]
 
 - [Convenciones de ingeniería](/es-ES/docs/best-practices)
 - [Capa de API de aplicación](/es-ES/docs/application-api)
 - [Diseño de SDK público](/es-ES/docs/public-sdk)
+- [Pruebas](/es-ES/docs/testing)
 
 ## Integraciones e IA [#integrations-and-ai]
 

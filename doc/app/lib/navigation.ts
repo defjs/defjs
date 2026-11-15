@@ -31,7 +31,6 @@ const guideGroups = [
       "/docs/errors",
       "/docs/interceptors",
       "/docs/load-balancing",
-      "/docs/testing",
     ],
   },
   {
@@ -40,6 +39,7 @@ const guideGroups = [
       "/docs/best-practices",
       "/docs/application-api",
       "/docs/public-sdk",
+      "/docs/testing",
     ],
   },
   { titleKey: "nav.guide.ai", paths: ["/docs/ai", "/docs/ai-api"] },

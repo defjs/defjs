@@ -134,10 +134,10 @@ const guidePaths = [
   "/docs/errors",
   "/docs/interceptors",
   "/docs/load-balancing",
-  "/docs/testing",
   "/docs/best-practices",
   "/docs/application-api",
   "/docs/public-sdk",
+  "/docs/testing",
   "/docs/ai",
   "/docs/ai-api",
 ];
@@ -249,7 +249,7 @@ test("top tabs expose four areas and the AI guide sits inside Guide", () => {
     const ai = `${prefix}/docs/ai`;
     const aiApi = `${prefix}/docs/ai-api`;
     expect(guideUrls.indexOf(ai)).toBe(
-      guideUrls.indexOf(`${prefix}/docs/public-sdk`) + 1,
+      guideUrls.indexOf(`${prefix}/docs/testing`) + 1,
     );
     expect(guideUrls.indexOf(aiApi)).toBe(guideUrls.indexOf(ai) + 1);
     expect(
@@ -402,7 +402,7 @@ test("design decisions sit in the preface group and native previous/next follows
       findNeighbour(tree, `${prefix}/docs/design-decisions`).next?.url,
     ).toBe(`${prefix}/docs/struct`);
     expect(findNeighbour(tree, `${prefix}/docs/testing`).previous?.url).toBe(
-      `${prefix}/docs/load-balancing`,
+      `${prefix}/docs/public-sdk`,
     );
     expect(
       findNeighbour(tree, `${prefix}/docs/integrations`).previous?.url,

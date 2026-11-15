@@ -26,13 +26,13 @@ Defjs отделяет контракт API, который публикует �
 - [Обработка ошибок](/ru-RU/docs/errors)
 - [Перехватчики](/ru-RU/docs/interceptors)
 - [Балансировка нагрузки и отказоустойчивость](/ru-RU/docs/load-balancing)
-- [Тестирование](/ru-RU/docs/testing)
 
 ## Лучшие практики [#best-practices]
 
 - [Инженерные соглашения](/ru-RU/docs/best-practices)
 - [API-слой приложения](/ru-RU/docs/application-api)
 - [Проектирование публичного SDK](/ru-RU/docs/public-sdk)
+- [Тестирование](/ru-RU/docs/testing)
 
 ## Интеграции и ИИ [#integrations-and-ai]
 

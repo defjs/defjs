@@ -26,13 +26,13 @@ Defjs は、SDK チームが公開する API 契約（定義）と、アプリ�
 - [エラーハンドリング](/ja-JP/docs/errors)
 - [インターセプター](/ja-JP/docs/interceptors)
 - [ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing)
-- [テスト](/ja-JP/docs/testing)
 
 ## ベストプラクティス [#best-practices]
 
 - [エンジニアリング規約](/ja-JP/docs/best-practices)
 - [アプリケーション API 層](/ja-JP/docs/application-api)
 - [公開 SDK 設計](/ja-JP/docs/public-sdk)
+- [テスト](/ja-JP/docs/testing)
 
 ## 統合と AI [#integrations-and-ai]
 

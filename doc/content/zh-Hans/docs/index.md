@@ -26,13 +26,13 @@ Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时使用的 
 - [错误处理](/zh-Hans/docs/errors)
 - [拦截器](/zh-Hans/docs/interceptors)
 - [负载均衡与故障转移](/zh-Hans/docs/load-balancing)
-- [测试](/zh-Hans/docs/testing)
 
 ## 最佳实践 [#best-practices]
 
 - [工程规范](/zh-Hans/docs/best-practices)
 - [应用接口层](/zh-Hans/docs/application-api)
 - [公共 SDK 设计](/zh-Hans/docs/public-sdk)
+- [测试](/zh-Hans/docs/testing)
 
 ## 框架集成与 AI [#integrations-and-ai]
 
