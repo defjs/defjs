@@ -14,7 +14,6 @@ export const LEGACY_FIXTURE_ID = "legacy";
 
 // A close frame already buffered at the handshake makes Firefox drop `open`,
 // so this constant is for the routes that need the client to see `open` first.
-const socketCloseAfterOpenMs = 200;
 
 export interface FixtureAppDeps {
   upgradeWebSocket: UpgradeWebSocket;
@@ -425,28 +424,6 @@ export function createFixtureApp(deps: FixtureAppDeps): Hono {
   registerE2eRoutes(app, deps);
 
   app.get(
-    "/ws/basic",
-    deps.upgradeWebSocket((c) => {
-      const roomId = c.req.query("roomId") ?? "default";
-
-      return {
-        onOpen(_event, ws) {
-          ws.send(createSocketMessage("joined", { roomId, userId: 1 }));
-          setTimeout(() => {
-            ws.send(
-              createSocketMessage("message", {
-                text: `welcome:${roomId}`,
-                userId: 1,
-              }),
-            );
-            ws.close(1000, "done");
-          }, socketCloseAfterOpenMs);
-        },
-      };
-    }),
-  );
-
-  app.get(
     "/ws/echo",
     deps.upgradeWebSocket(() => ({
       onOpen(_event, ws) {
@@ -460,34 +437,6 @@ export function createFixtureApp(deps: FixtureAppDeps): Hono {
         );
       },
     })),
-  );
-
-  app.get(
-    "/ws/invalid",
-    deps.upgradeWebSocket(() => ({
-      onOpen(_event, ws) {
-        setTimeout(() => {
-          ws.send("not-json");
-          ws.close(1000, "done");
-        }, socketCloseAfterOpenMs);
-      },
-    })),
-  );
-
-  app.get(
-    "/ws/before-connect",
-    deps.upgradeWebSocket((c) => {
-      const token = c.req.query("token") ?? "missing";
-
-      return {
-        onOpen(_event, ws) {
-          ws.send(createSocketMessage("connected", { token }));
-          setTimeout(() => {
-            ws.close(1000, "done");
-          }, socketCloseAfterOpenMs);
-        },
-      };
-    }),
   );
 
   app.get(
@@ -626,47 +575,8 @@ export function createFixtureApp(deps: FixtureAppDeps): Hono {
     })),
   );
 
-  app.get(
-    "/ws/error-before-close",
-    deps.upgradeWebSocket(() => ({
-      onOpen(_event, ws) {
-        setTimeout(() => {
-          ws.send(createSocketMessage("message", { text: 123 }));
-          ws.close(1000, "done");
-        }, socketCloseAfterOpenMs);
-      },
-    })),
-  );
-
-  app.get(
-    "/ws/unknown-message",
-    deps.upgradeWebSocket(() => ({
-      onOpen(_event, ws) {
-        setTimeout(() => {
-          ws.send(createSocketMessage("unknown", { note: "skip-me" }));
-          ws.close(1000, "done");
-        }, socketCloseAfterOpenMs);
-      },
-    })),
-  );
-
-  app.get(
-    "/ws/binary",
-    deps.upgradeWebSocket(() => ({
-      onOpen(_event, ws) {
-        ws.send(
-          new TextEncoder().encode(
-            JSON.stringify({ type: "message", text: "hello-binary" }),
-          ),
-        );
-        setTimeout(() => {
-          ws.close(1000, "done");
-        }, socketCloseAfterOpenMs);
-      },
-    })),
-  );
-
-  // Preserve the original 10ms closes independently of the padded browser fixtures.
+  // Close 10ms after open on purpose: the regression spec compares the library with native events when Firefox
+  // drops `open` because the close frame is already buffered.
   app.get(
     "/ws/regression/error-before-close",
     deps.upgradeWebSocket(() => ({

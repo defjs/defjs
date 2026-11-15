@@ -11,6 +11,7 @@ import type {
   ScenarioParams,
   ScriptStep,
   StepThen,
+  WsFrame,
 } from "./types.ts";
 
 export interface DataPlaneDeps {
@@ -104,19 +105,16 @@ function parseRespond(value: unknown): ScenarioParams["respond"] | undefined {
 
 function parseWs(value: unknown): ScenarioParams["ws"] | undefined {
   if (!isRecord(value)) return undefined;
-  const sendValue = own(value, "send");
-  if (!isUnknownArray(sendValue)) return undefined;
-  const send: string[] = [];
-  for (const message of sendValue) {
-    if (typeof message !== "string") return undefined;
-    send.push(message);
-  }
-  const closeWith = own(value, "closeWith");
-  if (closeWith === undefined) return { send };
-  if (!isRecord(closeWith)) return undefined;
-  const code = own(closeWith, "code");
-  const reason = own(closeWith, "reason");
+  const send = parseFrames(own(value, "send"));
+  if (send === undefined) return undefined;
+  const end = own(value, "end");
+  if (end === undefined) return { send };
+  if (!isRecord(end)) return undefined;
+  const endSend = parseFrames(own(end, "send"));
+  const code = own(end, "code");
+  const reason = own(end, "reason");
   if (
+    endSend === undefined ||
     typeof code !== "number" ||
     !Number.isInteger(code) ||
     code < 0 ||
@@ -125,7 +123,29 @@ function parseWs(value: unknown): ScenarioParams["ws"] | undefined {
   ) {
     return undefined;
   }
-  return { send, closeWith: { code, reason } };
+  return { send, end: { send: endSend, code, reason } };
+}
+
+function parseFrames(value: unknown): WsFrame[] | undefined {
+  if (!isUnknownArray(value)) return undefined;
+  const frames: WsFrame[] = [];
+  for (const frame of value) {
+    if (typeof frame === "string") {
+      frames.push(frame);
+      continue;
+    }
+    if (!isRecord(frame)) return undefined;
+    const binary = own(frame, "binary");
+    if (typeof binary !== "string") return undefined;
+    frames.push({ binary });
+  }
+  return frames;
+}
+
+function sendFrame(socket: WSContext, frame: WsFrame): void {
+  socket.send(
+    typeof frame === "string" ? frame : new TextEncoder().encode(frame.binary),
+  );
 }
 
 function parseHang(value: unknown): ScenarioParams["hang"] | undefined {
@@ -386,7 +406,13 @@ function acceptWebSocket(
       const socket = opened;
       if (socket === undefined) return Promise.resolve(false);
       if (action === "end") {
-        socket.close(1000);
+        const { end } = params;
+        if (end === undefined) {
+          socket.close(1000);
+        } else {
+          for (const frame of end.send) sendFrame(socket, frame);
+          socket.close(end.code, end.reason);
+        }
         return closed.then(() => true);
       }
       if (action === "terminate") {
@@ -409,15 +435,7 @@ function acceptWebSocket(
   return upgradeWebSocket(c, {
     onOpen(_event, ws) {
       opened = ws;
-      for (const message of params.send) ws.send(message);
-      if (params.closeWith !== undefined) {
-        const closeWith = params.closeWith;
-        // Same pad as /ws/error-before-close. Firefox drops `open` when the
-        // close is already buffered at the handshake.
-        setTimeout(() => {
-          ws.close(closeWith.code, closeWith.reason);
-        }, 200);
-      }
+      for (const frame of params.send) sendFrame(ws, frame);
     },
     onClose() {
       finish();

@@ -16,6 +16,7 @@ import {
 import type { Balancer } from "../src";
 import { makeResponse } from "../src/http/http_response";
 import { p2cBalancer } from "../src/balancer/p2c";
+import { webSocketEndpoint } from "./web_socket_endpoint";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -111,7 +112,7 @@ test("SSE starts immediately before Fetch and closes its one attributed attempt"
   expect(events).toEqual([`start:${host}`, `done:${host}`]);
 });
 test("WebSocket starts before constructing the native socket", async () => {
-  const host = inject("testServerHost");
+  const host = (await webSocketEndpoint({ send: [] })).endpoint;
   const events: string[] = [];
   class ObservedSocket extends WebSocket {
     constructor(url: string | URL, protocols?: string | string[]) {
@@ -125,7 +126,7 @@ test("WebSocket starts before constructing the native socket", async () => {
     withWebSocketHandle(ObservedSocket),
   );
   const [err, session] = await defineWebSocket({
-    path: "/ws/basic",
+    path: "/ws",
     incoming: struct.unknown(),
   })(client);
   expect(err).toBeNull();

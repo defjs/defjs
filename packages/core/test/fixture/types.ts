@@ -24,8 +24,16 @@ export interface ScenarioParams {
   hang: Readonly<Record<never, never>>;
   gzip: { body: string; status?: number; contentType?: string };
   script: { plan: readonly ScriptStep[] }; // 第 n 个请求（0 起）用 plan[Math.min(n, plan.length - 1)]
-  ws: { send: readonly string[]; closeWith?: { code: number; reason: string } };
+  // `send` goes out when the socket opens. The server never closes on its own: `act(name, "end")` sends `end.send`
+  // and closes with `end.code` and `end.reason`, or with 1000 when `end` is absent. A test acts once it has seen the
+  // session open, because Firefox drops `open` when the close frame is already buffered at the handshake.
+  ws: {
+    send: readonly WsFrame[];
+    end?: { send: readonly WsFrame[]; code: number; reason: string };
+  };
 }
+/** A frame the `ws` scenario sends: text as given, or `{ binary }` as the UTF-8 bytes of that text in a binary frame. */
+export type WsFrame = string | { readonly binary: string };
 /** A registered endpoint. The scenario decides the shape of `params`, which is checked once, when it is registered. */
 export type EndpointRegistration = {
   [S in ScenarioName]: {

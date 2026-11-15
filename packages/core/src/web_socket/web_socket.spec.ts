@@ -21,6 +21,10 @@ import {
 } from "../../test/fake_web_socket";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 import { useFakeClock } from "../../test/web_socket_support";
+import {
+  socketMessage,
+  webSocketEndpoint,
+} from "../../test/web_socket_endpoint";
 
 describe("web socket runtime", () => {
   let client: DerivableClient;
@@ -39,7 +43,7 @@ describe("web socket runtime", () => {
   test("should return transport error with invalid client", async () => {
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
-      path: "/ws/basic",
+      path: "/ws",
     });
 
     const client = createClient(
@@ -76,22 +80,32 @@ describe("web socket runtime", () => {
         type: struct.literal("message"),
         text: struct.string(),
       }),
-      path: "/ws/basic",
+      path: "/ws",
       protocols: ["json"],
     });
+    const ws = await webSocketEndpoint({
+      send: [socketMessage("joined", { roomId: "room-1", userId: 1 })],
+      end: {
+        send: [socketMessage("message", { text: "welcome:room-1", userId: 1 })],
+        code: 1000,
+        reason: "done",
+      },
+    });
 
-    const [error, socket, connection] = await run((client) =>
-      useChatSocket(client, { roomId: "room-1" }),
+    const [error, socket, connection] = await useChatSocket(
+      createClient(withEndpoint(ws.endpoint)),
+      { roomId: "room-1" },
     );
 
     expect(error).toBeNull();
     expect(connection?.protocol).toBe("json");
-    expect(connection?.url).toContain("/ws/basic?roomId=room-1");
+    expect(connection?.url).toContain("/ws?roomId=room-1");
 
     if (!socket) {
       throw new Error("Expected socket session");
     }
 
+    await ws.end();
     const messages: unknown[] = [];
     for await (const message of socket.receive) {
       messages.push(message);
@@ -307,10 +321,16 @@ describe("web socket runtime", () => {
         type: struct.literal("message"),
         text: struct.string(),
       }),
-      path: "/ws/invalid",
+      path: "/ws",
+    });
+    const ws = await webSocketEndpoint({
+      send: [],
+      end: { send: ["not-json"], code: 1000, reason: "done" },
     });
 
-    const [error, socket] = await run(useSocket);
+    const [error, socket] = await useSocket(
+      createClient(withEndpoint(ws.endpoint)),
+    );
 
     expect(error).toBeNull();
     if (!socket) {
@@ -321,6 +341,7 @@ describe("web socket runtime", () => {
     socket.onRuntimeError((error) => {
       runtimeError = error;
     });
+    await ws.end();
     const events: unknown[] = [];
     for await (const event of socket.receive) {
       events.push(event);
@@ -340,10 +361,20 @@ describe("web socket runtime", () => {
         type: struct.literal("message"),
         text: struct.string(),
       }),
-      path: "/ws/error-before-close",
+      path: "/ws",
+    });
+    const ws = await webSocketEndpoint({
+      send: [],
+      end: {
+        send: [socketMessage("message", { text: 123 })],
+        code: 1000,
+        reason: "done",
+      },
     });
 
-    const [error, socket] = await run(useSocket);
+    const [error, socket] = await useSocket(
+      createClient(withEndpoint(ws.endpoint)),
+    );
 
     expect(error).toBeNull();
     if (!socket) {
@@ -354,6 +385,7 @@ describe("web socket runtime", () => {
     socket.onRuntimeError((err: unknown) => {
       runtimeError = err;
     });
+    await ws.end();
 
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,
@@ -368,16 +400,27 @@ describe("web socket runtime", () => {
         type: struct.literal("message"),
         text: struct.string(),
       }),
-      path: "/ws/unknown-message",
+      path: "/ws",
+    });
+    const ws = await webSocketEndpoint({
+      send: [],
+      end: {
+        send: [socketMessage("unknown", { note: "skip-me" })],
+        code: 1000,
+        reason: "done",
+      },
     });
 
-    const [error, socket] = await run(useSocket);
+    const [error, socket] = await useSocket(
+      createClient(withEndpoint(ws.endpoint)),
+    );
 
     expect(error).toBeNull();
     if (!socket) {
       throw new Error("Expected socket");
     }
 
+    await ws.end();
     const events: unknown[] = [];
     for await (const event of socket.receive) {
       events.push(event);
@@ -459,7 +502,7 @@ describe("web socket runtime", () => {
   test("should abort before startup and surface aborted transport error", async () => {
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
-      path: "/ws/basic",
+      path: "/ws",
     });
 
     const controller = new AbortController();
@@ -481,7 +524,7 @@ describe("web socket runtime", () => {
       input: struct.object({
         id: struct.number(),
       }),
-      path: "/ws/basic",
+      path: "/ws",
     });
 
     const [error, socket, connection] = await run((client) =>
@@ -501,7 +544,7 @@ describe("web socket runtime", () => {
       },
       incoming: struct.unknown(),
       input: struct.object({}),
-      path: "/ws/basic",
+      path: "/ws",
     });
 
     const [error, socket, connection] = await run((client) =>
@@ -517,7 +560,7 @@ describe("web socket runtime", () => {
   test("should return definition error when websocket url creation fails", async () => {
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
-      path: "/ws/basic",
+      path: "/ws",
     });
 
     const badClient = createClient(withEndpoint("not-a-valid-url"));
@@ -532,7 +575,7 @@ describe("web socket runtime", () => {
   test("should report a throwing beforeConnect as an extension hook fault", async () => {
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
-      path: "/ws/basic",
+      path: "/ws",
     });
 
     const [error, socket, connection] = await run(useSocket, {
@@ -708,7 +751,7 @@ describe("web socket runtime", () => {
   test("should allow websocket interceptors to short-circuit startup", async () => {
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
-      path: "/ws/basic",
+      path: "/ws",
     });
 
     const clientWithInterceptor = createClient(
@@ -866,11 +909,14 @@ describe("web socket runtime", () => {
         roomId: struct.string(),
         userId: struct.number(),
       }),
-      path: "/ws/basic",
+      path: "/ws",
+    });
+    const ws = await webSocketEndpoint({
+      send: [socketMessage("joined", { roomId: "lobby", userId: 1 })],
     });
 
     const clientWithInterceptor = createClient(
-      withEndpoint(inject("testServerHost")),
+      withEndpoint(ws.endpoint),
       withInterceptors(
         createWebSocketInterceptor(async (request, next) =>
           next({
@@ -892,7 +938,7 @@ describe("web socket runtime", () => {
     const iterator = socket.receive[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
       done: false,
-      value: { roomId: "from-interceptor", type: "joined", userId: 1 },
+      value: { roomId: "lobby", type: "joined", userId: 1 },
     });
 
     socket.close(1000, "done");

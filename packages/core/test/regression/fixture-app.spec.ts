@@ -70,10 +70,10 @@ test("routes every WebSocket path through the injected upgradeWebSocket", async 
   upgradeCalls.length = 0;
   const { app } = createApp();
 
-  expect(upgradeCalls).toHaveLength(16);
+  expect(upgradeCalls).toHaveLength(10);
   expect(await (await app.request("/ws/echo")).text()).toBe("upgraded");
   expect(await (await app.request("/e2e/ws/room1")).text()).toBe("upgraded");
-  expect(upgradeCalls).toHaveLength(16);
+  expect(upgradeCalls).toHaveLength(10);
 });
 
 test("disposing the legacy fixture errors open SSE drop streams", async () => {
