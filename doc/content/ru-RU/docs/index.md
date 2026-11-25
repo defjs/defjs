@@ -12,6 +12,7 @@ Defjs отделяет контракт API, который публикует �
 - [Обзор проекта](/ru-RU)
 - [Быстрый старт](/ru-RU/docs/start)
 - [Архитектура ядра](/ru-RU/docs/design-decisions)
+- [Сравнение и гибридная архитектура](/ru-RU/docs/comparison-and-architecture)
 
 ## Определение SDK [#defining-sdks]
 
@@ -26,6 +27,7 @@ Defjs отделяет контракт API, который публикует �
 - [Обработка ошибок](/ru-RU/docs/errors)
 - [Перехватчики](/ru-RU/docs/interceptors)
 - [Балансировка нагрузки и отказоустойчивость](/ru-RU/docs/load-balancing)
+- [Транспорт Port](/ru-RU/docs/port)
 
 ## Лучшие практики [#best-practices]
 
@@ -40,5 +42,6 @@ Defjs отделяет контракт API, который публикует �
 - [React](/ru-RU/docs/integrations/react)
 - [Vue](/ru-RU/docs/integrations/vue)
 - [OpenTelemetry Server](/ru-RU/docs/integrations/opentelemetry-server)
+- [CLI и генератор OpenAPI](/ru-RU/docs/integrations/cli)
 - [Skill](/ru-RU/docs/ai)
 - [llms.txt](/ru-RU/docs/ai-api)

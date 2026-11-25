@@ -109,19 +109,19 @@ description: 配置业务应用如何调用接口操作，与接口契约定义�
 
 ## 6. 常用 `with*` 配置项速查表
 
-| 配置项                                                                             | 一句话说明                                                                                                                          |
-| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                            | 设置一个或多个服务基础地址（覆盖之前的值）                                                                                          |
-| `withHeaders(HeadersInit)`                                                         | 为 HTTP 和 SSE 设置默认请求头（会被操作里的 `builder` 覆盖）                                                                        |
-| `withInterceptors(...items)`                                                       | 按洋葱模型追加 HTTP、SSE、WebSocket 或操作拦截器                                                                                    |
-| `withQuerySerializer(fn)`                                                          | 自定义 Query 序列化格式（例如支持嵌套方括号写法）                                                                                   |
-| `withCredentials(boolean)`                                                         | 为 `true` 时给 HTTP 和 SSE 开启 `credentials: "include"`                                                                            |
-| `withXSRF(options?)`                                                               | 来自 `@defjs/core/xsrf`。浏览器内自动将 XSRF Cookie 带到同源变更请求头里；在 Node/Bun/Worker 里会抛错，同构项目注意判断环境后再挂载 |
-| `withBalancer(balancer)`                                                           | 切换节点选择策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）                                                        |
-| `withRetry(options?)`                                                              | 配置 HTTP / SSE / WebSocket 的重试次数、退避、方法白名单、单次尝试超时与重试预算                                                    |
-| `withSSEOnInvalidEvent`                                                            | 监听 SSE 推过来但未过 `struct` 校验的异常事件                                                                                       |
-| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 设置 WebSocket 默认心跳、子协议和建连前钩子                                                                                         |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | 在测试环境替换底层传输实现                                                                                                          |
+| 配置项                                                                             | 一句话说明                                                                                                                                                                                            |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                            | 设置一个或多个服务基础地址（覆盖之前的值）                                                                                                                                                            |
+| `withHeaders(HeadersInit)`                                                         | 为 HTTP 和 SSE 设置默认请求头（会被操作里的 `builder` 覆盖）                                                                                                                                          |
+| `withInterceptors(...items)`                                                       | 按洋葱模型追加 HTTP、SSE、WebSocket 或操作拦截器                                                                                                                                                      |
+| `withQuerySerializer(fn)`                                                          | 自定义 Query 序列化格式（例如支持嵌套方括号写法）                                                                                                                                                     |
+| `withCredentials(boolean)`                                                         | 为 `true` 时给 HTTP 和 SSE 开启 `credentials: "include"`                                                                                                                                              |
+| `withXSRF(options?)`                                                               | 来自 `@defjs/core/xsrf`。浏览器内自动将 XSRF Cookie 带到同源变更请求头里；在 Node/Bun/Worker 里会抛错，同构项目注意判断环境后再挂载                                                                   |
+| `withBalancer(balancer)`                                                           | 切换节点选择策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）                                                                                                                          |
+| `withRetry(options?)`                                                              | 配置 HTTP / SSE / WebSocket 的主动启用重试：重试次数、退避、状态码（默认 `[429, 502, 503, 504]`）、RFC 9110 `Retry-After` 处理、方法白名单、单次尝试超时、`shouldRetry` 函数与 HTTP Client 级重试预算 |
+| `withSSEOnInvalidEvent`                                                            | 监听 SSE 推过来但未过 `struct` 校验的异常事件                                                                                                                                                         |
+| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 设置 WebSocket 默认心跳、子协议和建连前钩子                                                                                                                                                           |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | 在测试环境替换底层传输实现                                                                                                                                                                            |
 
 ## 相关阅读
 

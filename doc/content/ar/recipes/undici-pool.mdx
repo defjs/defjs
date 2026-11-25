@@ -1,0 +1,31 @@
+---
+title: "مقبض HTTP عبر Undici Pool"
+description: اربط مجمّع الاتصالات undici.Pool في Node.js بعميل Defjs باستخدام withHTTPHandle دون تغيير تعريفات SDK.
+---
+
+# مقبض HTTP عبر Undici Pool
+
+في طبقات BFF وخدمات الخادم عالية الإنتاجية على Node.js، احقن `undici.Pool` مشتركاً عبر [`withHTTPHandle`](/ar/api/core/withhttphandle) حتى تبقى الاتصالات المتعددة بالخوادم الخلفية دافئة ومحدودة، بينما تبقى تعريفات SDK (`sdk/orders.ts`) محايدة تماماً عن المنصة. وتذكّر استدعاء `await pool.close()` عند إيقاف التشغيل.
+
+<Tabs items={["sdk/orders.ts", "app/pool-handle.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/pool-handle.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+راجع [المقارنة والمعمارية الهجينة](/ar/docs/comparison-and-architecture) للجمع بين `undici.Pool` و`p2cBalancer` و`outlierDetection`.

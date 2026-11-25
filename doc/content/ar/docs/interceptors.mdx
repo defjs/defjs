@@ -55,16 +55,16 @@ description: طبّق سياسات المصادقة والنقل على عميل
 
 ## 3. إعادات المحاولة و`Retry-After`
 
-إعادات محاولة HTTP معطلة افتراضيًا. لإعادة محاولة فشل اتصال أو مهلة أو `502` أو `503` أو `504` على نقطة نهاية أخرى، استخدم [`withRetry()`](/ar/docs/load-balancing#retries). بعد تأخير backoff يتيح للموازن أن يختار من جديد، ويعيد بناء الطلب، ويشغّل سلسلة المعترضات كاملة من جديد.
+إعادات محاولة HTTP معطلة افتراضيًا. لإعادة محاولة فشل اتصال أو مهلة أو حالة ضمن `statusCodes` (`429` أو `502` أو `503` أو `504` افتراضيًا) مع دعم أصلي لترويسة `Retry-After` وفق RFC 9110 للحالتين `429` و`503` (`retryAfter: true`، `maxRetryAfterMs: 60_000`)، استخدم [`withRetry()`](/ar/docs/load-balancing#retries). بعد التأخير يتيح للموازن أن يختار من جديد، ويعيد بناء الطلب، ويشغّل سلسلة المعترضات كاملة من جديد.
 
-يمكن لمعترض في التطبيق أن يعالج بدلاً من ذلك حالات الاستجابة على نقطة النهاية نفسها، مثل `429` و`Retry-After`:
+عندما يحتاج التطبيق إلى معالجة **مخصصة على نقطة النهاية نفسها** لحالات الاستجابة — مثل إعادة المحاولة على نقطة النهاية المختارة دون إعادة تشغيل `builder` أو المعترضات الخارجية، أو استبدال تأخير احتياطي عند غياب `Retry-After`، أو وضع سقف للانتظار بدل الفشل الفوري — يمكن لمعترض أن يكرر `next(request)` مباشرة في حلقة:
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **طبقتا إعادة المحاولة**: تبقى حلقة `next(request)` هذه على نقطة النهاية المختارة، ولا تعيد تشغيل دالة `builder` أو المعترضات الخارجية. حالات فشل الاتصال و`502`/`503`/`504` من اختصاص `withRetry`.
-- **سياسة `Retry-After`**: لا يقرأ `withRetry` في Core هذه الترويسة. سقف الوصفة البالغ 30 ثانية والتأخير الاحتياطي البالغ 250 مللي ثانية هما خياران للتطبيق. قد يؤدي وضع سقف لتأخير خادم أطول إلى إعادة المحاولة قبل الوقت المطلوب؛ وإذا لم يكن ذلك مقبولاً، فانتظر التأخير كاملاً أو أرجع الاستجابة بدلاً من ذلك.
+- **طبقتا إعادة المحاولة**: تبقى حلقة `next(request)` هذه على نقطة النهاية المختارة، ولا تعيد تشغيل دالة `builder` أو المعترضات الخارجية. حالات فشل الاتصال والتبديل عبر نقاط النهاية والسياسات الافتراضية لـ `429`/`502`/`503`/`504` من اختصاص `withRetry`.
+- **السياسة المدمجة مقابل المخصصة لـ `Retry-After`**: يحترم `withRetry()` الأساسي ترويسة `Retry-After` وفق RFC 9110 على الحالتين `429` و`503` افتراضيًا (فيخفق سريعًا دون إعادة محاولة إذا تجاوز التأخير الذي طلبه الخادم `maxRetryAfterMs`). إذا كنت تعالج `429` داخل معترض مخصص كما في الوصفة أعلاه، فاضبط `withRetry({ retryAfter: false })` (أو احذف `429` من `statusCodes`) لتفادي إعادة المحاولة مرتين؛ سقف الوصفة البالغ 30 ثانية والتأخير الاحتياطي البالغ 250 مللي ثانية هما خياران للتطبيق، وقد يؤدي وضع سقف لتأخير خادم أطول إلى إعادة المحاولة قبل الوقت المطلوب.
 - **عمليات الكتابة عند 401**: يمكن أن تُسلّم [وصفة تحديث Bearer](/ar/recipes/refresh-bearer-once) طلب POST بصيغة JSON مرتين. اشترط رفض المصادقة قبل معالجة الأعمال ومفتاحًا ثابتًا لتساوي الأثر مع إزالة التكرار على الخادم، أو لا تُعد إرسال عمليات الكتابة تلقائيًا. لا تُعاد أجسام الطلبات المتدفقة.
 - **التعامل مع رفض وسيلة النقل**: يرفض `next(request)` الاستمرار عند حدوث خطأ في الشبكة (لا توجد استجابة برمز الحالة 0). ويؤدي التقاط هذا الرفض وإعادة إلقائه إلى الحفاظ على رمز خطأ `NET_*` الأصلي.
 - **الطلبات التي لا يمكن إرسالها**: في معترض HTTP، عندما ترفض المنصة الطلب (طريقة غير صالحة أو ممنوعة، أو جسم GET أو HEAD، أو عنوان URL فيه بيانات اعتماد، أو `Content-Type` غير صالح) أو يرمي خطاف `finalizeHeaders`، يرفض `next(request)` بخطأ المنصة نفسه (`TypeError`) أو بالقيمة التي رماها الخطاف، لا بغلاف `BodyFailure` الخاص بالمكتبة. إعادة إلقائه تُبقي رمز الخطأ (`REQ_BUILD_FAILED` أو `EXT_HOOK_FAILED`)؛ وإلقاء خطأ مختلف يجعل الإخفاق إخفاقك (`EXT_INTERCEPTOR_FAILED`). الإخفاقات الأخرى حول النقل ما زالت تصل إلى `next(request)` كـ `BodyFailure`: جسم استجابة لا يمكن قراءته أو فكه أو مطابقته لنوع وسائطه، وجسم مقطوع، ومراقب تقدم رفع يرمي (`EXT_OBSERVER_FAILED`)، وهو ما يمكن أن يحدث قبل إرسال الطلب.
@@ -96,17 +96,23 @@ description: طبّق سياسات المصادقة والنقل على عميل
 
 ## 6. دوال المصنع والدوال المساعدة المدمجة
 
-| التصدير                                        | وسيلة النقل | الوصف                                                                                 |
-| ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP        | تغلف `(req, next) => Promise<HttpResponse<unknown>>`                                  |
-| `createSSEInterceptor(fn)`                     | SSE         | تغلف `(req, next) => Promise<EventStreamHandle<unknown>>`                             |
-| `createWebSocketInterceptor(fn)`               | WebSocket   | تغلف `(req, next) => Promise<WebSocketSessionLike>`                                   |
-| `createOperationInterceptor(fn)`               | الكل        | تغلف `(call, next) => Promise<result>` حول استدعاء العملية كاملًا                     |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP        | تحقن الترويسة `Authorization: Basic ...` من موفر بيانات اعتماد تزامني يُستدعى لكل طلب |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE         | تحقن الترويسة `Authorization: Basic ...` في مصافحات تدفق SSE                          |
+| التصدير                                        | وسيلة النقل | الوصف                                                                                                                                                                       |
+| ---------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP        | تغلف `(req, next) => Promise<HttpResponse<unknown>>`                                                                                                                        |
+| `createSSEInterceptor(fn)`                     | SSE         | تغلف `(req, next) => Promise<EventStreamHandle<unknown>>`                                                                                                                   |
+| `createWebSocketInterceptor(fn)`               | WebSocket   | تغلف `(req, next) => Promise<WebSocketSessionLike>`                                                                                                                         |
+| `createOperationInterceptor(fn)`               | الكل        | تغلف `(call, next) => Promise<result>` حول استدعاء العملية كاملًا                                                                                                           |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP        | تحقن الترويسة `Authorization: Basic ...` من موفر بيانات اعتماد تزامني يُستدعى لكل طلب                                                                                       |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE         | تحقن الترويسة `Authorization: Basic ...` في مصافحات تدفق SSE                                                                                                                |
+| `concurrencyLimitHttpInterceptor(options)`     | HTTP        | تحدّد محاولات التنفيذ المتزامنة لكل حزمة (`ConcurrencyLimitInterceptorOptions`)؛ تصطف الطلبات بترتيب FIFO حتى `maxQueue` وترفض الفائض بـ `BulkheadOverflowError`            |
+| `idempotencyKeyHttpInterceptor(options?)`      | HTTP        | تحقن ترويسة مفتاح عدم التكرار (`IdempotencyKeyInterceptorOptions`، الافتراضي `Idempotency-Key`) على الطرق المعدِّلة (`POST`، `PATCH`)، مع إعادة استخدام `req.correlationId` |
+
+تحرّر `concurrencyLimitHttpInterceptor` التصاريح أثناء فترات انتظار تراجع `withRetry` حتى لا تتسبب إعادات المحاولة في جمود الحاجز (bulkhead)، وترمي `BulkheadOverflowError` (الذي يظهر بوصفه `EXT_INTERCEPTOR_FAILED` مع `{ attempted: false }`) عند تجاوز `maxQueue`. انظر [مرجع واجهة برمجة المعترضات](/ar/api/interceptors).
 
 ## قراءات ذات صلة
 
+- [مفاتيح عدم التكرار عند إعادات المحاولة](/ar/recipes/idempotency-key)
+- [حدود التزامن بحاجز العزل](/ar/recipes/concurrency-limit)
 - [تحديث رمز Bearer تلقائياً عند استلام 401](/ar/recipes/refresh-bearer-once)
 - [طلبات ETag الشرطية](/ar/recipes/etag-revalidate)
 - [خادم OpenTelemetry](/ar/docs/integrations/opentelemetry-server)

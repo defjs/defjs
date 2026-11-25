@@ -1,0 +1,40 @@
+---
+title: "@defjs/cli"
+description: OpenAPI-to-Defjs ジェネレーター、設定ヘルパー、および CLI ランナーです。
+---
+
+# CLI (`@defjs/cli`)
+
+Swagger 2.0 および OpenAPI 3.0–3.2 仕様をステートレスな ESM の `@defjs/core` モジュールに変換する開発用 CLI およびプログラマティックジェネレーターです。[CLI 連携ガイド](/ja-JP/docs/integrations/cli) を参照してください。
+
+## クイック例
+
+<include cwd>examples/api/cli.ts#example</include>
+
+## 設定
+
+### defineConfig
+
+<ApiSignature name="defineConfig" />
+
+### DefjsConfig, OpenApiTargetConfig, OpenApiOutputConfig, OpenApiInput
+
+<ApiSignature name="DefjsConfig, OpenApiTargetConfig, OpenApiOutputConfig, OpenApiInput, OpenApiDocumentObject" />
+
+### 戦略と出力形式の型
+
+<ApiSignature name="OpenApiOutputFormat, OpenApiGenerationMode, OpenApiErrorStrategy, OpenApiMixed2xxStrategy" />
+
+## プログラマティック実行と CLI 実行
+
+### generateOpenApi
+
+<ApiSignature name="generateOpenApi" />
+
+<ApiSignature name="GenerateOpenApiOptions, OpenApiGenerateResult, CliDiagnostic, CliDiagnosticSeverity" />
+
+### runCli
+
+<ApiSignature name="runCli" />
+
+<ApiSignature name="CliIo" />

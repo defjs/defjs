@@ -1,0 +1,105 @@
+---
+title: CLI & OpenAPI ジェネレーター
+description: "@defjs/cli を使用して、Swagger 2.0 および OpenAPI 3.0–3.2 仕様からステートレスな ESM の @defjs/core 定義と struct スキーマを生成します。"
+---
+
+# CLI & OpenAPI ジェネレーター
+
+`@defjs/cli` は、実行時依存関係ゼロの単一ファイル ESM バンドル（`@defjs/core` は任意の peer dependency）として提供される開発用 Node.js（`>= 22.18.0`）／Bun CLI で、組み込みの 2 スペース AST プリンターを用い、Swagger 2.0 および OpenAPI 3.0–3.2 仕様（同梱された `@scalar/openapi-parser` ベース）を **ステートレスな ESM** の `@defjs/core` 定義と `struct` スキーマに変換します。生成されるモジュールはクライアントをキャプチャせず、クラスを作成せず、純粋な宣言に `/*#__PURE__*/` アノテーションを付与します。
+
+開発用依存関係としてインストールします。
+
+```bash
+bun add -D @defjs/cli
+```
+
+引数を指定せずに `defjs` を実行すると、ヘルプを表示して正常終了します。
+
+## 設定とプログラマティック API
+
+`defjs.config.ts`（または `.mts` / `.mjs` / `.js`。ネイティブの Node `>= 22.18` または Bun の `import()` で読み込み）で `defineConfig` を使ってターゲットを構成するか、カスタムスクリプトから `generateOpenApi` を呼び出します。
+
+<Tabs items={["openapi/orders.json", "defjs.config.ts", "app/generate.ts"]}>
+  <Tab>
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders API", "version": "1.0.0" },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "status"],
+                  "properties": {
+                    "id": { "type": "number" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/defjs.config.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/app/generate.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+その後、CLI からコード生成または CI での差分検出（drift check）を実行します。
+
+```bash
+npx @defjs/cli openapi generate
+npx @defjs/cli openapi generate --check
+```
+
+## 主なフラグと Defjs のガードレール
+
+| フラグ / オプション                 | 値                                                                                                                       | 動作                                                                                                                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--input`, `input`                  | ローカルの `.yaml`/`.yml`/`.json`/`.ts`/`.mts`/`.js`/`.mjs`、`http(s):` URL、import したオブジェクト、またはローダー関数 | `.ts`/`.mts`/`.js`/`.mjs` モジュールはネイティブの Node `>= 22.18` / Bun `import()` で、仕様書は Scalar 経由で読み込みます（単一ファイルの Swagger 2.0 / 3.0 は `upgrade` され、複数ファイルの `$ref` は維持されます） |
+| `--format`, `format`                | `ts`（デフォルト）、`tsx`、`js`（`.js` + `.d.ts`）、`mjs`（`.mjs` + `.d.mts`）                                           | タグごとにグループ化されたステートレス ESM モジュールを `schema/` と `request/` 配下に出力します（必要に応じて共有ルート `util` モジュールも出力します）                                                               |
+| `--mode`, `mode`                    | `sync`（デフォルト）、`scaffold`                                                                                         | `sync` は古い管理対象ファイルを削除しヘッダー所有権を検証します。`scaffold` は不足しているファイルのみを書き込みます                                                                                                   |
+| `--error-strategy`, `errorStrategy` | `none`（デフォルト）、`union`                                                                                            | `none` は 2xx 以外の HTML ゲートウェイエラーのデコードを回避します。`union` は仕様書に記載された非 2xx `error` struct を合成します                                                                                     |
+| `--mixed-2xx`, `mixed2xxStrategy`   | `omit`（デフォルト）、`split`                                                                                            | 操作がボディ付き 2xx と `204` を混在させる場合、`omit` は警告を出して `output` を省略し、`split` は `<op>NoContent` を追加します                                                                                       |
+| `--check`                           | boolean                                                                                                                  | 管理対象ファイルに差分がある、または削除予定がある場合に終了コード `1` で終了します                                                                                                                                    |
+
+生成されたコードは、Defjs のすべての契約を遵守します。
+
+- `input` + 明示的な同期 `builder`（JSON ボディに `.alias(...)` によるリネームが含まれる場合、型付けされた `body: input.body` をそのまま渡します）
+- デフォルト以外のクエリスタイル（`deepObject`、`pipeDelimited`、`spaceDelimited`、`explode: false` の `form`、`json`）およびデフォルト以外のパス・ヘッダーパラメータシリアライザー（配列／オブジェクト向けの `label`、`matrix`、`simple`）では、必要なヘルパークロージャだけを共有ルート `util` モジュール（`util.ts`/`.tsx`/`.js`/`.mjs`、JS 形式では `util.d.ts`/`.d.mts` も併せて出力）に出力し、`request/<group>` ファイルから `../util` 経由でインポートします
+- ストリーミングの `text/event-stream`（`itemSchema`）レスポンスは `defineRequest` ではなく `defineEventStream` を出力します
+- 相互再帰または自己再帰スキーマは、オブジェクト循環部分に遅延ゲッタープロパティを持つトポロジカル事後順序（topological post-order）で宣言を出力し、モジュール読み込み時の `ReferenceError`（TDZ クラッシュ）を防ぎます
+
+詳細は [CLI API リファレンス](/ja-JP/api/cli) を参照してください。

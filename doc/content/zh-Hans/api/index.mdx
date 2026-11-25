@@ -13,24 +13,26 @@ description: 查阅 SDK 定义入口、应用执行入口，以及传输、Struc
 
 ## 包
 
-| 包                                                                 | 你来查什么                                                        |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| [`@defjs/core`](/zh-Hans/api/client)                               | `createClient`、`defineRequest`、`struct`、HTTP / SSE / WebSocket |
-| [`@defjs/vue`](/zh-Hans/api/vue)                                   | `createClientPlugin`、`injectClient`、`HTTP_CLIENT`               |
-| [`@defjs/react`](/zh-Hans/api/react)                               | `ClientProvider`、`useClient`                                     |
-| [`@defjs/opentelemetry-server`](/zh-Hans/api/opentelemetry-server) | `withOpenTelemetryServer`、各传输的选项                           |
+| 包                                                                 | 你来查什么                                                                                                      |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](/zh-Hans/api/client)                               | `createClient`、`defineRequest`、`struct`、HTTP / SSE / WebSocket、`@defjs/core/concurrent`、`@defjs/core/port` |
+| [`@defjs/cli`](/zh-Hans/api/cli)                                   | `defineConfig`、`generateOpenApi`、`runCli`、OpenAPI 目标配置选项                                               |
+| [`@defjs/vue`](/zh-Hans/api/vue)                                   | `createClientPlugin`、`injectClient`、`HTTP_CLIENT`                                                             |
+| [`@defjs/react`](/zh-Hans/api/react)                               | `ClientProvider`、`useClient`                                                                                   |
+| [`@defjs/opentelemetry-server`](/zh-Hans/api/opentelemetry-server) | `withOpenTelemetryServer`、各传输的选项                                                                         |
 
 ## @defjs/core
 
-| 页面                                 | 你来查什么                                                            |
-| ------------------------------------ | --------------------------------------------------------------------- |
-| [Client](/zh-Hans/api/client)        | `createClient`、`with*` 选项、`Client`                                |
-| [HTTP](/zh-Hans/api/http)            | `defineRequest`、`HttpExecuteOptions`、`HttpRequest` / `HttpResponse` |
-| [Struct](/zh-Hans/api/struct)        | `struct.*`、`Infer`、`StructError`                                    |
-| [错误](/zh-Hans/api/errors)          | `Fault` 变体和工厂                                                    |
-| [拦截器](/zh-Hans/api/interceptors)  | HTTP / SSE / WebSocket 拦截器辅助函数                                 |
-| [SSE](/zh-Hans/api/sse)              | `defineEventStream`、流句柄                                           |
-| [WebSocket](/zh-Hans/api/web-socket) | `defineWebSocket`、会话                                               |
+| 页面                                 | 你来查什么                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| [Client](/zh-Hans/api/client)        | `createClient`、`with*` 选项、`Client`、`@defjs/core/concurrent`                      |
+| [HTTP](/zh-Hans/api/http)            | `defineRequest`、`HttpExecuteOptions`、`HttpRequest` / `HttpResponse`                 |
+| [Struct](/zh-Hans/api/struct)        | `struct.*`、`Infer`、`StructError`                                                    |
+| [错误](/zh-Hans/api/errors)          | `Fault` 变体和工厂                                                                    |
+| [拦截器](/zh-Hans/api/interceptors)  | HTTP / SSE / WebSocket / 内置拦截器辅助函数                                           |
+| [SSE](/zh-Hans/api/sse)              | `defineEventStream`、流句柄                                                           |
+| [WebSocket](/zh-Hans/api/web-socket) | `defineWebSocket`、会话                                                               |
+| [Port](/zh-Hans/api/port)            | `withPortTransport`、`attachPortHost`、`createPort*Handle`、`@defjs/core/port/webext` |
 
 ## 相关
 

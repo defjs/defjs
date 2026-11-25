@@ -26,7 +26,7 @@ Importez les vraies opérations `defineRequest` de votre projet et créez un `Cl
 
 - **Pourquoi `https://fixture.invalid`** : `createClient` valide l'URL de base avant d'atteindre `withHTTPHandle` ; `.invalid` est réservé par la RFC et n'interrogera jamais le DNS public même en cas d'oubli.
 - **Un type de handle par protocole** : `withHTTPHandle` n'intercepte que HTTP (`defineRequest`). Utilisez `withSSEHandle` pour `defineEventStream` et `withWebSocketHandle` pour `defineWebSocket`.
-- **Retries par défaut et piège de `withRetry(undefined)`** : Sans `withRetry`, les retries sont désactivés — omettez-le dans les tests unitaires ordinaires pour que `502`/`503`/`504` et les erreurs réseau reviennent immédiatement après une tentative au lieu d'attendre `1s + 2s + 4s` de backoff. Attention : appeler `withRetry()` ou `withRetry(undefined)` active **3 retries par défaut**. Pour désactiver explicitement les retries depuis une fabrique partagée, passez `withRetry({ maxRetries: 0 })`.
+- **Retries par défaut et piège de `withRetry(undefined)`** : Sans `withRetry`, les retries sont désactivés — omettez-le dans les tests unitaires ordinaires pour que `429`/`502`/`503`/`504` et les erreurs réseau reviennent immédiatement après une tentative au lieu d'attendre `1s + 2s + 4s` de backoff. Attention : appeler `withRetry()` ou `withRetry(undefined)` active **3 retries par défaut**. Pour désactiver explicitement les retries depuis une fabrique partagée, passez `withRetry({ maxRetries: 0 })`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>

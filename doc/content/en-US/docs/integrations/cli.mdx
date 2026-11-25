@@ -1,0 +1,105 @@
+---
+title: CLI & OpenAPI generator
+description: Generate stateless ESM @defjs/core definitions and struct schemas from Swagger 2.0 and OpenAPI 3.0–3.2 specifications with @defjs/cli.
+---
+
+# CLI & OpenAPI generator
+
+`@defjs/cli` is a development-time Node.js (`>= 22.18.0`) and Bun CLI—shipped as a zero-runtime-dependency single-file ESM bundle with `@defjs/core` as an optional peer—that converts Swagger 2.0 and OpenAPI 3.0–3.2 specifications (via bundled `@scalar/openapi-parser`) into **stateless ESM** `@defjs/core` definitions and `struct` schemas using a built-in 2-space AST printer. Generated modules capture no client, create no classes, and annotate pure declarations with `/*#__PURE__*/`.
+
+Install as a dev dependency:
+
+```bash
+bun add -D @defjs/cli
+```
+
+Running `defjs` with no arguments prints help and exits cleanly.
+
+## Configuration and programmatic API
+
+Configure targets in `defjs.config.ts` (or `.mts` / `.mjs` / `.js`, loaded via native Node `>= 22.18` or Bun `import()`) with `defineConfig`, or call `generateOpenApi` from a custom script:
+
+<Tabs items={["openapi/orders.json", "defjs.config.ts", "app/generate.ts"]}>
+  <Tab>
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders API", "version": "1.0.0" },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "status"],
+                  "properties": {
+                    "id": { "type": "number" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/defjs.config.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/app/generate.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Then run generation or CI drift checks via CLI:
+
+```bash
+npx @defjs/cli openapi generate
+npx @defjs/cli openapi generate --check
+```
+
+## Key flags and Defjs guardrails
+
+| Flag / Option                       | Values                                                                                                      | Behavior                                                                                                                                                                             |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--input`, `input`                  | Local `.yaml`/`.yml`/`.json`/`.ts`/`.mts`/`.js`/`.mjs`, `http(s):` URL, imported object, or loader function | Loads `.ts`/`.mts`/`.js`/`.mjs` modules via native Node `>= 22.18` / Bun `import()` and specs via Scalar (`upgrade` for single-file Swagger 2.0 / 3.0; preserves multi-file `$ref`s) |
+| `--format`, `format`                | `ts` (default), `tsx`, `js` (`.js` + `.d.ts`), `mjs` (`.mjs` + `.d.mts`)                                    | Emits stateless ESM modules grouped by tag under `schema/` and `request/` (plus a shared root `util` module when needed)                                                             |
+| `--mode`, `mode`                    | `sync` (default), `scaffold`                                                                                | `sync` prunes stale managed files and verifies header ownership; `scaffold` writes missing files only                                                                                |
+| `--error-strategy`, `errorStrategy` | `none` (default), `union`                                                                                   | `none` avoids decoding non-2xx HTML gateway errors; `union` synthesizes a documented non-2xx `error` struct                                                                          |
+| `--mixed-2xx`, `mixed2xxStrategy`   | `omit` (default), `split`                                                                                   | When an op mixes body-bearing 2xx and `204`, `omit` warns cleanly and omits `output`, whereas `split` adds `<op>NoContent`                                                           |
+| `--check`                           | boolean                                                                                                     | Exits `1` when any managed file differs or would be deleted                                                                                                                          |
+
+Generated code honors all Defjs contracts:
+
+- `input` + explicit synchronous `builder` (passing typed `body: input.body` directly when JSON bodies carry `.alias(...)` renames)
+- Non-default query styles (`deepObject`, `pipeDelimited`, `spaceDelimited`, `form` with `explode: false`, `json`) as well as non-default path and header parameter serializers (`label`, `matrix`, `simple` for arrays/objects) emit only the required helper closure into a shared root `util` module (`util.ts`/`.tsx`/`.js`/`.mjs` + `util.d.ts`/`.d.mts` for JS formats), imported from `../util` by `request/<group>` files
+- Streaming `text/event-stream` (`itemSchema`) responses emit `defineEventStream` instead of `defineRequest`
+- Mutual or self-recursive schemas emit topological post-order declarations with lazy getter properties on object cycles, preventing `ReferenceError` TDZ crashes at module load
+
+See the [CLI API reference](/api/cli).

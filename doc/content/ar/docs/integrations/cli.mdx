@@ -1,0 +1,105 @@
+---
+title: أداة CLI ومولّد OpenAPI
+description: ولّد تعريفات @defjs/core عديمة الحالة بصيغة ESM ومخططات struct من مواصفات Swagger 2.0 وOpenAPI 3.0–3.2 باستخدام @defjs/cli.
+---
+
+# أداة CLI ومولّد OpenAPI
+
+حزمة `@defjs/cli` هي أداة سطر أوامر لوقت التطوير على Node.js (`>= 22.18.0`) وBun — تُشحَن كحزمة ESM أحادية الملف دون أي اعتماديات وقت تشغيل (مع كون `@defjs/core` اعتمادية نظيرة اختيارية) — تحوّل مواصفات Swagger 2.0 وOpenAPI 3.0–3.2 (عبر `@scalar/openapi-parser` المدمج) إلى تعريفات `@defjs/core` **عديمة الحالة بصيغة ESM** ومخططات `struct` باستخدام طابعة AST مدمجة بمسافة بادئة من فراغين. لا تحتجز الوحدات المولَّدة أي عميل، ولا تنشئ أصنافاً، وتعلّم التصريحات النقية بالتعليق `/*#__PURE__*/`.
+
+ثبّتها كاعتمادية تطوير:
+
+```bash
+bun add -D @defjs/cli
+```
+
+يؤدي تشغيل `defjs` دون وسائط إلى طباعة التعليمات والخروج بنجاح.
+
+## الإعداد وواجهة البرمجة
+
+اضبط الأهداف في ملف `defjs.config.ts` (أو `.mts` / `.mjs` / `.js`، المحمَّل عبر `import()` الأصلي في Node `>= 22.18` أو Bun) باستخدام `defineConfig`، أو استدعِ `generateOpenApi` من نص برمجي مخصص:
+
+<Tabs items={["openapi/orders.json", "defjs.config.ts", "app/generate.ts"]}>
+  <Tab>
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders API", "version": "1.0.0" },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "status"],
+                  "properties": {
+                    "id": { "type": "number" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/defjs.config.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/app/generate.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+ثم شغّل التوليد أو فحوصات الانجراف في CI عبر CLI:
+
+```bash
+npx @defjs/cli openapi generate
+npx @defjs/cli openapi generate --check
+```
+
+## الرايات الأساسية وضوابط Defjs
+
+| الراية / الخيار                     | القيم                                                                                                        | السلوك                                                                                                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--input`، `input`                  | ملف محلي `.yaml`/`.yml`/`.json`/`.ts`/`.mts`/`.js`/`.mjs`، أو رابط `http(s):`، أو كائن مستورد، أو دالة تحميل | يحمّل وحدات `.ts`/`.mts`/`.js`/`.mjs` عبر `import()` الأصلي في Node `>= 22.18` / Bun والمواصفات عبر Scalar (`upgrade` لمستندات Swagger 2.0 / 3.0 أحادية الملف؛ ويحافظ على مراجع `$ref` متعددة الملفات) |
+| `--format`، `format`                | `ts` (افتراضي)، `tsx`، `js` (`.js` + `.d.ts`)، `mjs` (`.mjs` + `.d.mts`)                                     | يُخرج وحدات ESM عديمة الحالة مجمَّعة حسب الوسم ضمن `schema/` و`request/` (مع وحدة `util` جذرية مشتركة عند الحاجة)                                                                                      |
+| `--mode`، `mode`                    | `sync` (افتراضي)، `scaffold`                                                                                 | يزيل `sync` الملفات المدارة المتقادمة ويتحقق من ملكية الترويسة؛ بينما يكتب `scaffold` الملفات المفقودة فقط                                                                                             |
+| `--error-strategy`، `errorStrategy` | `none` (افتراضي)، `union`                                                                                    | يتجنب `none` فك ترميز أخطاء البوابة HTML خارج 2xx؛ بينما يركّب `union` مخطط `error` struct موثقاً لحالات غير 2xx                                                                                       |
+| `--mixed-2xx`، `mixed2xxStrategy`   | `omit` (افتراضي)، `split`                                                                                    | عندما تمزج العملية بين استجابات 2xx ذات جسم و`204`، يحذّر `omit` بوضوح ويُغفل `output`، بينما يضيف `split` عملية `<op>NoContent`                                                                       |
+| `--check`                           | boolean                                                                                                      | يخرج برمز `1` إذا اختلف أي ملف مُدار أو كان سيتعرض للحذف                                                                                                                                               |
+
+تلتزم الشيفرة المولَّدة بجميع عقود Defjs:
+
+- `input` + دالة `builder` تزامنية صريحة (مع تمرير `body: input.body` المحدد النوع مباشرة عندما تحمل أجسام JSON إعادة تسمية `.alias(...)`)
+- تصدر أنماط الاستعلام غير الافتراضية (`deepObject` و`pipeDelimited` و`spaceDelimited` و`form` مع `explode: false` و`json`)، وكذلك مسلسِلات معاملات المسار والترويسة غير الافتراضية (`label` و`matrix` و`simple` للمصفوفات والكائنات)، الانغلاق المساعد المطلوب فقط إلى وحدة `util` جذرية مشتركة (`util.ts`/`.tsx`/`.js`/`.mjs` + `util.d.ts`/`.d.mts` لصيغ JS)، تستوردها ملفات `request/<group>` من `../util`
+- تصدر استجابات البث `text/event-stream` (`itemSchema`) عبر `defineEventStream` بدلاً من `defineRequest`
+- تصدر المخططات المتبادلة أو ذاتية الاستدعاء العودي بترتيب طوبولوجي لاحق (topological post-order) مع خصائص getter كسولة على دورات الكائنات، لمنع أعطال `ReferenceError` الناتجة عن TDZ عند تحميل الوحدة
+
+راجع [مرجع واجهة برمجة CLI](/ar/api/cli).

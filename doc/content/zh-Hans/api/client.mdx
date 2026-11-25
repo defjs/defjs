@@ -217,33 +217,34 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-统计已分类的失败并按时间逐出端点，并跳过应用提供的 `isHealthy` 函数拒绝的端点。Defjs 不决定什么叫健康。除非传入对象，否则它是关闭的：pick-first、round robin 和 p2c 都通过各自的 `outlierDetection` 选项接收它（默认值用 `{}`），也可以直接包装自定义子均衡器。默认的 `isFailure` 把每个带 code 的结果都计入，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`；它只决定什么计入逐出，并且可以替换。连续五次失败后，惩罚从 1000 ms 起，每次逐出增加 1000 ms，加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。时间一到，端点就可以再次被选择，没有试探请求，也不判断是否恢复；惩罚等级会保留，每 10 秒没有新的逐出就减一（与 gRPC A50 相同）。在逐出之前开始、或端点处于逐出期间开始的尝试，其迟到的结果会被忽略。没有配额、最后一台主机保护、结算网格、百分比判据或慢启动。`isHealthy` 是唯一的健康判断；它与逐出按 AND 组合，因此 `true` 从不会结束惩罚，它抛出的异常会报告为 `REQ_BUILD_FAILED`。所有主机都可以被逐出；Finagle 式的列表内失败时放行仍会发出请求。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
+统计已分类的失败并按时间逐出端点，并跳过应用提供的 `isHealthy` 函数拒绝的端点。Defjs 不决定什么叫健康。除非传入对象，否则它是关闭的：pick-first、round robin 和 p2c 都通过各自的 `outlierDetection` 选项接收它（默认值用 `{}`），也可以直接包装自定义子均衡器。默认的 `isFailure` 把每个带 code 的结果都计入，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`；它只决定什么计入逐出，并且可以替换。连续五次失败后，惩罚从 1000 ms 起，每次逐出增加 1000 ms，加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。默认情况下（`halfOpen: false`），时间一到端点就可以再次被所有调用方选择；若设为 `halfOpen: true`，惩罚到期后进入单探针状态，每次只放行一个试探请求，成功即恢复全量流量，失败则立即按下一惩罚等级重新逐出（受 `maxEjectionPercent` 约束）。惩罚等级会保留，每 10 秒没有新的逐出就减一（与 gRPC A50 相同）。在逐出之前开始、或端点处于逐出期间开始的尝试，其迟到的结果会被忽略。`maxEjectionPercent`（默认 `100`，不限制配额）限制同时可被逐出的候选端点数量上限（`Math.floor(endpoints.length * maxEjectionPercent / 100)`）。没有最后一台主机保护、结算网格或慢启动。`isHealthy` 是唯一的健康判断；它与逐出按 AND 组合，因此 `true` 从不会结束惩罚，它抛出的异常会报告为 `REQ_BUILD_FAILED`。所有主机都可以被逐出或等待在途试探；Finagle 式的列表内失败时放行仍会发出请求。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
-为 HTTP、SSE 和 WebSocket 启用同一份策略，保存在 `config.retry`。没有 `withRetry` 时，每次调用只尝试一次，既简单也没有退避。`withRetry()` 和 `withRetry(undefined)` 等价于 `withRetry({})`。后一次 `withRetry` 会替换策略；`withRetry({ maxRetries: 0 })` 会在启用后关闭重试。该选项在应用时捕获自己拥有的字段、`methods` 数组和嵌套的 budget。选项不会在运行时校验；TypeScript 会拒绝的值按 JavaScript 对待它的方式处理。
+为 HTTP、SSE 和 WebSocket 启用同一份策略，保存在 `config.retry`。没有 `withRetry` 时，每次调用只尝试一次，既简单也没有退避。`withRetry()` 和 `withRetry(undefined)` 等价于 `withRetry({})`。后一次 `withRetry` 会替换策略；`withRetry({ maxRetries: 0 })` 会在启用后关闭重试。该选项在应用时捕获自己拥有的字段、`methods` 与 `statusCodes` 数组以及嵌套的 budget。选项不会在运行时校验；TypeScript 会拒绝的值按 JavaScript 对待它的方式处理。
 
-默认值是 `maxRetries: 3`（首次尝试之后的重试次数；`0` 从不重试）、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`（`Infinity` 去掉上限，平台计时器上限 `2_147_483_647` ms 仍然生效）和 `jitter: 0.2`（0 到 1 的乘性因子）。第 _n_ 次重试等待 `delayMs * factor^(n-1)`，并封顶；随后是抖动和取整，最终延迟再封顶一次。基础延迟为零时始终为零。`methods` 默认为 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 和 `DELETE`，比较时不区分大小写。`attemptTimeoutMs` 限制单次尝试：HTTP 计到响应 body 结束，SSE 计到响应头，WebSocket 计到 `open`。用尽时间的尝试与连接被拒绝一样算作失败。只要时间限制、不要重试时，使用 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。
+默认值是 `maxRetries: 3`（首次尝试之后的重试次数；`0` 从不重试）、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`（`Infinity` 去掉上限，平台计时器上限 `2_147_483_647` ms 仍然生效）、`jitter: 0.2`（0 到 1 的乘性因子：指数退避为 ±20%，`Retry-After` 为仅正向 `[1, 1 + jitter]`）、`statusCodes: [429, 502, 503, 504]`、`retryAfter: true` 和 `maxRetryAfterMs: 60000`（`Infinity` 去掉上限，但仍受平台计时器上限约束）。第 _n_ 次重试等待 `delayMs * factor^(n-1)`，并封顶；随后是抖动和取整，最终延迟再封顶一次。基础延迟为零时始终为零。启用 `retryAfter` 时，`429` 或 `503` HTTP 响应或 SSE 握手响应上有效的 RFC 9110 `Retry-After` 头（`delay-seconds` 或 `HTTP-date`）会替换指数退避，上限为 `maxRetryAfterMs`。`methods` 默认为 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 和 `DELETE`，比较时不区分大小写。`attemptTimeoutMs` 限制单次尝试：HTTP 计到响应 body 结束，SSE 计到响应头，WebSocket 计到 `open`。用尽时间的尝试与连接被拒绝一样算作失败。只要时间限制、不要重试时，使用 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。
 
 每次失败的尝试之后，每种传输都按这个顺序走同一条流程：
 
 1. 调用方中止、手动 `close()`、致命错误（例如媒体类型不匹配）、构造函数抛出的 WebSocket，以及 `ReadableStream` 请求 body，都会结束调用。不会调用 `shouldRetry`。
-2. 已经进行了 `maxRetries` 次重试时，调用结束。不会调用 `shouldRetry`。
-3. `shouldRetry(context)` 做决定；没有它时由 `context.retryable` 决定。它可以返回 promise，调用方的 signal 会取消它。如果它抛出，调用以 `EXT_HOOK_FAILED` 结束，抛出的值作为 `cause`。已经打开的 SSE 流在 `closed.code` 中报告 `EXT_HOOK_FAILED`，并在 `closed.cause` 中放一个 `cause` 为抛出值的 error。已经打开的 WebSocket 会话以 `closed.kind: "error"` 结束，抛出的值作为 `closed.cause`。
-4. 仅 HTTP：预算必须为这次重试付费，否则调用结束。
-5. 调用等待退避延迟，然后均衡器从全部端点中再次选择，包括刚刚失败的那个。单个端点会在延迟之后再次尝试。对 HTTP，每次重试都会重建请求并重新跑完整条拦截器链；SSE 和 WebSocket 复用它们的请求，只重新解析 URL。
+2. 当启用 `retryAfter` 且 `429` 或 `503` 响应携带有超过 `maxRetryAfterMs` 的有效 `Retry-After` 延迟时，调用立即结束，不调用 `shouldRetry`，也不消耗 `budget`。
+3. 已经进行了 `maxRetries` 次重试时，调用结束。不会调用 `shouldRetry`。
+4. `shouldRetry(context)` 做决定；没有它时由 `context.retryable` 决定。它可以返回 promise，调用方的 signal 会取消它。如果它抛出，调用以 `EXT_HOOK_FAILED` 结束，抛出的值作为 `cause`。已经打开的 SSE 流在 `closed.code` 中报告 `EXT_HOOK_FAILED`，并在 `closed.cause` 中放一个 `cause` 为抛出值的 error。已经打开的 WebSocket 会话以 `closed.kind: "error"` 结束，抛出的值作为 `closed.cause`。
+5. 仅 HTTP：预算必须为这次重试付费，否则调用结束。
+6. 调用等待 `Retry-After` 延迟（当 `429` 或 `503` 响应携带且启用时）或指数退避延迟，然后均衡器从全部端点中再次选择，包括刚刚失败的那个。单个端点会在延迟之后再次尝试。对 HTTP，每次重试都会重建请求并重新跑完整条拦截器链；SSE 和 WebSocket 复用它们的请求，只重新解析 URL。
 
-`context` 是按 `transport` 收窄的 [`RetryContext`](/zh-Hans/api/core/retrycontext-type)。每个 context 都有 `attempt`（即将开始的重试序号，从 1 起）、`cause`（fault、error 或关闭原因）和 `retryable`（默认策略的判断）。HTTP 还加上 `method`、`endpoint` 和 `status`；SSE 还加上 `method`、`lastEventId`、`open` 和 `status`；WebSocket 还加上 `code`、`reason` 和 `wasClean`。返回 `context.retryable` 可以保留默认规则并在上面加一条规则，或者返回你自己的结论来替换它。
+`context` 是按 `transport` 收窄的 [`RetryContext`](/zh-Hans/api/core/retrycontext-type)。每个 context 都有 `attempt`（即将开始的重试序号，从 1 起）、`cause`（fault、error 或关闭原因）和 `retryable`（默认策略的判断）。HTTP 还加上 `method`、`endpoint`、`status`、`headers` 和 `retryAfterMs`；SSE 还加上 `method`、`lastEventId`、`open`、`status`、`headers` 和 `retryAfterMs`；WebSocket 还加上 `code`、`reason` 和 `wasClean`。返回 `context.retryable` 可以保留默认规则并在上面加一条规则，或者返回你自己的结论来替换它。
 
 默认哪些结果可以重试，差别只在于哪些失败计入：
 
-| 传输      | 默认 `retryable`                                                                                                                                                                                        |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP      | 方法在 `methods` 中，并且这次尝试没有得到响应、得到了 502、503 或 504，或者用尽了 `attemptTimeoutMs`。任何其他状态都会交给 `shouldRetry`，且 `retryable: false`。Fetch 开始之前的本地失败永远到不了它。 |
-| SSE       | 方法在 `methods` 中，并且握手在网络上失败、握手返回 502、503 或 504、尝试用尽了 `attemptTimeoutMs`，或者已打开的流在网络上失败。流的正常结束从不重试。                                                  |
-| WebSocket | `session.close()` 没有请求的每一次关闭，包括从未打开的连接和没有得到应答的心跳。                                                                                                                        |
+| 传输      | 默认 `retryable`                                                                                                                                                                                                                                      |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP      | 方法在 `methods` 中，并且这次尝试没有得到响应、得到了在 `statusCodes` 中的状态（默认 `429`、`502`、`503` 或 `504`），或者用尽了 `attemptTimeoutMs`。任何其他状态都会交给 `shouldRetry`，且 `retryable: false`。Fetch 开始之前的本地失败永远到不了它。 |
+| SSE       | 方法在 `methods` 中，并且握手在网络上失败、握手返回在 `statusCodes` 中的状态（默认 `429`、`502`、`503` 或 `504`）、尝试用尽了 `attemptTimeoutMs`，或者已打开的流在网络上失败。流的正常结束从不重试。                                                  |
+| WebSocket | `session.close()` 没有请求的每一次关闭，包括从未打开的连接和没有得到应答的心跳。                                                                                                                                                                      |
 
 对 SSE，只含数字的服务器 `retry:` 字段会为之后的尝试替换 `delayMs`，已提交的事件 ID 以 UTF-8 字节写入 `Last-Event-ID`，成功的握手会重置计数。对 WebSocket，成功的 `open` 会重置计数。因此，接受连接后立刻关闭的服务器会一直被重试；用 `shouldRetry` 停掉它。SSE 和 WebSocket 没有预算。HTTP 的离线失败从不重试。
 
@@ -258,5 +259,19 @@ HTTP 预算归 Client 所有，采用 Finagle 风格。它默认为 20%，外加
 `pick` 返回错误优先元组。可选的 `start` 在所选传输开始前至多同步运行一次；可选的 `end` 在 `start` 之后、对端响应开始（或响应前发生失败）时运行一次；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有 Hook 的抛出都会被接住，并在运行时定义了 `reportError` 时用它报告（未处理的报告可以结束一个没有错误处理程序的 Bun 或 Deno 进程）；返回的 promise 不会被等待。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能跨 Core 副本识别它。
 
 均衡器只看到中立结果；每种传输把自己的事实转换成 `DoneInfo.code`。默认离群检测把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。原始 `DoneInfo.status` 只保留给自定义均衡器，内置策略从不读取。`PickInfo` 包含一次 pick 的候选 `endpoints`、`members`（client 的完整端点列表，每次尝试都相同）和可选的 `meta`，没有传输类型判别字段。
+
+## 并发（`@defjs/core/concurrent`）
+
+在共享或派生的 `Client` 上并发执行同构批次或异构任务，支持可选的并发上限与快速失败取消。
+
+### concurrentMap(), concurrentMapSettled(), concurrentAll(), concurrentAllSettled()
+
+<ApiSignature name="concurrentMap, concurrentMapSettled, concurrentAll, concurrentAllSettled" />
+
+### ConcurrencyOptions, ConcurrentTask, ConcurrentTaskRecord
+
+<ApiSignature name="ConcurrencyOptions, ConcurrentTask, ConcurrentTaskRecord" />
+
+`concurrentMap` 与 `concurrentAll` 会在首个操作出现 Fault 时快速失败，中止所有仍在途的兄弟请求（并关闭该批次中早先打开的所有流或会话）；而 `concurrentMapSettled` 与 `concurrentAllSettled` 则收集每一项各自的错误优先元组，不取消兄弟任务。`options.concurrency` 默认为 `Infinity`，若传入非正数或非整数会同步抛出 `RangeError`。见[并发限制与池化调用](/zh-Hans/recipes/concurrency-limit)。
 
 见 [Client 指南](/zh-Hans/docs/client)。

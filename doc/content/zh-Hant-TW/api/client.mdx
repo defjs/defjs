@@ -217,33 +217,34 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事�
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-計入已分類的失敗並依時間剔除端點，也會略過應用程式提供的 `isHealthy` 函式所拒絕的端點。Defjs 不決定什麼叫做健康。除非傳入物件，否則它是關閉的：pick-first、round robin 與 p2c 都透過自己的 `outlierDetection` 選項接受它（`{}` 表示預設值），它也可以直接包住自訂的子平衡器。預設的 `isFailure` 把每個帶 code 的結果都計入，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`；它只決定哪些結果計入剔除，而且可以替換。連續五次失敗之後，懲罰從 1000 ms 起算，每一次剔除增加 1000 ms，再加上不超過基數 0.5 倍的正向抖動，上限為 60000 ms。時間一到，端點就可以再被選取，沒有試探請求，也不判斷是否已復原；懲罰等級會保留，每 10 秒沒有剔除就減一（與 gRPC A50 相同）。在剔除之前就開始的嘗試，或端點被剔除期間開始的嘗試，其遲到的結果會被忽略。沒有配額、最後一台主機保護、結算網格、百分比判準或慢啟動。`isHealthy` 是唯一的健康判斷；它與剔除以 AND 結合，因此 `true` 絕不會結束懲罰，它拋出的例外會以 `REQ_BUILD_FAILED` 回報。所有主機都可能故障；Finagle 式、只限目前清單的失敗時放行仍會送出請求。見[健康過濾與 p2c](/zh-Hant-TW/docs/client#health-filtering-and-p2c)。
+計入已分類的失敗並依時間剔除端點，也會略過應用程式提供的 `isHealthy` 函式所拒絕的端點。Defjs 不決定什麼叫做健康。除非傳入物件，否則它是關閉的：pick-first、round robin 與 p2c 都透過自己的 `outlierDetection` 選項接受它（`{}` 表示預設值），它也可以直接包住自訂的子平衡器。預設的 `isFailure` 把每個帶 code 的結果都計入，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`；它只決定哪些結果計入剔除，而且可以替換。連續五次失敗之後，懲罰從 1000 ms 起算，每一次剔除增加 1000 ms，再加上不超過基數 0.5 倍的正向抖動，上限為 60000 ms。預設情況下（`halfOpen: false`），時間一到端點就可以對所有呼叫端再次被選取；若設為 `halfOpen: true`，懲罰到期後會進入單一試探狀態，每次只放行一個試探請求，成功時恢復全量流量，失敗時則立刻以下一個懲罰等級重新剔除（受 `maxEjectionPercent` 約束）。懲罰等級會保留，每 10 秒沒有剔除就減一（與 gRPC A50 相同）。在剔除之前就開始的嘗試，或端點被剔除期間開始的嘗試，其遲到的結果會被忽略。`maxEjectionPercent`（預設 `100`，無配額）限制同時可被剔除的候選端點數量上限（`Math.floor(endpoints.length * maxEjectionPercent / 100)`）。沒有最後一台主機保護、結算網格或慢啟動。`isHealthy` 是唯一的健康判斷；它與剔除以 AND 結合，因此 `true` 絕不會結束懲罰，它拋出的例外會以 `REQ_BUILD_FAILED` 回報。所有主機都可能故障或正在等待進行中的試探；Finagle 式、只限目前清單的失敗時放行仍會送出請求。見[健康過濾與 p2c](/zh-Hant-TW/docs/client#health-filtering-and-p2c)。
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
-為 HTTP、SSE 與 WebSocket 啟用同一份重試策略，存在 `config.retry` 裡。沒有 `withRetry` 時，每次呼叫只嘗試一次，單純且沒有退避。`withRetry()` 與 `withRetry(undefined)` 等同於 `withRetry({})`。後一次 `withRetry` 會取代該策略；`withRetry({ maxRetries: 0 })` 會在啟用之後關閉重試。該選項會在套用時複製自己擁有的欄位、`methods` 陣列與巢狀 budget。選項不會在執行時期驗證；TypeScript 會拒絕的值，會照 JavaScript 對待它的方式運作。
+為 HTTP、SSE 與 WebSocket 啟用同一份重試策略，存在 `config.retry` 裡。沒有 `withRetry` 時，每次呼叫只嘗試一次，單純且沒有退避。`withRetry()` 與 `withRetry(undefined)` 等同於 `withRetry({})`。後一次 `withRetry` 會取代該策略；`withRetry({ maxRetries: 0 })` 會在啟用之後關閉重試。該選項會在套用時複製自己擁有的欄位、`methods` 與 `statusCodes` 陣列，以及巢狀 budget。選項不會在執行時期驗證；TypeScript 會拒絕的值，會照 JavaScript 對待它的方式運作。
 
-預設值是 `maxRetries: 3`（第一次嘗試之後的重試次數；`0` 絕不重試）、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`（`Infinity` 會移除上限，平台計時器上限 `2_147_483_647` ms 仍然生效），以及 `jitter: 0.2`（0 到 1 的乘性係數）。第 _n_ 次重試等待 `delayMs * factor^(n-1)`，先封頂；接著套用抖動與捨入，然後最終延遲再封頂一次。base 為零時維持零。`methods` 預設為 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 與 `DELETE`，比較時不區分大小寫。`attemptTimeoutMs` 限制單次嘗試：HTTP 計到回應本文結束，SSE 計到回應標頭，WebSocket 計到 `open`。用完時間的嘗試是一次失敗，與連線被拒絕相同。只要時間限制、不要重試時，使用 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。
+預設值是 `maxRetries: 3`（第一次嘗試之後的重試次數；`0` 絕不重試）、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`（`Infinity` 會移除上限，平台計時器上限 `2_147_483_647` ms 仍然生效）、`jitter: 0.2`（0 到 1 的乘性係數：指數退避為 ±20%，`Retry-After` 為僅正向 `[1, 1 + jitter]`）、`statusCodes: [429, 502, 503, 504]`、`retryAfter: true` 與 `maxRetryAfterMs: 60000`（`Infinity` 移除上限，但仍受平台計時器上限限制）。第 _n_ 次重試等待 `delayMs * factor^(n-1)`，先封頂；接著套用抖動與捨入，然後最終延遲再封頂一次。base 為零時維持零。當啟用 `retryAfter` 時，`429` 或 `503` HTTP 或 SSE 交握回應上有效的 RFC 9110 `Retry-After` 標頭（`delay-seconds` 或 `HTTP-date`）會取代指數退避，上限為 `maxRetryAfterMs`。`methods` 預設為 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 與 `DELETE`，比較時不區分大小寫。`attemptTimeoutMs` 限制單次嘗試：HTTP 計到回應本文結束，SSE 計到回應標頭，WebSocket 計到 `open`。用完時間的嘗試是一次失敗，與連線被拒絕相同。只要時間限制、不要重試時，使用 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。
 
 每次失敗的嘗試之後，每種傳輸都依這個順序執行同一套流程：
 
 1. 呼叫端中止、手動 `close()`、致命錯誤（例如媒體類型不符）、建構子會拋出例外的 WebSocket，以及 `ReadableStream` 請求本文都會結束呼叫。不會呼叫 `shouldRetry`。
-2. 已經做完 `maxRetries` 次重試時，呼叫結束。不會呼叫 `shouldRetry`。
-3. 由 `shouldRetry(context)` 決定；沒有它時，由 `context.retryable` 決定。它可以回傳 promise，呼叫端的 signal 會取消它。若它拋出，呼叫會以 `EXT_HOOK_FAILED` 結束，拋出的值成為 `cause`。已經開啟的 SSE 串流會在 `closed.code` 回報 `EXT_HOOK_FAILED`，並在 `closed.cause` 放一個 error，其 `cause` 是拋出的值。已經開啟的 WebSocket 工作階段會以 `closed.kind: "error"` 結束，拋出的值成為 `closed.cause`。
-4. 僅 HTTP：預算必須支付這次重試，否則呼叫結束。
-5. 呼叫等待退避延遲，然後平衡器從每一個端點重新選取，包括剛剛失敗的那個。單一端點會在延遲之後再試一次。對 HTTP 而言，每一次重試都會重建請求並重新執行完整的攔截器鏈；SSE 與 WebSocket 會重用請求，只重新解析 URL。
+2. 當啟用 `retryAfter` 且 `429` 或 `503` 回應帶有超過 `maxRetryAfterMs` 的有效 `Retry-After` 延遲時，呼叫會立刻結束，不會呼叫 `shouldRetry` 也不會消耗 `budget`。
+3. 已經做完 `maxRetries` 次重試時，呼叫結束。不會呼叫 `shouldRetry`。
+4. 由 `shouldRetry(context)` 決定；沒有它時，由 `context.retryable` 決定。它可以回傳 promise，呼叫端的 signal 會取消它。若它拋出，呼叫會以 `EXT_HOOK_FAILED` 結束，拋出的值成為 `cause`。已經開啟的 SSE 串流會在 `closed.code` 回報 `EXT_HOOK_FAILED`，並在 `closed.cause` 放一個 error，其 `cause` 是拋出的值。已經開啟的 WebSocket 工作階段會以 `closed.kind: "error"` 結束，拋出的值成為 `closed.cause`。
+5. 僅 HTTP：預算必須支付這次重試，否則呼叫結束。
+6. 呼叫等待 `Retry-After` 延遲（當 `429` 或 `503` 回應帶有且已啟用時）或指數退避延遲，然後平衡器從每一個端點重新選取，包括剛剛失敗的那個。單一端點會在延遲之後再試一次。對 HTTP 而言，每一次重試都會重建請求並重新執行完整的攔截器鏈；SSE 與 WebSocket 會重用請求，只重新解析 URL。
 
-`context` 是依 `transport` 收窄的 [`RetryContext`](/zh-Hant-TW/api/core/retrycontext-type)。每個 context 都有 `attempt`（即將開始的重試編號，從 1 起算）、`cause`（fault、error 或關閉原因）與 `retryable`（預設策略的決定）。HTTP 另外有 `method`、`endpoint` 與 `status`；SSE 另外有 `method`、`lastEventId`、`open` 與 `status`；WebSocket 另外有 `code`、`reason` 與 `wasClean`。回傳 `context.retryable` 可保留預設，再在上面加上規則；回傳你自己的判定則會取代它。
+`context` 是依 `transport` 收窄的 [`RetryContext`](/zh-Hant-TW/api/core/retrycontext-type)。每個 context 都有 `attempt`（即將開始的重試編號，從 1 起算）、`cause`（fault、error 或關閉原因）與 `retryable`（預設策略的決定）。HTTP 另外有 `method`、`endpoint`、`status`、`headers` 與 `retryAfterMs`；SSE 另外有 `method`、`lastEventId`、`open`、`status`、`headers` 與 `retryAfterMs`；WebSocket 另外有 `code`、`reason` 與 `wasClean`。回傳 `context.retryable` 可保留預設，再在上面加上規則；回傳你自己的判定則會取代它。
 
 預設哪些情況可重試，差別只在哪些失敗算進去：
 
-| 傳輸      | 預設 `retryable`                                                                                                                                                                                |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP      | 方法屬於 `methods`，且該次嘗試沒有得到回應、得到 502、503 或 504，或用完 `attemptTimeoutMs`。其他任何狀態都會帶著 `retryable: false` 交給 `shouldRetry`。Fetch 開始之前的本機失敗絕不會到達它。 |
-| SSE       | 方法屬於 `methods`，且交握發生網路失敗、交握回了 502、503 或 504、嘗試用完 `attemptTimeoutMs`，或已開啟的串流發生網路失敗。串流正常結束絕不會重試。                                             |
-| WebSocket | `session.close()` 沒有要求的每一次關閉，包括從未開啟的連線與沒有得到回應的心跳。                                                                                                                |
+| 傳輸      | 預設 `retryable`                                                                                                                                                                                                                              |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP      | 方法屬於 `methods`，且該次嘗試沒有得到回應、得到屬於 `statusCodes` 的狀態（預設 `429`、`502`、`503` 或 `504`），或用完 `attemptTimeoutMs`。其他任何狀態都會帶著 `retryable: false` 交給 `shouldRetry`。Fetch 開始之前的本機失敗絕不會到達它。 |
+| SSE       | 方法屬於 `methods`，且交握發生網路失敗、交握回了屬於 `statusCodes` 的狀態（預設 `429`、`502`、`503` 或 `504`）、嘗試用完 `attemptTimeoutMs`，或已開啟的串流發生網路失敗。串流正常結束絕不會重試。                                             |
+| WebSocket | `session.close()` 沒有要求的每一次關閉，包括從未開啟的連線與沒有得到回應的心跳。                                                                                                                                                              |
 
 對 SSE 而言，伺服器送出的純數字 `retry:` 欄位會取代之後嘗試的 `delayMs`，已提交的事件 ID 會以 UTF-8 位元組放進 `Last-Event-ID`，成功的交握會重設次數。對 WebSocket 而言，成功的 `open` 會重設次數。會接受連線然後立刻關掉的伺服器因此會一直被重試；請用 `shouldRetry` 停掉它。SSE 與 WebSocket 沒有預算。HTTP 的離線失敗絕不會重試。
 
@@ -258,5 +259,19 @@ HTTP 預算歸 client 所有，採 Finagle 風格。預設為 20%，再加上 10
 `pick` 回傳 error-first tuple。選用的 `start` 會在所選傳輸開始之前同步執行至多一次；選用的 `end` 會在 `start` 之後、對端回應開始（或回應前發生失敗）時執行一次；選用的 `done` 則在完成時執行一次。Fetch 無法揭露 Linkerd 的首個本文訊框，也無法揭露 Envoy 的串流邊界。所有鉤子拋出的例外都會被接住，並在執行環境有定義 `reportError` 的地方以它回報（未被處理的回報可以結束沒有錯誤處理常式的 Bun 或 Deno 行程）；回傳的 Promise 不會被等待。`ERR_NO_CANDIDATE` 只會作為 `REQ_BUILD_FAILED` 的 `cause`，不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-TW/api/core/isnocandidatecause) 也能辨識來自另一份 Core 副本的它。
 
 平衡器只看得到中立的結果；每種傳輸會把自己的事實轉譯成 `DoneInfo.code`。預設的 outlier detection 把每個帶 code 的結果都計為失敗，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。原始的 `DoneInfo.status` 只保留給自訂平衡器，內建策略從不讀取它。`PickInfo` 包含一次 pick 的候選 `endpoints`、`members`（client 的完整端點清單，每次嘗試都相同）與選用的 `meta`，沒有傳輸類型的判別欄位。
+
+## 並行（`@defjs/core/concurrent`）
+
+在共用或衍生的 `Client` 上並行執行同質批次或異質任務，支援選用的並行上限與快速失敗取消。
+
+### concurrentMap(), concurrentMapSettled(), concurrentAll(), concurrentAllSettled()
+
+<ApiSignature name="concurrentMap, concurrentMapSettled, concurrentAll, concurrentAllSettled" />
+
+### ConcurrencyOptions, ConcurrentTask, ConcurrentTaskRecord
+
+<ApiSignature name="ConcurrencyOptions, ConcurrentTask, ConcurrentTaskRecord" />
+
+`concurrentMap` 與 `concurrentAll` 會在第一個操作出現 fault 時快速失敗，中止所有進行中的同批請求（並關閉該批次中稍早開啟的所有串流或工作階段）；而 `concurrentMapSettled` 與 `concurrentAllSettled` 則會收集每一項各自的 error-first tuple，不取消同批任務。`options.concurrency` 預設為 `Infinity`，若傳入非正數或非整數會同步拋出 `RangeError`。見[並行限制與池化呼叫](/zh-Hant-TW/recipes/concurrency-limit)。
 
 見 [Client 指南](/zh-Hant-TW/docs/client)。

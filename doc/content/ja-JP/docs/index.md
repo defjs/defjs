@@ -12,6 +12,7 @@ Defjs は、SDK チームが公開する API 契約（定義）と、アプリ�
 - [概要](/ja-JP)
 - [クイックスタート](/ja-JP/docs/start)
 - [コアアーキテクチャ](/ja-JP/docs/design-decisions)
+- [比較とハイブリッドアーキテクチャ](/ja-JP/docs/comparison-and-architecture)
 
 ## SDK の定義 [#defining-sdks]
 
@@ -26,6 +27,7 @@ Defjs は、SDK チームが公開する API 契約（定義）と、アプリ�
 - [エラーハンドリング](/ja-JP/docs/errors)
 - [インターセプター](/ja-JP/docs/interceptors)
 - [ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing)
+- [Port トランスポート](/ja-JP/docs/port)
 
 ## ベストプラクティス [#best-practices]
 
@@ -40,5 +42,6 @@ Defjs は、SDK チームが公開する API 契約（定義）と、アプリ�
 - [React](/ja-JP/docs/integrations/react)
 - [Vue](/ja-JP/docs/integrations/vue)
 - [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server)
+- [CLI & OpenAPI ジェネレーター](/ja-JP/docs/integrations/cli)
 - [Skill](/ja-JP/docs/ai)
 - [llms.txt](/ja-JP/docs/ai-api)

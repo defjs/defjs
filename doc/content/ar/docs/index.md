@@ -12,6 +12,7 @@ description: صمّم عقود حزم SDK وعملياتها، وانشرها، 
 - [نظرة عامة](/ar)
 - [البدء السريع](/ar/docs/start)
 - [معمارية النواة](/ar/docs/design-decisions)
+- [المقارنة والبنية الهجينة](/ar/docs/comparison-and-architecture)
 
 ## تعريف حزم SDK [#defining-sdks]
 
@@ -26,6 +27,7 @@ description: صمّم عقود حزم SDK وعملياتها، وانشرها، 
 - [معالجة الأخطاء](/ar/docs/errors)
 - [المعترضات (Interceptors)](/ar/docs/interceptors)
 - [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing)
+- [وسيلة نقل Port](/ar/docs/port)
 
 ## أفضل الممارسات [#best-practices]
 
@@ -40,5 +42,6 @@ description: صمّم عقود حزم SDK وعملياتها، وانشرها، 
 - [React](/ar/docs/integrations/react)
 - [Vue](/ar/docs/integrations/vue)
 - [خادم OpenTelemetry](/ar/docs/integrations/opentelemetry-server)
+- [أداة CLI ومولّد OpenAPI](/ar/docs/integrations/cli)
 - [Skill](/ar/docs/ai)
 - [llms.txt](/ar/docs/ai-api)

@@ -26,7 +26,7 @@ description: كيفية كتابة حالات الاختبار داخل مشرو
 
 - **لماذا `https://fixture.invalid`**: تتحقق `createClient` من صحة رابط الأساس قبل وصول الطلب إلى `withHTTPHandle`؛ والنطاق `.invalid` محجوز حسب RFC ولا يستعلم DNS عاماً أبداً حتى مع خطأ في الإعدادات.
 - **مقبض مستقل لكل بروتوكول**: يعترض `withHTTPHandle` طلبات HTTP (`defineRequest`) فقط. استخدم `withSSEHandle` مع `defineEventStream` و`withWebSocketHandle` مع `defineWebSocket`.
-- **الإعدادات الافتراضية لإعادة المحاولة وفخ `withRetry(undefined)`**: إعادة المحاولة معطّلة عند حذف `withRetry` — اتركها معطلة في اختبارات الوحدة العادية كي تعود حالات `502`/`503`/`504` وأخطاء الشبكة بعد محاولة واحدة دون انتظار تراجع `1s + 2s + 4s`. انتبه: استدعاء `withRetry()` أو `withRetry(undefined)` يفعّل **3 محاولات افتراضية**. لتعطيلها صراحةً مرّر `withRetry({ maxRetries: 0 })`.
+- **الإعدادات الافتراضية لإعادة المحاولة وفخ `withRetry(undefined)`**: إعادة المحاولة معطّلة عند حذف `withRetry` — اتركها معطلة في اختبارات الوحدة العادية كي تعود حالات `429`/`502`/`503`/`504` وأخطاء الشبكة بعد محاولة واحدة دون انتظار تراجع `1s + 2s + 4s`. انتبه: استدعاء `withRetry()` أو `withRetry(undefined)` يفعّل **3 محاولات افتراضية**. لتعطيلها صراحةً مرّر `withRetry({ maxRetries: 0 })`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>

@@ -1,0 +1,105 @@
+---
+title: CLI & OpenAPI-Generator
+description: Zustandslose ESM-@defjs/core-Definitionen und Struct-Schemas mit @defjs/cli aus Swagger-2.0- und OpenAPI-3.0–3.2-Spezifikationen generieren.
+---
+
+# CLI & OpenAPI-Generator
+
+`@defjs/cli` ist eine Entwicklungs-CLI für Node.js (`>= 22.18.0`) und Bun – ausgeliefert als Single-File-ESM-Bundle ohne Laufzeitabhängigkeiten und mit `@defjs/core` als optionaler Peer-Abhängigkeit –, die Swagger-2.0- und OpenAPI-3.0–3.2-Spezifikationen (über gebündeltes `@scalar/openapi-parser`) mithilfe eines eingebauten AST-Printers mit 2 Leerzeichen Einrückung in **zustandslose ESM**-`@defjs/core`-Definitionen und `struct`-Schemas umwandelt. Generierte Module erfassen keinen Client, erzeugen keine Klassen und versehen reine Deklarationen mit `/*#__PURE__*/`.
+
+Als Entwicklungsabhängigkeit installieren:
+
+```bash
+bun add -D @defjs/cli
+```
+
+Der Aufruf von `defjs` ohne Argumente gibt die Hilfe aus und beendet sich sauber.
+
+## Konfiguration und programmatische API
+
+Konfiguriere Ziele in `defjs.config.ts` (oder `.mts` / `.mjs` / `.js`, geladen über natives Node `>= 22.18` bzw. Bun `import()`) mit `defineConfig` oder rufe `generateOpenApi` aus einem eigenen Skript heraus auf:
+
+<Tabs items={["openapi/orders.json", "defjs.config.ts", "app/generate.ts"]}>
+  <Tab>
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders API", "version": "1.0.0" },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "status"],
+                  "properties": {
+                    "id": { "type": "number" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/defjs.config.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/app/generate.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Führe anschließend die Generierung oder eine Drift-Prüfung in der CI per CLI aus:
+
+```bash
+npx @defjs/cli openapi generate
+npx @defjs/cli openapi generate --check
+```
+
+## Wichtige Flags und Defjs-Leitplanken
+
+| Flag / Option                       | Werte                                                                                                              | Verhalten                                                                                                                                                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--input`, `input`                  | Lokales `.yaml`/`.yml`/`.json`/`.ts`/`.mts`/`.js`/`.mjs`, `http(s):`-URL, importiertes Objekt oder Loader-Funktion | Lädt `.ts`-/`.mts`-/`.js`-/`.mjs`-Module über natives Node `>= 22.18` / Bun `import()` und Spezifikationen über Scalar (`upgrade` für einzelne Swagger-2.0-/3.0-Dateien; bewahrt dateiübergreifende `$ref`s) |
+| `--format`, `format`                | `ts` (Standard), `tsx`, `js` (`.js` + `.d.ts`), `mjs` (`.mjs` + `.d.mts`)                                          | Gibt zustandslose ESM-Module gruppiert nach Tag unter `schema/` und `request/` aus (plus bei Bedarf ein gemeinsames Root-`util`-Modul)                                                                       |
+| `--mode`, `mode`                    | `sync` (Standard), `scaffold`                                                                                      | `sync` bereinigt veraltete verwaltete Dateien und prüft Header-Eigentümerschaft; `scaffold` schreibt nur fehlende Dateien                                                                                    |
+| `--error-strategy`, `errorStrategy` | `none` (Standard), `union`                                                                                         | `none` vermeidet das Dekodieren von Nicht-2xx-HTML-Gateway-Fehlern; `union` synthetisiert ein dokumentiertes Nicht-2xx-`error`-Struct                                                                        |
+| `--mixed-2xx`, `mixed2xxStrategy`   | `omit` (Standard), `split`                                                                                         | Mischt eine Operation 2xx mit Body und `204`, warnt `omit` sauber und lässt `output` weg, während `split` `<op>NoContent` ergänzt                                                                            |
+| `--check`                           | boolean                                                                                                            | Beendet mit Exit-Code `1`, sobald eine verwaltete Datei abweicht oder gelöscht würde                                                                                                                         |
+
+Der generierte Code erfüllt sämtliche Defjs-Verträge:
+
+- `input` + expliziter synchroner `builder` (reicht typisiertes `body: input.body` direkt durch, wenn JSON-Bodys `.alias(...)`-Umbenennungen tragen)
+- Nicht-standardmäßige Query-Stile (`deepObject`, `pipeDelimited`, `spaceDelimited`, `form` mit `explode: false`, `json`) sowie nicht-standardmäßige Pfad- und Header-Parameter-Serialisierer (`label`, `matrix`, `simple` für Arrays/Objekte) geben nur die jeweils benötigte Helper-Closure in ein gemeinsames Root-`util`-Modul (`util.ts`/`.tsx`/`.js`/`.mjs` + `util.d.ts`/`.d.mts` bei JS-Formaten) aus, das von `request/<group>`-Dateien aus `../util` importiert wird
+- Streaming-`text/event-stream`-Antworten (`itemSchema`) geben `defineEventStream` statt `defineRequest` aus
+- Wechselseitig oder selbst-rekursive Schemas erzeugen topologisch in Post-Order sortierte Deklarationen mit Lazy-Getter-Properties auf Objektzyklen und verhindern so `ReferenceError`-TDZ-Abstürze beim Laden des Moduls
+
+Siehe die [CLI-API-Referenz](/de-DE/api/cli).

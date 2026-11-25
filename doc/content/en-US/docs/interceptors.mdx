@@ -55,16 +55,16 @@ An HTTP interceptor can return a synthetic response without calling `next(req)` 
 
 ## 3. Retries and `Retry-After`
 
-HTTP retries are off by default. To retry a connection failure, a timeout, or a `502`, `503`, or `504` on another endpoint, use [`withRetry()`](/docs/load-balancing#retries). After the backoff delay it lets the balancer pick again, rebuilds the request, and reruns the complete interceptor chain.
+HTTP retries are off by default. To retry a connection failure, a timeout, or a status in `statusCodes` (`429`, `502`, `503`, or `504` by default) with native RFC 9110 `Retry-After` support on `429` and `503` (`retryAfter: true`, `maxRetryAfterMs: 60_000`), use [`withRetry()`](/docs/load-balancing#retries). After the delay it lets the balancer pick again, rebuilds the request, and reruns the complete interceptor chain.
 
-An application interceptor can instead implement same-endpoint status handling, such as `429` and `Retry-After`:
+When an application needs **custom same-endpoint** status handling—such as retrying on the selected endpoint without re-running `builder` or outer interceptors, substituting a fallback delay when `Retry-After` is absent, or capping waits instead of failing fast—an interceptor can loop on `next(request)` directly:
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **Two retry layers**: This `next(request)` loop stays on the selected endpoint and does not rerun the builder or outer interceptors. Connection failures and `502`/`503`/`504` belong to `withRetry`.
-- **`Retry-After` policy**: Core `withRetry` does not read this header. The recipe's 30-second cap and 250 ms fallback are application choices. Capping a longer server delay can retry earlier than requested; if that is unacceptable, wait for the full delay or return the response instead.
+- **Two retry layers**: This `next(request)` loop stays on the selected endpoint and does not rerun the builder or outer interceptors. Connection failures, cross-endpoint failover, and default `429`/`502`/`503`/`504` policies belong to `withRetry`.
+- **Built-in vs. custom `Retry-After` policy**: Core `withRetry()` honors RFC 9110 `Retry-After` on `429` and `503` by default (failing fast without retrying if the server-requested delay exceeds `maxRetryAfterMs`). If you handle `429` inside a custom interceptor like the recipe above, configure `withRetry({ retryAfter: false })` (or omit `429` from `statusCodes`) to avoid double-retrying; the recipe's 30-second cap and 250 ms fallback are application choices, and capping a longer server delay can retry earlier than requested.
 - **401 writes**: The [Bearer-refresh recipe](/recipes/refresh-bearer-once) can deliver a JSON POST twice. Require authentication rejection before business processing and a stable idempotency key with server-side deduplication, or do not automatically replay writes. Stream request bodies are not replayed.
 - **Handling transport rejections**: `next(request)` rejects when a network error occurs (there is no status-0 response). Catching and rethrowing that rejection preserves the original `NET_*` fault code.
 - **Requests that cannot be sent**: In an HTTP interceptor, when the platform refuses the request (an invalid or forbidden method, a GET or HEAD body, a URL with credentials, an invalid `Content-Type`) or a `finalizeHeaders` hook throws, `next(request)` rejects with the platform's own error (a `TypeError`) or the value the hook threw, not with the library's `BodyFailure` wrapper. Rethrowing it keeps the fault code (`REQ_BUILD_FAILED` or `EXT_HOOK_FAILED`); throwing a different error makes the failure yours (`EXT_INTERCEPTOR_FAILED`). The other failures found around the transport still reach `next(request)` as `BodyFailure`: a response body that cannot be read, decoded or matched to its media type, a truncated body, and a throwing upload progress observer (`EXT_OBSERVER_FAILED`), which can happen before the request is sent.
@@ -96,17 +96,23 @@ A transport interceptor sees one request at a time: an input that fails validati
 
 ## 6. Built-in factories and helpers
 
-| Export                                         | Transport | Description                                                                                  |
-| ---------------------------------------------- | --------- | -------------------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | Wraps `(req, next) => Promise<HttpResponse<unknown>>`                                        |
-| `createSSEInterceptor(fn)`                     | SSE       | Wraps `(req, next) => Promise<EventStreamHandle<unknown>>`                                   |
-| `createWebSocketInterceptor(fn)`               | WebSocket | Wraps `(req, next) => Promise<WebSocketSessionLike>`                                         |
-| `createOperationInterceptor(fn)`               | All       | Wraps `(call, next) => Promise<result>` around a whole operation call                        |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injects `Authorization: Basic ...` from a synchronous credential provider called per request |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injects `Authorization: Basic ...` on SSE handshakes                                         |
+| Export                                         | Transport | Description                                                                                                                                                            |
+| ---------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | Wraps `(req, next) => Promise<HttpResponse<unknown>>`                                                                                                                  |
+| `createSSEInterceptor(fn)`                     | SSE       | Wraps `(req, next) => Promise<EventStreamHandle<unknown>>`                                                                                                             |
+| `createWebSocketInterceptor(fn)`               | WebSocket | Wraps `(req, next) => Promise<WebSocketSessionLike>`                                                                                                                   |
+| `createOperationInterceptor(fn)`               | All       | Wraps `(call, next) => Promise<result>` around a whole operation call                                                                                                  |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injects `Authorization: Basic ...` from a synchronous credential provider called per request                                                                           |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injects `Authorization: Basic ...` on SSE handshakes                                                                                                                   |
+| `concurrencyLimitHttpInterceptor(options)`     | HTTP      | Limits concurrent in-flight attempts per bucket (`ConcurrencyLimitInterceptorOptions`); queues FIFO up to `maxQueue` and rejects overflow with `BulkheadOverflowError` |
+| `idempotencyKeyHttpInterceptor(options?)`      | HTTP      | Injects an idempotency key header (`IdempotencyKeyInterceptorOptions`, default `Idempotency-Key`) on mutating methods (`POST`, `PATCH`), reusing `req.correlationId`   |
+
+`concurrencyLimitHttpInterceptor` releases permits during `withRetry` backoff waits so retries cannot deadlock the bulkhead, and throws `BulkheadOverflowError` (surfaced as `EXT_INTERCEPTOR_FAILED` with `{ attempted: false }`) when `maxQueue` is exceeded. See the [Interceptors API reference](/api/interceptors).
 
 ## Related reading
 
+- [Idempotency keys on retries](/recipes/idempotency-key)
+- [Bulkhead concurrency limits](/recipes/concurrency-limit)
 - [Refresh a Bearer token once on 401](/recipes/refresh-bearer-once)
 - [ETag conditional requests](/recipes/etag-revalidate)
 - [OpenTelemetry Server](/docs/integrations/opentelemetry-server)

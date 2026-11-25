@@ -1,0 +1,78 @@
+---
+title: 비교 및 하이브리드 아키텍처
+description: fetch, ky, ofetch, openapi-fetch, oRPC와의 객관적인 비교와 하이브리드 Defjs + oRPC/Hono BFF 아키텍처 및 재현 가능한 벤치마크를 살펴봅니다.
+---
+
+# 비교 및 하이브리드 아키텍처
+
+Defjs는 두 생태계, 즉 **브라우저/Node HTTP 클라이언트**(`fetch`, `ky`, `ofetch`, `axios`, `openapi-fetch`)와 **계약 우선(contract-first) RPC 프레임워크**(`oRPC`, tRPC)의 교차점에 자리합니다. 이 가이드에서는 각 도구가 어디에 적합한지, 언제 Defjs가 불필요한 오버헤드인지, 그리고 프로덕션 환경에서 이들을 어떻게 조합해 사용하는지 설명합니다.
+
+## 생태계 비교
+
+| 역량                                    | 순수 `fetch`                       | `ky` / `ofetch`                     | `openapi-fetch`                              | `oRPC`                                  | Defjs (`@defjs/core`)                                                      |
+| --------------------------------------- | ---------------------------------- | ----------------------------------- | -------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------- |
+| 주요 설계 목적                          | 플랫폼 프리미티브                  | 앱 HTTP 래퍼                        | 타입화된 OpenAPI Fetch 클라이언트            | 풀스택 TS RPC 프레임워크                | SDK 정의 + 복원력 있는 클라이언트 키트                                     |
+| 정의 / 클라이언트 분리                  | 수동                               | 기본 URL별 인스턴스 결합            | 경로 타입 공유; 클라이언트가 호출 소유       | RPC 계약으로 라우터와 클라이언트 결합   | 일급 지원(`define*` 데이터 vs. `Client`)                                   |
+| 통합 전송 방식                          | HTTP 전용                          | HTTP 전용                           | HTTP 전용                                    | HTTP + SSE/이벤트 이터레이터(서버 소유) | 하나의 클라이언트 아래 HTTP, SSE, WebSocket 지원                           |
+| 런타임 와이어 계약 및 별칭              | 없음                               | 없음                                | 선택적 미들웨어                              | 외부 검증기(Zod/Valibot/ArkType)        | 의존성 없는 `struct`와 양방향 `.alias()`                                   |
+| 실패 시맨틱                             | 네트워크 오류 시 reject; `!res.ok` | `HTTPError` throw                   | `{ data, error }` (throw 또는 네트워크 거부) | 안전한/throw 가능한 RPC 오류            | 예외 없는 `[err, value, meta]` Go 스타일 튜플                              |
+| 다중 업스트림 로드 밸런싱               | 없음                               | 없음                                | 없음                                         | 링크 플러그인(내장 P2C EWMA 없음)       | 내장 `p2cBalancer` + `outlierDetection` (`halfOpen`, `maxEjectionPercent`) |
+| `429` + `Retry-After` + 상관관계 ID     | 수동                               | `ky`는 `Retry-After` 처리; 단일 URL | 내장 없음                                    | 클라이언트 재시도 플러그인              | 네이티브 `429`/RFC `Retry-After`, 재시도 예산 및 `correlationId`           |
+| 구조화된 동시성(Structured concurrency) | 순수 `Promise.all`                 | 순수 `Promise.all`                  | 순수 `Promise.all`                           | 배치 플러그인 / `Promise.all`           | 클라이언트에 바인딩된 `@defjs/core/concurrent` + 취소 전파                 |
+| OpenAPI 코드 생성                       | 없음                               | 없음                                | `openapi-typescript` 타입만 생성             | oRPC 라우터에서 OpenAPI 사양 export     | `@defjs/cli`가 상태 없는 ESM + `struct` 생성                               |
+| 경계 간 프록시(Cross-boundary proxy)    | 수동 `postMessage`                 | 수동                                | 수동                                         | MessagePort / 워커 어댑터               | `@defjs/core/port` + `/webext` (HTTP, SSE, WS + 기본 거부 출처 정책)       |
+
+### 다른 대안을 선택해야 하는 경우
+
+- **순수 `fetch`, `ofetch`, 또는 `ky`를 선택하세요**: SDK 배포, 다중 업스트림 장애 조치, 런타임 스키마 검증(~4–10 KB brotli) 없이 동일 오리진(same-origin) 엔드포인트 몇 개만 호출하는 앱에 적합합니다.
+- **`openapi-fetch`를 선택하세요**: 이미 `openapi-typescript` 타입을 유지 관리하고 있으며, 런타임 와이어 디코딩 없이 최소한의 Fetch 래퍼와 컴파일 타임 타입만 원하는 경우에 적합합니다.
+- **`oRPC`(또는 Hono RPC)를 선택하세요**: 팀이 TypeScript 서버와 브라우저 클라이언트를 모두 소유하고, 별도의 HTTP 계약을 유지 관리하지 않고도 종단 간 프로시저 추론을 원하는 **퍼스트파티 프런트엔드-BFF / 풀스택 RPC**에 적합합니다.
+
+---
+
+## 하이브리드 BFF 블루프린트: 엣지에는 oRPC / Hono, 다운스트림에는 Defjs
+
+대규모 프로덕션에서 가장 흔한 패턴은 Defjs를 `oRPC`나 `Hono`와 대결시키는 것이 아니라, 신뢰 경계(trust boundary)를 사이에 두고 두 도구를 함께 배치하는 것입니다:
+
+```txt
+┌──────────────┐   First-party RPC (oRPC / Hono)   ┌─────────────────────────────────┐
+│ Browser /    │ ────────────────────────────────▶ │ BFF (Hono / oRPC Server)        │
+│ Mobile App   │ ◀──────────────────────────────── │                                 │
+└──────────────┘                                   │  @defjs/core Client:            │
+                                                   │  • undici.Pool handle           │
+                                                   │  • p2cBalancer({                │
+                                                   │      outlierDetection: {        │
+                                                   │        halfOpen: true           │
+                                                   │      }                          │
+                                                   │    })                           │
+                                                   │  • withRetry (429 / 503)        │
+                                                   │  • bulkhead + idempotency       │
+                                                   │  • @defjs/opentelemetry-server  │
+                                                   └────────────────┬────────────────┘
+                                                                    │
+                                        Downstream REST / SSE / WS  │
+                               ┌────────────────────────────────────┴────────┐
+                               ▼                                             ▼
+                    서드파티 SaaS API                             내부 마이크로서비스
+                    (@defjs/cli로 생성)                          (노드 A, B, C 장애 조치)
+```
+
+이 분리 구조에서:
+
+1. **브라우저 ↔ BFF** 구간은 빠른 퍼스트파티 RPC 개발을 위해 `oRPC` 또는 `Hono`를 사용합니다.
+2. **BFF ↔ 다운스트림 API** 구간은 `@defjs/core`(주로 `@defjs/cli`로 벤더 OpenAPI 사양에서 생성하고 [`undici.Pool`](/ko-KR/recipes/undici-pool)로 풀링함)를 사용하여, 느려진 단일 다운스트림 인스턴스(`B`)나 속도 제한(`429` / `503`)에 걸린 인스턴스(`C`)가 BFF 워커 용량을 고갈시키기 전에 `p2cBalancer` + `outlierDetection`으로 격리합니다.
+
+---
+
+## 재현 가능한 벤치마크 주요 결과
+
+아래의 모든 수치는 격리되고 lockfile이 고정된 [`bench/`](https://github.com/defjs/defjs/blob/main/bench/REPORT.md) 벤치마크 스위트에서 측정되었습니다(`bun run build && cd bench && bun install --frozen-lockfile && bun run all`, Apple M1 Max, Bun `1.4.5`, Node `v26.13.1`, 결정론적 시드 `SEED=20261124`).
+
+| 측정 차원                | 시나리오                                                                                                                  | 결과 하이라이트                                                                                                                                                                                                                                                   | 방법론 / 공정성 참고 사항                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 다중 업스트림 복원력     | 정상 `A` (5 ms), 롱테일 `B` (40% 300 ms), 불안정 `C` (40% `503`, 40% `429` + `Retry-After: 1`) 대상 동시성 8로 200회 호출 | `@defjs/core` (`p2c` + `outlierDetection` + `withRetry`): **100.0% 성공**, **1.03x** 와이어 증폭, **11.01 ms p95** (`A:195 / B:3 / C:9`) vs. `ky`: **81.5%**, **1.49x**, **1626.30 ms p95** (`A:67 / B:67 / C:163`) 및 순수 `fetch`: **71.0%**, **302.18 ms p95** | PRNG 상태와 업스트림 카운터는 각 클라이언트 실행 전에 동일하게 초기화되며, `@defjs/core`는 `struct`를 통한 응답 검증까지 수행합니다.                                                                                     |
+| ESM 브라우저 번들 크기   | `esbuild` minify + tree-shake (brotli-11 / gzip-9)                                                                        | 최소 `@defjs/core` (`defineRequest` + `struct`): **16.69 KB br / 18.75 KB gzip**; 전체 복원력 스택 (`p2c` + `outlierDetection` + `withRetry` + 미들웨어): **17.78 KB br / 20.00 KB gzip**                                                                         | `ofetch` (**3.62 KB br**)와 `ky` (**9.66 KB br**)는 스키마 디코딩을 포함하지 않으며, `openapi-fetch + zod` (**76.79 KB br**)와 `@orpc/client + zod` (**81.51 KB br**)는 Zod를 번들링합니다.                              |
+| HTTP keep-alive 오버헤드 | 로컬 루프백 Hono 서버, 5,000건 요청 (동시성 16 / 순차)                                                                    | `@defjs/core` (`fetch` + `struct`): 동시성 16에서 **23,481 req/s** (`0.57 ms` p50); 순차 실행 **9,926 req/s** (`0.09 ms` p50)                                                                                                                                     | 두 `@defjs/core` 변형 모두 모든 응답에서 전체 `struct` 출력 검증을 실행합니다. 동시성 16에서 `ky` (**21,310 req/s**), `ofetch` (**28,921 req/s**), `openapi-fetch` (**34,393 req/s**)는 검증되지 않은 JSON을 반환합니다. |
+| 스키마 fail-fast 디코딩  | 인덱스 `0`이 유효하지 않은 1,000개 항목 배열 (`mitata`)                                                                   | `@defjs/core`: **506.5 ns** (`1,974,438 ops/s`) vs. `zod`: **51.25 us**, `valibot`: **70.82 us**, `arktype`: **334.86 us**                                                                                                                                        | `@defjs/core`는 첫 번째 구조 위반 시 즉시 중단합니다. 유효한 입력(`flat-6-fields`, `array-1000-items`)에서는 ArkType JIT, Zod v4, Valibot이 더 빠르게 실행됩니다.                                                        |
+
+원본 JSON 지표와 모든 환경 고정 버전은 [전체 벤치마크 보고서](https://github.com/defjs/defjs/blob/main/bench/REPORT.md)에서 확인할 수 있습니다.

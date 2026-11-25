@@ -1,0 +1,25 @@
+---
+title: "Límites de concurrencia y llamadas agrupadas"
+description: Protege los orígenes aguas abajo con concurrencyLimitHttpInterceptor y reparte llamadas en paralelo limpiamente mediante @defjs/core/concurrent.
+---
+
+# Límites de concurrencia y llamadas agrupadas
+
+Usa `concurrencyLimitHttpInterceptor` en el `Client` como un bulkhead a nivel de cliente (cola FIFO con protección opcional contra desbordamiento mediante `maxQueue`), y usa `@defjs/core/concurrent` (`concurrentMap`, `concurrentMapSettled`, `concurrentAll`, `concurrentAllSettled`) para llamadas paralelas fail-fast o liquidadas vinculadas directamente a ese `Client`.
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Consulta [API de Client](/es-ES/api/client) y [API de Interceptores](/es-ES/api/interceptors).

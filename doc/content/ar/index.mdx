@@ -1,16 +1,16 @@
 ---
 title: Defjs
-description: صمّم وانشر حزم TypeScript SDK عبر تعريفات API قابلة لإعادة الاستخدام وعملاء يملكها التطبيق بالكامل.
+description: حزمة TypeScript SDK والعميل المرن — عرّف عقود HTTP وSSE وWebSocket القابلة لإعادة الاستخدام بشكل مستقل عن العملاء المرنين المملوكين للتطبيق.
 ---
 
 # Defjs
 
-**عرّف عقد واجهة برمجة التطبيقات (API) مرة واحدة. واضبط التنفيذ لكل تطبيق على حدة.**
+**حزمة TypeScript SDK والعميل المرن — عرّف عقد واجهة برمجة التطبيقات (API) مرة واحدة. واضبط التنفيذ لكل تطبيق على حدة.**
 
 يفصل Defjs بين شقين أساسيين في حزم TypeScript SDK:
 
-- **تعريف SDK (`@defjs/core`)** — أعلن عن عمليات HTTP وSSE وWebSocket محددة الأنواع مع مخططات `struct`، سواء كنت تنشر حزمة SDK عامة أو تنظّم طبقة API داخل تطبيقك. التعريف بيانات خالصة: استيراده لا يطلق طلباً ولا يربط عميلاً عاماً.
-- **تنفيذ التطبيق** — تنشئ التطبيقات عميلها الخاص `Client` عبر `createClient(withEndpoint(...))`، وتربط بيانات الاعتماد والمعترضات وموازنات الحمل، ثم تمرّره عند استدعاء كل عملية.
+- **تعريف SDK (`@defjs/core`، `@defjs/cli`)** — أعلن عن عمليات HTTP وSSE وWebSocket محددة الأنواع مع مخططات `struct` (مكتوبة يدوياً أو مولَّدة كوحدات ESM عديمة الحالة من مواصفات OpenAPI 2.0/3.0/3.1/3.2). التعريف بيانات خالصة: استيراده لا يطلق أي اتصال شبكي ولا يربط عميلاً عاماً.
+- **تنفيذ تطبيقي مرن (`@defjs/core`)** — تنشئ التطبيقات عميلها الخاص `Client` عبر `createClient(withEndpoint(...))`، وتربط بيانات الاعتماد والمعترضات (`basicAuth*`، `idempotencyKeyHttpInterceptor`، `concurrencyLimitHttpInterceptor`)، وتضبط موازنة الحمل P2C وكشف القيم الشاذة `outlierDetection` (`halfOpen`، `maxEjectionPercent`)، وتفعّل إعادة المحاولة لحالات `429`/`Retry-After`، وتوزّع الاستدعاءات المتوازية عبر `@defjs/core/concurrent`، أو تمد جسور التواصل مع الـ workers والملحقات عبر `@defjs/core/port`.
 
 ## نظرة سريعة: تعريف SDK مقابل تنفيذ التطبيق
 
@@ -43,11 +43,12 @@ description: صمّم وانشر حزم TypeScript SDK عبر تعريفات API
 
 ## اختر مسارك
 
-1. **[البدء السريع](/ar/docs/start)** — عرّف عملية، واختبرها محلياً دون شبكة باستخدام مقبض Fetch محلي، ثم وجّهها نحو خدمة حية.
+1. **[البدء السريع](/ar/docs/start)** — عرّف عملية، واختبرها محلياً دون شبكة باستخدام مقبض Fetch محلي، ثم وجّه عميلاً نحو خدمة حية.
 2. **[معمارية النواة](/ar/docs/design-decisions)** — تعرّف على قواعد فك ترميز الاستجابة الست، ومصفوفات الخطأ أولاً (error-first tuples)، وملكية الموارد.
-3. **[تعريف حزم SDK](/ar/docs/struct)** — أعلن عن عقود البيانات السلكية عبر [Struct](/ar/docs/struct) وصدّر عمليات [HTTP](/ar/docs/http) و[SSE](/ar/docs/sse) و[WebSocket](/ar/docs/web-socket).
-4. **[العميل وتنفيذ الطلبات](/ar/docs/client)** — اضبط [العملاء](/ar/docs/client)، وتعامل مع [الأخطاء](/ar/docs/errors) محددة الأنواع، وأرفق [المعترضات](/ar/docs/interceptors)، واضبط [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing).
-5. **[أفضل الممارسات والاختبارات](/ar/docs/best-practices)** — اتبع [الاتفاقيات الهندسية](/ar/docs/best-practices)، ونظّم [طبقة API للتطبيق](/ar/docs/application-api) أو [تصميم حزمة SDK عامة](/ar/docs/public-sdk)، واكتب [اختبارات](/ar/docs/testing) قطعية وسريعة.
+3. **[المقارنة ومعمارية BFF الهجينة](/ar/docs/comparison-and-architecture)** — قارن Defjs مع `fetch` و`ky` و`ofetch` و`openapi-fetch` و`oRPC`، واطّلع على مخطط BFF الهجين بـ Defjs + oRPC/Hono والاختبارات القياسية.
+4. **[تعريف حزم SDK](/ar/docs/struct)** — أعلن عن عقود البيانات السلكية عبر [Struct](/ar/docs/struct) وصدّر عمليات [HTTP](/ar/docs/http) و[SSE](/ar/docs/sse) و[WebSocket](/ar/docs/web-socket).
+5. **[العميل وتنفيذ الطلبات](/ar/docs/client)** — اضبط [العملاء](/ar/docs/client)، وتعامل مع [الأخطاء](/ar/docs/errors) محددة الأنواع، وأرفق [المعترضات](/ar/docs/interceptors)، واضبط [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing).
+6. **[أفضل الممارسات والاختبارات](/ar/docs/best-practices)** — اتبع [الاتفاقيات الهندسية](/ar/docs/best-practices)، ونظّم [طبقة API للتطبيق](/ar/docs/application-api) أو [تصميم حزمة SDK عامة](/ar/docs/public-sdk)، واكتب [اختبارات](/ar/docs/testing) قطعية وسريعة.
 
 ## وسائل النقل المدعومة ومصفوفات النتائج
 
@@ -63,12 +64,13 @@ description: صمّم وانشر حزم TypeScript SDK عبر تعريفات API
 
 ## الحزم الرسمية
 
-| الحزمة                        | الدور                                                                                        | الدليل                                                           |
-| ----------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `@defjs/core`                 | تعريفات حزم SDK خالية من الاعتماديات الخارجية، مع `struct` والعميل والوسائط                  | [البدء السريع](/ar/docs/start)                                   |
-| `@defjs/react`                | سياق العميل `ClientProvider` وحقنه عبر `useClient()` لتطبيقات React 18+                      | [تكامل React](/ar/docs/integrations/react)                       |
-| `@defjs/vue`                  | إضافة `createClientPlugin` ورمز الحقن `HTTP_CLIENT` و`injectClient()` لتطبيقات Vue 3 أو أحدث | [تكامل Vue](/ar/docs/integrations/vue)                           |
-| `@defjs/opentelemetry-server` | تتبع الطلبات الصادرة من الخادم وتوليد القياسات وسجلات التشخيص                                | [خادم OpenTelemetry](/ar/docs/integrations/opentelemetry-server) |
+| الحزمة                        | الدور                                                                                                     | الدليل                                                           |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `@defjs/core`                 | تعريفات SDK خالية من الاعتماديات، و`struct`، والعميل، والمرونة، والبرمجيات الوسيطة، و`concurrent` و`port` | [البدء السريع](/ar/docs/start)                                   |
+| `@defjs/cli`                  | أداة سطر أوامر للتطوير تولّد تعريفات ESM عديمة الحالة من مواصفات OpenAPI 2.0–3.2                          | [تكامل CLI](/ar/docs/integrations/cli)                           |
+| `@defjs/react`                | سياق العميل `ClientProvider` وحقنه عبر `useClient()` لتطبيقات React 18+                                   | [تكامل React](/ar/docs/integrations/react)                       |
+| `@defjs/vue`                  | إضافة `createClientPlugin` ورمز الحقن `HTTP_CLIENT` و`injectClient()` لتطبيقات Vue 3 أو أحدث              | [تكامل Vue](/ar/docs/integrations/vue)                           |
+| `@defjs/opentelemetry-server` | تتبع الطلبات الصادرة من الخادم وتوليد القياسات وسجلات التشخيص                                             | [خادم OpenTelemetry](/ar/docs/integrations/opentelemetry-server) |
 
 ## أمثلة ووصفات شائعة
 
@@ -76,6 +78,10 @@ description: صمّم وانشر حزم TypeScript SDK عبر تعريفات API
 - [إرسال بيانات JSON والتحقق منها](/ar/recipes/post-json)
 - [التعامل مع استجابة 404 معلنة](/ar/recipes/get-declared-404)
 - [إلغاء طلب HTTP وإدارته بالمهلة الزمنية](/ar/recipes/cancel-http)
+- [تدفق التصفح بالمؤشر (Cursor Pagination)](/ar/recipes/cursor-pagination)
+- [مفاتيح تساوي الأثر عند إعادة المحاولة](/ar/recipes/idempotency-key)
+- [حدود التزامن (Bulkhead)](/ar/recipes/concurrency-limit)
+- [إعادة استخدام الاتصالات عبر Undici Pool](/ar/recipes/undici-pool)
 - [تحديث رمز Bearer تلقائياً عند استلام 401](/ar/recipes/refresh-bearer-once)
 - [استهلاك تدفق أحداث SSE](/ar/recipes/consume-sse)
 - [فتح جلسة WebSocket وإدارتها](/ar/recipes/websocket-session)

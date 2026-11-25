@@ -1,0 +1,25 @@
+---
+title: "멱등성 키"
+description: idempotencyKeyHttpInterceptor와 네이티브 429 Retry-After 백오프를 사용해 상태를 변경하는 POST 또는 PATCH 요청을 안전하게 재시도합니다.
+---
+
+# 멱등성 키
+
+기본적으로 `withRetry`는 멱등성이 보장되는 HTTP 메서드(`GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`)만 재시도합니다. `POST` 또는 `PATCH` 엔드포인트에 재시도를 활성화할 때는 `withRetry`와 `idempotencyKeyHttpInterceptor()`를 함께 사용하여, 동일한 논리적 호출의 모든 재시도 시도가 `req.correlationId`를 `Idempotency-Key` 헤더로 재사용하고 이후 새 호출에는 새로운 키가 발급되도록 하세요.
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+재시도 예산 및 `Retry-After` 처리에 대한 자세한 내용은 [인터셉터](/ko-KR/docs/interceptors) 및 [로드 밸런싱](/ko-KR/docs/load-balancing) 문서를 참조하세요.

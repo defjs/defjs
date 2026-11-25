@@ -281,9 +281,13 @@ describe("client option snapshots", () => {
       message: () => ({ type: "ping" }),
     };
     const protocols = ["one"];
+    const statusCodes = [429, 503];
     const retry = {
       maxRetries: 1,
       delayMs: 0,
+      statusCodes,
+      retryAfter: false,
+      maxRetryAfterMs: 5000,
       shouldRetry: () => true,
     };
     const wsHeartbeat = withWebSocketHeartbeat(heartbeat);
@@ -302,8 +306,11 @@ describe("client option snapshots", () => {
     heartbeat.intervalMs = 99;
     protocols.push("two");
     protocols[0] = "changed";
+    statusCodes.push(502);
     retry.maxRetries = 9;
     retry.delayMs = 1;
+    retry.retryAfter = true;
+    retry.maxRetryAfterMs = 9999;
 
     expect(first[CLIENT].config.webSocket.heartbeat?.intervalMs).toBe(10);
     expect(second[CLIENT].config.webSocket.heartbeat?.intervalMs).toBe(10);
@@ -320,6 +327,10 @@ describe("client option snapshots", () => {
     );
     expect(first[CLIENT].config.retry?.maxRetries).toBe(1);
     expect(second[CLIENT].config.retry?.delayMs).toBe(0);
+    expect(first[CLIENT].config.retry?.statusCodes).toEqual([429, 503]);
+    expect(first[CLIENT].config.retry?.statusCodes).not.toBe(statusCodes);
+    expect(first[CLIENT].config.retry?.retryAfter).toBe(false);
+    expect(first[CLIENT].config.retry?.maxRetryAfterMs).toBe(5000);
     expect(first[CLIENT].config.retry?.shouldRetry).toBe(retry.shouldRetry);
     expect(first[CLIENT].config).not.toBe(second[CLIENT].config);
 

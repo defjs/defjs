@@ -1,0 +1,25 @@
+---
+title: "Idempotency keys"
+description: Safely retry mutating POST or PATCH requests using idempotencyKeyHttpInterceptor and native 429 Retry-After backoff.
+---
+
+# Idempotency keys
+
+By default, `withRetry` retries only idempotent HTTP methods (`GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`). When enabling retries on `POST` or `PATCH` endpoints, pair `withRetry` with `idempotencyKeyHttpInterceptor()` so every retry attempt of the same logical call reuses `req.correlationId` as its `Idempotency-Key` header while subsequent calls receive fresh keys.
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+See [Interceptors](/docs/interceptors) and [Load balancing](/docs/load-balancing) for retry budgets and `Retry-After` handling.

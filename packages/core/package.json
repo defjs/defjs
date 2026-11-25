@@ -1,6 +1,6 @@
 {
   "name": "@defjs/core",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Define and execute typed HTTP, SSE, and WebSocket APIs.",
   "bugs": {
     "url": "https://github.com/defjs/defjs/issues"
@@ -19,9 +19,21 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./concurrent": {
+      "types": "./dist/concurrent.d.ts",
+      "default": "./dist/concurrent.js"
+    },
     "./xsrf": {
       "types": "./dist/xsrf.d.ts",
       "default": "./dist/xsrf.js"
+    },
+    "./port": {
+      "types": "./dist/port.d.ts",
+      "default": "./dist/port.js"
+    },
+    "./port/webext": {
+      "types": "./dist/port/webext.d.ts",
+      "default": "./dist/port/webext.js"
     },
     "./package.json": "./package.json"
   },

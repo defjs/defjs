@@ -12,6 +12,7 @@ Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时使用的 
 - [项目概览](/zh-Hans)
 - [快速开始](/zh-Hans/docs/start)
 - [核心架构设计](/zh-Hans/docs/design-decisions)
+- [竞品对比与混合架构](/zh-Hans/docs/comparison-and-architecture)
 
 ## 定义 SDK [#defining-sdks]
 
@@ -26,6 +27,7 @@ Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时使用的 
 - [错误处理](/zh-Hans/docs/errors)
 - [拦截器](/zh-Hans/docs/interceptors)
 - [负载均衡与故障转移](/zh-Hans/docs/load-balancing)
+- [Port 传输层](/zh-Hans/docs/port)
 
 ## 最佳实践 [#best-practices]
 
@@ -40,5 +42,6 @@ Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时使用的 
 - [React](/zh-Hans/docs/integrations/react)
 - [Vue](/zh-Hans/docs/integrations/vue)
 - [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server)
+- [CLI 与 OpenAPI 生成器](/zh-Hans/docs/integrations/cli)
 - [Skill](/zh-Hans/docs/ai)
 - [llms.txt](/zh-Hans/docs/ai-api)

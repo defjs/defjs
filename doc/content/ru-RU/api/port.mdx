@@ -1,0 +1,44 @@
+---
+title: Port
+description: Мультиплексированные прокси-транспорты MessagePort и MV3 WebExtension для клиентов Defjs.
+---
+
+# Транспорт Port (`@defjs/core/port` и `@defjs/core/port/webext`)
+
+Мультиплексированные транспортные хэндлы `MessagePort` и WebExtension `runtime.Port`, а также мост хоста с запретом по умолчанию. Смотрите [руководство по транспорту Port](/ru-RU/docs/port).
+
+## Быстрый пример
+
+<include cwd>examples/api/port.ts#example</include>
+
+## Клиентские хэндлы (`@defjs/core/port`)
+
+### withPortTransport
+
+<ApiSignature name="withPortTransport" />
+
+### createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle
+
+<ApiSignature name="createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle" />
+
+<ApiSignature name="PortClientOptions, PortWebSocketHandle, PortWebSocketHandleConstructor" />
+
+## Подключение хоста (`@defjs/core/port`)
+
+### attachPortHost
+
+<ApiSignature name="attachPortHost" />
+
+<ApiSignature name="PortHostOptions, PortHostHandle, PortRequestCheckContext, PortWebSocketConstructor" />
+
+## Абстракции порта
+
+<ApiSignature name="PortLike, PortEndpoint, PortWireMode, PortMessageListener, PortDisconnectListener" />
+
+## Адаптер WebExtension (`@defjs/core/port/webext`)
+
+### fromWebExtPort
+
+<ApiSignature name="fromWebExtPort" />
+
+<ApiSignature name="WebExtPort, WebExtEvent, WebExtPortOptions" />

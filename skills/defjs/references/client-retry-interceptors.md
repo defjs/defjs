@@ -1,6 +1,6 @@
 # Client Configuration, Load Balancing, Retries, and Interceptors
 
-Contents: [Client creation and `DerivableClient` scope](#1-client-creation-and-derivableclient-scope) · [`RequestOptions` and client helpers](#2-requestoptions-and-client-helpers) · [Browser XSRF protection](#3-browser-xsrf-protection) · [Multiple endpoints and load balancing](#4-multiple-endpoints-and-load-balancing) · [Unified retry policy (`withRetry`)](#5-unified-retry-policy-withretry) · [HTTP interceptors and the 4 standard recipes](#6-http-interceptors-and-the-4-standard-recipes)
+Contents: [Client creation and `DerivableClient` scope](#1-client-creation-and-derivableclient-scope) · [`RequestOptions` and client helpers](#2-requestoptions-and-client-helpers) · [Browser XSRF protection](#3-browser-xsrf-protection) · [Multiple endpoints and load balancing](#4-multiple-endpoints-and-load-balancing) · [Unified retry policy (`withRetry`)](#5-unified-retry-policy-withretry) · [HTTP interceptors and the 4 standard recipes](#6-http-interceptors-and-the-4-standard-recipes) · [Native `429` / `Retry-After`, outlier gating, built-in middleware, and `@defjs/core/concurrent`](#7-native-429--retry-after-outlier-gating-built-in-middleware-and-defjscoreconcurrent)
 
 For full English guide pages on the official site (no locale prefix), fetch `https://defjs.lyz.cloud/llms.mdx/docs/client/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/load-balancing/content.md`, and `https://defjs.lyz.cloud/llms.mdx/docs/interceptors/content.md`.
 
@@ -33,15 +33,15 @@ await getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 2 });
 
 `client(options)` accepts 7 flat fields; each protocol reads only the fields that apply to it:
 
-| `RequestOptions` field | Applies to           | Behavior                                                                                                                                     |
-| ---------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `signal`               | HTTP, SSE, WebSocket | `AbortSignal` for the request, entire SSE stream lifetime, or entire WebSocket session lifetime                                              |
-| `onUploadProgress`     | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>` (called only for `ReadableStream` bodies)                                              |
-| `onDownloadProgress`   | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                                                                                        |
-| `beforeConnect`        | WebSocket            | `({ attempt, signal }) => void \| Promise<void>` hook run before each WebSocket connection attempt                                           |
-| `protocols`            | WebSocket            | `string[]` subprotocols (overrides `withWebSocketProtocols` and `defineWebSocket` `protocols`)                                               |
-| `heartbeat`            | WebSocket            | `{ intervalMs, message, isAck?, timeoutMs? }`; `timeoutMs` requires `isAck`                                                                  |
-| `retry`                | HTTP, SSE, WebSocket | `{ maxRetries?, delayMs?, factor?, maxDelayMs?, jitter?, attemptTimeoutMs?, methods?, shouldRetry? }` (replaces client policy for this call) |
+| `RequestOptions` field | Applies to           | Behavior                                                                                                                                                                                  |
+| ---------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `signal`               | HTTP, SSE, WebSocket | `AbortSignal` for the request, entire SSE stream lifetime, or entire WebSocket session lifetime                                                                                           |
+| `onUploadProgress`     | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>` (called only for `ReadableStream` bodies)                                                                                           |
+| `onDownloadProgress`   | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                                                                                                                                     |
+| `beforeConnect`        | WebSocket            | `({ attempt, signal }) => void \| Promise<void>` hook run before each WebSocket connection attempt                                                                                        |
+| `protocols`            | WebSocket            | `string[]` subprotocols (overrides `withWebSocketProtocols` and `defineWebSocket` `protocols`)                                                                                            |
+| `heartbeat`            | WebSocket            | `{ intervalMs, message, isAck?, timeoutMs? }`; `timeoutMs` requires `isAck`                                                                                                               |
+| `retry`                | HTTP, SSE, WebSocket | `{ maxRetries?, delayMs?, factor?, maxDelayMs?, jitter?, attemptTimeoutMs?, methods?, statusCodes?, retryAfter?, maxRetryAfterMs?, shouldRetry? }` (replaces client policy for this call) |
 
 Client configuration helpers passed to `createClient(...)`:
 
@@ -162,8 +162,8 @@ Without `withRetry`, every operation runs at most 1 attempt. `withRetry(options?
 - **Defaults**: `maxRetries: 3`, `delayMs: 1000`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 30000`, `methods: ["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"]`, HTTP `budget: { percentCanRetry: 0.2, minRetriesPerSecond: 10, ttlMs: 10000 }`.
 - **Single-attempt deadline without retries**: `attemptTimeoutMs` bounds one attempt (HTTP to end of response body, SSE to response headers, WebSocket to `open`). Because `maxRetries` defaults to `3`, write `withRetry({ maxRetries: 0, attemptTimeoutMs: 3_000 })` when you want a per-attempt deadline with zero retries.
 - **Default `context.retryable`**:
-  - **HTTP**: Method is in `methods` AND outcome is connection failure, `502`/`503`/`504`, or `attemptTimeoutMs` timeout (`ReadableStream` bodies are never retried). Each retry re-picks an endpoint, rebuilds the request, and re-runs the full interceptor chain.
-  - **SSE**: Method is in `methods` AND handshake/stream network failure, `502`/`503`/`504` handshake, or attempt timeout (clean server EOF ends the stream normally). `maxRetries` resets on each successful open.
+  - **HTTP**: Method is in `methods` AND outcome is connection failure, status in `statusCodes` (default `[429, 502, 503, 504]`), or `attemptTimeoutMs` timeout (`ReadableStream` bodies are never retried; `Retry-After` on `429`/`503` is honored up to `maxRetryAfterMs`, default `60_000`). Each retry re-picks an endpoint, rebuilds the request, and re-runs the full interceptor chain.
+  - **SSE**: Method is in `methods` AND handshake/stream network failure, status in `statusCodes` (default `[429, 502, 503, 504]`) handshake (honoring `Retry-After` on `429`/`503` up to `maxRetryAfterMs`), or attempt timeout (clean server EOF ends the stream normally). `maxRetries` resets on each successful open.
   - **WebSocket**: Every close not initiated by `session.close()` (including failed initial handshakes and heartbeat timeouts). `maxRetries` resets on each successful open.
 
 ### Best practice: custom `shouldRetry` across HTTP, SSE, and WebSocket
@@ -288,7 +288,7 @@ export function refreshingBearer(
 
 ### Best practice 3: Honor `429 Retry-After` on the same endpoint
 
-Core `withRetry` handles `502`/`503`/`504` and network failures; `429 Retry-After` is an application interceptor policy that waits while respecting `request.signal`:
+Core `withRetry` natively retries `429`/`502`/`503`/`504` on safe `methods` and honors `Retry-After` on `429`/`503` across balanced endpoints; add an application interceptor when you need custom same-endpoint waits (for example on non-idempotent `POST` requests or customized caps) while respecting `request.signal`:
 
 ```ts
 import {
@@ -407,3 +407,17 @@ export const syntheticResponseExample = makeResponse({
   url: "https://api.example.com/orders/1",
 });
 ```
+
+---
+
+## 7. Native `429` / `Retry-After`, outlier gating, built-in middleware, and `@defjs/core/concurrent`
+
+- **Native `429` + RFC `Retry-After` & `correlationId`**: `withRetry()` retries status codes `[429, 502, 503, 504]` on safe `methods` by default and honors RFC 9110 `Retry-After` headers on `429` and `503` responses (`retryAfter: true`, bounded by `maxRetryAfterMs`, default `60_000`; a `Retry-After` delay exceeding `maxRetryAfterMs` stops retries immediately before `shouldRetry` runs). Every attempt of one logical call receives a shared `req.correlationId`, and `req.retryAttempt` starts at `0`.
+- **`outlierDetection` production gates**: Enable `{ halfOpen: true, maxEjectionPercent: 50 }` alongside `p2cBalancer()` so expired ejections test one trial probe before restoring full traffic and no more than the configured fraction of upstream nodes can be ejected simultaneously.
+- **Built-in interceptors**:
+  - `basicAuthHttpInterceptor` / `basicAuthSSEInterceptor` for HTTP Basic auth headers.
+  - `concurrencyLimitHttpInterceptor({ maxConcurrency, maxQueue?, key? })` for FIFO request concurrency bulkheads (rejects overflow with `EXT_INTERCEPTOR_FAILED` carrying `BulkheadOverflowError`).
+  - `idempotencyKeyHttpInterceptor({ headerName?, methods?, generate?, respectExisting? })` for `POST`/`PATCH` idempotency keys keyed by `req.correlationId` across retries.
+- **Structured concurrency (`@defjs/core/concurrent`)**:
+  - `concurrentMap(client, op, inputs, { concurrency?, signal? })` and `concurrentMapSettled(...)` fan out one operation across an array of inputs while preserving order and propagating cancellation/fail-fast abort.
+  - `concurrentAll(client, tasks, { concurrency?, signal? })` and `concurrentAllSettled(...)` execute heterogeneous tuples or keyed task objects of thunks `(c) => op(c, input)`.

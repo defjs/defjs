@@ -12,6 +12,7 @@ Defjs 將 SDK 團隊發佈嘅 API 契約，同應用程式喺 runtime 使用嘅 
 - [項目概覽](/zh-Hant-HK)
 - [快速開始](/zh-Hant-HK/docs/start)
 - [核心架構](/zh-Hant-HK/docs/design-decisions)
+- [比較與混合架構](/zh-Hant-HK/docs/comparison-and-architecture)
 
 ## 定義 SDK [#defining-sdks]
 
@@ -26,6 +27,7 @@ Defjs 將 SDK 團隊發佈嘅 API 契約，同應用程式喺 runtime 使用嘅 
 - [錯誤處理](/zh-Hant-HK/docs/errors)
 - [攔截器](/zh-Hant-HK/docs/interceptors)
 - [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)
+- [Port 傳輸層](/zh-Hant-HK/docs/port)
 
 ## 最佳實踐 [#best-practices]
 
@@ -40,5 +42,6 @@ Defjs 將 SDK 團隊發佈嘅 API 契約，同應用程式喺 runtime 使用嘅 
 - [React](/zh-Hant-HK/docs/integrations/react)
 - [Vue](/zh-Hant-HK/docs/integrations/vue)
 - [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server)
+- [CLI 與 OpenAPI 生成器](/zh-Hant-HK/docs/integrations/cli)
 - [Skill](/zh-Hant-HK/docs/ai)
 - [llms.txt](/zh-Hant-HK/docs/ai-api)

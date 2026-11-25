@@ -1,0 +1,25 @@
+---
+title: "冪等鍵"
+description: 搭配 idempotencyKeyHttpInterceptor 與原生 429 Retry-After 退避，安全地重試異動類 POST 或 PATCH 請求。
+---
+
+# 冪等鍵
+
+預設情況下，`withRetry` 只會重試具冪等性的 HTTP 方法（`GET`、`HEAD`、`PUT`、`DELETE`、`OPTIONS`、`TRACE`）。當為 `POST` 或 `PATCH` 端點啟用重試時，請將 `withRetry` 搭配 `idempotencyKeyHttpInterceptor()`，讓同一次邏輯呼叫的每一次重試都重用 `req.correlationId` 作為 `Idempotency-Key` 標頭，而後續新的呼叫則取得全新的鍵值。
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+重試預算與 `Retry-After` 處理細節，請參閱[攔截器](/zh-Hant-TW/docs/interceptors)與[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)。

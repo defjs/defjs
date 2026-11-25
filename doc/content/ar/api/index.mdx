@@ -13,24 +13,26 @@ description: ابحث عن واجهات تعريف SDK وإعداد عميل ا�
 
 ## الحزم
 
-| الحزمة                                                        | ما تبحث عنه                                                       |
-| ------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`@defjs/core`](/ar/api/client)                               | `createClient` و`defineRequest` و`struct` وHTTP / SSE / WebSocket |
-| [`@defjs/vue`](/ar/api/vue)                                   | `createClientPlugin` و`injectClient` و`HTTP_CLIENT`               |
-| [`@defjs/react`](/ar/api/react)                               | `ClientProvider` و`useClient`                                     |
-| [`@defjs/opentelemetry-server`](/ar/api/opentelemetry-server) | `withOpenTelemetryServer` وخيارات كل وسيلة نقل                    |
+| الحزمة                                                        | ما تبحث عنه                                                                                                     |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](/ar/api/client)                               | `createClient` و`defineRequest` و`struct` وHTTP / SSE / WebSocket و`@defjs/core/concurrent` و`@defjs/core/port` |
+| [`@defjs/cli`](/ar/api/cli)                                   | `defineConfig` و`generateOpenApi` و`runCli` وخيارات أهداف OpenAPI                                               |
+| [`@defjs/vue`](/ar/api/vue)                                   | `createClientPlugin` و`injectClient` و`HTTP_CLIENT`                                                             |
+| [`@defjs/react`](/ar/api/react)                               | `ClientProvider` و`useClient`                                                                                   |
+| [`@defjs/opentelemetry-server`](/ar/api/opentelemetry-server) | `withOpenTelemetryServer` وخيارات كل وسيلة نقل                                                                  |
 
 ## @defjs/core
 
-| الصفحة                            | ما تبحث عنه                                                           |
-| --------------------------------- | --------------------------------------------------------------------- |
-| [العميل](/ar/api/client)          | `createClient` وخيارات `with*` و`Client`                              |
-| [HTTP](/ar/api/http)              | `defineRequest` و`HttpExecuteOptions` و`HttpRequest` / `HttpResponse` |
-| [Struct](/ar/api/struct)          | `struct.*` و`Infer` و`StructError`                                    |
-| [الأخطاء](/ar/api/errors)         | أنواع `Fault` والمصانع                                                |
-| [المعترضات](/ar/api/interceptors) | مساعدات معترضات HTTP / SSE / WebSocket                                |
-| [SSE](/ar/api/sse)                | `defineEventStream` ومقبض التدفق                                      |
-| [WebSocket](/ar/api/web-socket)   | `defineWebSocket` والجلسة                                             |
+| الصفحة                            | ما تبحث عنه                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------- |
+| [العميل](/ar/api/client)          | `createClient` وخيارات `with*` و`Client` و`@defjs/core/concurrent`                    |
+| [HTTP](/ar/api/http)              | `defineRequest` و`HttpExecuteOptions` و`HttpRequest` / `HttpResponse`                 |
+| [Struct](/ar/api/struct)          | `struct.*` و`Infer` و`StructError`                                                    |
+| [الأخطاء](/ar/api/errors)         | أنواع `Fault` والمصانع                                                                |
+| [المعترضات](/ar/api/interceptors) | مساعدات معترضات HTTP / SSE / WebSocket والمعترضات المدمجة                             |
+| [SSE](/ar/api/sse)                | `defineEventStream` ومقبض التدفق                                                      |
+| [WebSocket](/ar/api/web-socket)   | `defineWebSocket` والجلسة                                                             |
+| [Port](/ar/api/port)              | `withPortTransport` و`attachPortHost` و`createPort*Handle` و`@defjs/core/port/webext` |
 
 ## ذات صلة
 

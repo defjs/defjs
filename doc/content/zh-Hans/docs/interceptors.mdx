@@ -55,16 +55,16 @@ description: 在 Client 上统一挂载鉴权、日志、限流退避和异常�
 
 ## 3. 重试与处理 `Retry-After`
 
-HTTP 重试默认是关着的。遇到连接不通、超时或 `502`/`503`/`504` 时想自动换个节点重试，请用 [`withRetry()`](/zh-Hans/docs/load-balancing#retries)——每次等待完退避时间后会重新经由负载均衡选节点、重新拼请求并跑一遍完整拦截器链。
+HTTP 重试默认是关着的。遇到连接不通、超时或 `statusCodes` 中的状态码（默认 `429`、`502`、`503`、`504`），并希望在 `429` 与 `503` 上原生支持 RFC 9110 `Retry-After`（默认 `retryAfter: true`、`maxRetryAfterMs: 60_000`）时，请使用 [`withRetry()`](/zh-Hans/docs/load-balancing#retries)——每次等待完退避时间后会重新经由负载均衡选节点、重新拼请求并跑一遍完整拦截器链。
 
-如果需要在同一个节点上处理 `429` + `Retry-After` 这类应用状态码，可以直接在 HTTP 拦截器里写等待重放：
+当应用需要**自定义的同节点**状态码处理——例如只在当前选中的节点上重试而不重跑 `builder` 和外层拦截器、在缺少 `Retry-After` 时使用自定义兜底延迟，或对等待做上限截断而非快速失败——可以在拦截器里直接循环调用 `next(request)`：
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **和 `withRetry` 分工不同**：拦截器里的 `next(request)` 循环始终只打当前选好的那一个节点，不会重跑 `builder` 或外层拦截器。像连接超时、`502`/`503`/`504` 请交给外层的 `withRetry`。
-- **`Retry-After` 要自己控制上限**：`@defjs/core` 内置的 `withRetry` 不读 `Retry-After` 响应头。示例里设的 30 秒最大等待和 250 ms 默认等待都是业务代码自己的取舍——如果限制上限短于服务端实际要求，可能提前重打过去；不希望这样就直接等满延迟，或者干脆把响应返回给业务提示用户稍后再试。
+- **两层重试分工不同**：拦截器里的 `next(request)` 循环始终只打当前选好的那一个节点，不会重跑 `builder` 或外层拦截器。连接失败、跨节点故障转移以及默认的 `429`/`502`/`503`/`504` 重试策略交给外层的 `withRetry`。
+- **内置与自定义 `Retry-After` 策略**：Core 内置的 `withRetry()` 默认会对 `429` 和 `503` 遵守 RFC 9110 `Retry-After`（若服务端要求的延迟超过 `maxRetryAfterMs` 会直接快速失败而不再重试）。如果你像上面的示例一样在自定义拦截器里自行处理 `429`，请配置 `withRetry({ retryAfter: false })`（或从 `statusCodes` 中移出 `429`）以避免双重重试；示例里设的 30 秒上限和 250 ms 兜底等待都是业务代码自己的取舍，如果限制上限短于服务端实际要求，可能会提前重打过去。
 - **`401` 刷新重放写操作的幂等提醒**：参考 [401 自动刷新一次 Bearer Token](/zh-Hans/recipes/refresh-bearer-once) 时请记住，`POST` 重放有可能发两次请求体。请确保后端认证拦截在真正写库之前完成，或者带上幂等键，否则不要自动重放写请求。另外，`ReadableStream` 流式请求体不支持重放。
 - **处理 `next(request)` 抛出的底层异常**：
   - 断网等传输错误会使 `next(request)` reject（Defjs 里没有 `status: 0` 的假响应），`catch` 后如果发现不是自己要处理的情况直接重新 `throw` 出去，就能原样保留原本的 `NET_*` 错误码。
@@ -98,17 +98,23 @@ WebSocket 拦截器里 **`next(req)` 最多只能调用一次**。如果你想�
 
 ## 6. 内置工厂与工具函数速查
 
-| 导出函数                                       | 适用协议  | 作用说明                                                                     |
-| ---------------------------------------------- | --------- | ---------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>`                         |
-| `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>`                    |
-| `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>`                          |
-| `createOperationInterceptor(fn)`               | 全部      | 围绕整次操作调用包装 `(call, next) => Promise<result>`                       |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 接收同步凭据函数（每次请求调一次），自动加 `Authorization: Basic ...` 请求头 |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 发起握手请求时自动加 `Authorization: Basic ...` 请求头                |
+| 导出函数                                       | 适用协议  | 作用说明                                                                                                                                |
+| ---------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>`                                                                                    |
+| `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>`                                                                               |
+| `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>`                                                                                     |
+| `createOperationInterceptor(fn)`               | 全部      | 围绕整次操作调用包装 `(call, next) => Promise<result>`                                                                                  |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 接收同步凭据函数（每次请求调一次），自动加 `Authorization: Basic ...` 请求头                                                            |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 发起握手请求时自动加 `Authorization: Basic ...` 请求头                                                                           |
+| `concurrencyLimitHttpInterceptor(options)`     | HTTP      | 按分桶限制在途并发尝试数（`ConcurrencyLimitInterceptorOptions`）；FIFO 排队至 `maxQueue`，溢出抛出 `BulkheadOverflowError`              |
+| `idempotencyKeyHttpInterceptor(options?)`      | HTTP      | 在变更方法（`POST`、`PATCH`）上注入幂等键请求头（`IdempotencyKeyInterceptorOptions`，默认 `Idempotency-Key`），复用 `req.correlationId` |
+
+`concurrencyLimitHttpInterceptor` 会在 `withRetry` 退避等待期间释放许可，避免重试导致舱壁死锁；超出 `maxQueue` 时抛出 `BulkheadOverflowError`（对外表现为 `EXT_INTERCEPTOR_FAILED` 且 `{ attempted: false }`）。完整签名见[拦截器 API 参考](/zh-Hans/api/interceptors)。
 
 ## 相关阅读
 
+- [重试时的幂等键](/zh-Hans/recipes/idempotency-key)
+- [并发限制与池化调用](/zh-Hans/recipes/concurrency-limit)
 - [401 自动刷新一次 Bearer Token](/zh-Hans/recipes/refresh-bearer-once)
 - [ETag 条件请求](/zh-Hans/recipes/etag-revalidate)
 - [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server)

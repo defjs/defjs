@@ -1,0 +1,53 @@
+---
+title: نقل Port (Workers وWebExtensions)
+description: مرّر عمليات HTTP وSSE وWebSocket بالوكالة عبر MessagePort وWorkers وiframes وElectron وMV3 WebExtension runtime.Port مع سياسات رفض افتراضي للأصل.
+---
+
+# نقل Port (`@defjs/core/port`)
+
+تتيح وحدة `@defjs/core/port` لأي سياق معزول (`SharedWorker`، أو Dedicated Worker، أو `iframe` معزول بـ sandbox، أو عارض Electron، أو Popup / Side Panel / Content Script في ملحق WebExtension) تنفيذ تعريفات SDK النقية من `@defjs/core` عبر منفذ واحد متعدد القنوات دون ربط التعريفات بناقل الوكيل.
+
+- خالية من الاعتماديات وقت التشغيل؛ تتوفر كمساري تصدير فرعيين اختياريين `@defjs/core/port` و`@defjs/core/port/webext` دون أي عبء إضافي على الحزمة ما لم يتم استيرادهما
+- تشارك منفذاً واحداً بالتزامن عبر HTTP (بما في ذلك عمليات الرفع والتنزيل عبر `ReadableStream`)، وSSE (`text/event-stream`)، واتصالات WebSocket
+- **أمان مُغلق عند الفشل افتراضياً (fail-closed)**: ترفض `attachPortHost` كل حركة المرور ما لم يحدد المضيف صراحةً `allowedOrigins` أو `allowRequest` أو `allowAnyOrigin: true`
+
+```bash
+bun add @defjs/core
+```
+
+## جسر MessagePort (Workers، وiframes، وElectron)
+
+يحتفظ كلا الجانبين بتعريفات SDK دون أي تغيير. ينفّذ المضيف ذو الصلاحيات استدعاءات `fetch` و`WebSocket` الفعلية؛ بينما يلحق العميل المعزول `withPortTransport(port)` بعميله `Client`:
+
+<Tabs items={["sdk/orders.ts", "host.ts", "client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/host.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+عند استدعاء `attachPortHost`، احتفظ بمرجع إلى `PortHostHandle` المُرجَع واستدعِ `host.close()` (أو `using host = attachPortHost(...)`) عند التفكيك حتى تُغلق قنوات HTTP/SSE الجارية وجلسات WebSocket بنظافة.
+
+## وكيل ملحقات MV3 WebExtension (`@defjs/core/port/webext`)
+
+لا يستطيع `runtime.Port` في ملحقات المتصفح نقل كائنات `ArrayBuffer` مباشرة عبر حدود ملحقات Chromium/Firefox/Safari، كما ينقطع اتصاله كلما دخل عامل الخدمة (Service Worker) في Manifest V3 في وضع السكون. توفر `@defjs/core/port/webext` المحول البنيوي الخالي من الاعتماديات `fromWebExtPort` (ولا يتطلب `@types/chrome`) الذي يستخدم تأطير `"json"` المقسَّم إلى قطع Base64 ويدعم دوال الربط الكسولة لإعادة الاتصال تلقائياً بعد سبات Service Worker:
+
+<include cwd lang="typescript">
+  examples/port/webext.ts#example
+</include>
+
+راجع [مرجع واجهة برمجة Port](/ar/api/port).

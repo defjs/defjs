@@ -217,33 +217,34 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols` を派生した�
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-分類された失敗を数えてエンドポイントを時間で隔離し、アプリケーションが渡す `isHealthy` 関数が拒否するエンドポイントをスキップします。何が健全かを決めるのは Defjs ではありません。オブジェクトを渡さない限りオフです。pick-first、ラウンドロビン、p2c はすべて `outlierDetection` オプションでそれを取り（デフォルトにするには `{}`）、カスタムの子を直接包むこともできます。デフォルトの `isFailure` は、`NET_TIMEOUT` と `NET_BODY_INCOMPLETE` を含め、code を持つ結果をすべて数えます。それが決めるのは隔離のカウントに入れるものだけで、置き換えられます。失敗が 5 回あると、ペナルティは 1000ms から始まり、隔離のたびに 1000ms ずつ伸び、ベースの 0.5 倍までの正のジッターを加え、60000ms を上限とします。時間が来るとエンドポイントは再び選択可能になり、試しのリクエストも復旧の判断もありません。ペナルティレベルは保たれ、隔離のない 10 秒ごとに 1 下がります（gRPC A50 と同じです）。隔離の前、または隔離されているあいだに始まった試行の遅れた結果は無視されます。除外枠も、最後のホストの保護も、精算グリッドも、割合の基準も、スロースタートもありません。`isHealthy` は唯一の健全さの判断です。隔離と AND で組み合わさるので、`true` がペナルティを終えることはなく、そこからの throw は `REQ_BUILD_FAILED` として報告されます。すべてのホストが遮断され得ます。Finagle 流の、リスト内だけのフェイルオープンは、それでもリクエストを送ります。[ヘルスフィルタリングと p2c](/ja-JP/docs/client#health-filtering-and-p2c) を参照してください。
+分類された失敗を数えてエンドポイントを時間で隔離し、アプリケーションが渡す `isHealthy` 関数が拒否するエンドポイントをスキップします。何が健全かを決めるのは Defjs ではありません。オブジェクトを渡さない限りオフです。pick-first、ラウンドロビン、p2c はすべて `outlierDetection` オプションでそれを取り（デフォルトにするには `{}`）、カスタムの子を直接包むこともできます。デフォルトの `isFailure` は、`NET_TIMEOUT` と `NET_BODY_INCOMPLETE` を含め、code を持つ結果をすべて数えます。それが決めるのは隔離のカウントに入れるものだけで、置き換えられます。失敗が 5 回あると、ペナルティは 1000ms から始まり、隔離のたびに 1000ms ずつ伸び、ベースの 0.5 倍までの正のジッターを加え、60000ms を上限とします。デフォルト（`halfOpen: false`）では、時間が来るとエンドポイントはすべての呼び出し元に対して再び選択可能になります。`halfOpen: true` を指定すると、ペナルティ期限切れ後に単一プローブ状態に入り、一度に 1 つの試行リクエストだけを通し、成功で通常トラフィックを復旧させ、失敗で次のペナルティレベルで即座に再隔離します（`maxEjectionPercent` に従います）。ペナルティレベルは復旧をまたいで保たれ、隔離のない 10 秒ごとに 1 下がります（gRPC A50 と同じです）。隔離の前、または隔離されているあいだに始まった試行の遅れた結果は無視されます。`maxEjectionPercent`（デフォルト `100`、上限なし）は同時に隔離できる候補エンドポイント数の上限を定めます（`Math.floor(endpoints.length * maxEjectionPercent / 100)`）。最後のホストの保護も、精算グリッドも、スロースタートもありません。`isHealthy` は唯一の健全さの判断です。隔離と AND で組み合わさるので、`true` がペナルティを終えることはなく、そこからの throw は `REQ_BUILD_FAILED` として報告されます。すべてのホストが遮断されるか実行中のプローブ待ちになり得ます。Finagle 流の、リスト内だけのフェイルオープンは、それでもリクエストを送ります。[ヘルスフィルタリングと p2c](/ja-JP/docs/client#health-filtering-and-p2c) を参照してください。
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
-1 つのポリシーで HTTP、SSE、WebSocket のリトライを有効にし、`config.retry` に保存します。`withRetry` がなければ、すべての呼び出しはバックオフのない単純な 1 回の試行です。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同等です。後から渡した `withRetry` はポリシーを置き換え、`withRetry({ maxRetries: 0 })` は、有効にしたあとリトライを無効にします。このオプションは適用時に、所有するフィールド、`methods` 配列、入れ子の budget を捕捉します。オプションは実行時には検証されません。TypeScript が拒否する値は、JavaScript が扱うとおりに振る舞います。
+1 つのポリシーで HTTP、SSE、WebSocket のリトライを有効にし、`config.retry` に保存します。`withRetry` がなければ、すべての呼び出しはバックオフのない単純な 1 回の試行です。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同等です。後から渡した `withRetry` はポリシーを置き換え、`withRetry({ maxRetries: 0 })` は、有効にしたあとリトライを無効にします。このオプションは適用時に、所有するフィールド、`methods` と `statusCodes` の配列、入れ子の budget を捕捉します。オプションは実行時には検証されません。TypeScript が拒否する値は、JavaScript が扱うとおりに振る舞います。
 
-デフォルトは `maxRetries: 3`（最初の試行のあとのリトライ。`0` はリトライしません）、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`（`Infinity` は上限を外し、プラットフォームのタイマー上限である `2_147_483_647` ms は引き続き適用されます）、`jitter: 0.2`（0 から 1 の乗法因子）です。リトライ _n_ は `delayMs * factor^(n-1)` を待ち、上限が適用されます。そのあとジッターと丸めが続き、最終的な遅延に再び上限が適用されます。基準値がゼロならゼロのままです。`methods` のデフォルトは `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT`、`DELETE` で、大文字小文字を区別せずに比較します。`attemptTimeoutMs` は 1 回の試行を区切ります。HTTP はレスポンスボディの終わりまで、SSE はレスポンスヘッダーまで、WebSocket は `open` まで数えます。使い切った試行は、接続拒否と同じ失敗です。リトライなしの時間制限には `withRetry({ maxRetries: 0, attemptTimeoutMs })` を使います。
+デフォルトは `maxRetries: 3`（最初の試行のあとのリトライ。`0` はリトライしません）、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`（`Infinity` は上限を外し、プラットフォームのタイマー上限である `2_147_483_647` ms は引き続き適用されます）、`jitter: 0.2`（0 から 1 の乗法因子：指数バックオフでは ±20%、`Retry-After` では正方向のみの `[1, 1 + jitter]`）、`statusCodes: [429, 502, 503, 504]`、`retryAfter: true`、`maxRetryAfterMs: 60000`（`Infinity` で上限解除、プラットフォームのタイマー上限には従います）です。リトライ _n_ は `delayMs * factor^(n-1)` を待ち、上限が適用されます。そのあとジッターと丸めが続き、最終的な遅延に再び上限が適用されます。基準値がゼロならゼロのままです。`retryAfter` が有効な場合、`429` または `503` の HTTP または SSE ハンドシェイクレスポンス上の有効な RFC 9110 `Retry-After` ヘッダー（`delay-seconds` または `HTTP-date`）は、`maxRetryAfterMs` を上限として指数バックオフを置き換えます。`methods` のデフォルトは `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT`、`DELETE` で、大文字小文字を区別せずに比較します。`attemptTimeoutMs` は 1 回の試行を区切ります。HTTP はレスポンスボディの終わりまで、SSE はレスポンスヘッダーまで、WebSocket は `open` まで数えます。使い切った試行は、接続拒否と同じ失敗です。リトライなしの時間制限には `withRetry({ maxRetries: 0, attemptTimeoutMs })` を使います。
 
 失敗した試行のあとは、どのトランスポートでも同じ流れが、次の順序で走ります。
 
 1. 呼び出し元の abort、手動の `close()`、一致しないメディアタイプのような致命的なエラー、コンストラクターが throw する WebSocket、`ReadableStream` のリクエストボディは、呼び出しを終えます。`shouldRetry` は呼ばれません。
-2. `maxRetries` 回のリトライを終えると、呼び出しは終わります。`shouldRetry` は呼ばれません。
-3. `shouldRetry(context)` が判断します。なければ `context.retryable` が判断します。promise を返してもよく、呼び出し元の signal がそれをキャンセルします。throw すると、投げられた値を `cause` として呼び出しが `EXT_HOOK_FAILED` で終わります。すでに開いていた SSE ストリームは `closed.code` に `EXT_HOOK_FAILED` を報告し、`closed.cause` には投げられた値を `cause` とするエラーが入ります。すでに開いていた WebSocket セッションは `closed.kind: "error"` で終わり、投げられた値が `closed.cause` になります。
-4. HTTP のみ: バジェットがリトライの費用を払わなければ、呼び出しは終わります。
-5. 呼び出しはバックオフの遅延を待ち、そのあとバランサーが、直前に失敗したものを含め、すべてのエンドポイントから選び直します。単一のエンドポイントは、遅延のあとにもう一度試されます。HTTP では各リトライがリクエストを作り直し、インターセプターチェーン全体を再実行します。SSE と WebSocket はリクエストを再利用し、URL だけを解決し直します。
+2. `retryAfter` が有効で、`429` または `503` のレスポンスに `maxRetryAfterMs` を超える有効な `Retry-After` 遅延が含まれている場合、`shouldRetry` を呼ばず、`budget` も消費せずに呼び出しを即座に終了します。
+3. `maxRetries` 回のリトライを終えると、呼び出しは終わります。`shouldRetry` は呼ばれません。
+4. `shouldRetry(context)` が判断します。なければ `context.retryable` が判断します。promise を返してもよく、呼び出し元の signal がそれをキャンセルします。throw すると、投げられた値を `cause` として呼び出しが `EXT_HOOK_FAILED` で終わります。すでに開いていた SSE ストリームは `closed.code` に `EXT_HOOK_FAILED` を報告し、`closed.cause` には投げられた値を `cause` とするエラーが入ります。すでに開いていた WebSocket セッションは `closed.kind: "error"` で終わり、投げられた値が `closed.cause` になります。
+5. HTTP のみ: バジェットがリトライの費用を払わなければ、呼び出しは終わります。
+6. 呼び出しは `Retry-After` 遅延（`429` または `503` のレスポンスに存在し有効な場合）または指数バックオフの遅延を待ち、そのあとバランサーが、直前に失敗したものを含め、すべてのエンドポイントから選び直します。単一のエンドポイントは、遅延のあとにもう一度試されます。HTTP では各リトライがリクエストを作り直し、インターセプターチェーン全体を再実行します。SSE と WebSocket はリクエストを再利用し、URL だけを解決し直します。
 
-`context` は [`RetryContext`](/ja-JP/api/core/retrycontext-type) で、`transport` によって絞られます。どのコンテキストにも `attempt`（始まろうとしているリトライの番号。1 から）、`cause`（Fault、エラー、または close の原因）、`retryable`（デフォルトのポリシーが決めるもの）があります。HTTP は `method`、`endpoint`、`status` を加え、SSE は `method`、`lastEventId`、`open`、`status` を加え、WebSocket は `code`、`reason`、`wasClean` を加えます。デフォルトを保ったうえで規則を足すには `context.retryable` を返し、置き換えるには自分の判定を返してください。
+`context` は [`RetryContext`](/ja-JP/api/core/retrycontext-type) で、`transport` によって絞られます。どのコンテキストにも `attempt`（始まろうとしているリトライの番号。1 から）、`cause`（Fault、エラー、または close の原因）、`retryable`（デフォルトのポリシーが決めるもの）があります。HTTP は `method`、`endpoint`、`status`、`headers`、`retryAfterMs` を加え、SSE は `method`、`lastEventId`、`open`、`status`、`headers`、`retryAfterMs` を加え、WebSocket は `code`、`reason`、`wasClean` を加えます。デフォルトを保ったうえで規則を足すには `context.retryable` を返し、置き換えるには自分の判定を返してください。
 
 デフォルトでリトライ可能かどうかが異なるのは、どの失敗を数えるかだけです。
 
-| トランスポート | デフォルトの `retryable`                                                                                                                                                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| HTTP           | メソッドが `methods` に含まれ、試行が応答を得なかったか、502、503、504 を得たか、`attemptTimeoutMs` を使い切った。それ以外のステータスは `retryable: false` で `shouldRetry` に渡されます。Fetch が始まる前のローカルな失敗はそこへ届きません。  |
-| SSE            | メソッドが `methods` に含まれ、ハンドシェイクがネットワークで失敗したか、ハンドシェイクが 502、503、504 を返したか、試行が `attemptTimeoutMs` を使い切ったか、開いたストリームがネットワークで失敗した。ストリームの正常終了はリトライしません。 |
-| WebSocket      | `session.close()` が要求していないすべての close。開かなかった接続と、応答のないハートビートを含みます。                                                                                                                                         |
+| トランスポート | デフォルトの `retryable`                                                                                                                                                                                                                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP           | メソッドが `methods` に含まれ、試行が応答を得なかったか、`statusCodes` に含まれるステータス（デフォルトでは `429`、`502`、`503`、`504`）を得たか、`attemptTimeoutMs` を使い切った。それ以外のステータスは `retryable: false` で `shouldRetry` に渡されます。Fetch が始まる前のローカルな失敗はそこへ届きません。  |
+| SSE            | メソッドが `methods` に含まれ、ハンドシェイクがネットワークで失敗したか、ハンドシェイクが `statusCodes` に含まれるステータス（デフォルトでは `429`、`502`、`503`、`504`）を返したか、試行が `attemptTimeoutMs` を使い切ったか、開いたストリームがネットワークで失敗した。ストリームの正常終了はリトライしません。 |
+| WebSocket      | `session.close()` が要求していないすべての close。開かなかった接続と、応答のないハートビートを含みます。                                                                                                                                                                                                          |
 
 SSE では、数字だけのサーバーの `retry:` フィールドが以降の試行で `delayMs` を置き換え、コミットされたイベント ID は UTF-8 のバイト列として `Last-Event-ID` に送られ、成功したハンドシェイクが回数をリセットします。WebSocket では成功した `open` が回数をリセットします。そのため、接続を受け入れてすぐに閉じるサーバーはリトライされ続けます。止めるには `shouldRetry` を使います。SSE と WebSocket にバジェットはありません。HTTP のオフライン失敗はリトライしません。
 
@@ -258,5 +259,19 @@ HTTP のバジェットはクライアント所有で、Finagle 流です。デ�
 `pick` は error-first タプルを返します。任意の `start` は、選ばれたトランスポートが始まる直前に、同期的に多くて 1 回実行されます。任意の `end` は `start` のあと 1 回、ピアの応答が始まるとき（またはレスポンス前の失敗）に実行されます。任意の `done` は完了時に 1 回実行されます。Fetch は Linkerd の最初のボディフレームの境界も、Envoy のストリームの境界も公開できません。すべてのフックからの throw は封じ込められ、ランタイムが `reportError` を定義している場合はそれで報告されます（処理されない報告は、エラーハンドラーのない Bun や Deno のプロセスを終了させることがあります）。返された promise は待機されません。`ERR_NO_CANDIDATE` は `REQ_BUILD_FAILED` の `cause` でしかありません。`FaultCode` ではありません。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーをまたいでもそれを認識します。
 
 バランサーが見るのは中立な結果だけです。各トランスポートは自身の情報を `DoneInfo.code` へ変換します。デフォルトの外れ値検出は、`NET_TIMEOUT` と `NET_BODY_INCOMPLETE` を含め、code を持つ結果をすべて失敗としてカウントします。生の `DoneInfo.status` はカスタムバランサーのためだけに残され、組み込み戦略は決して読みません。`PickInfo` は、1 回の pick の候補 `endpoints`、`members`（クライアントの全エンドポイントリストで、どの試行でも同じです）、任意の `meta` を含み、トランスポートを区別するフィールドはありません。
+
+## 並行処理 (`@defjs/core/concurrent`)
+
+共有または派生した `Client` 上で、均質なバッチや異質なタスクを並行実行します。任意の同時実行数上限とフェイルファストのキャンセルに対応します。
+
+### concurrentMap(), concurrentMapSettled(), concurrentAll(), concurrentAllSettled()
+
+<ApiSignature name="concurrentMap, concurrentMapSettled, concurrentAll, concurrentAllSettled" />
+
+### ConcurrencyOptions, ConcurrentTask, ConcurrentTaskRecord
+
+<ApiSignature name="ConcurrencyOptions, ConcurrentTask, ConcurrentTaskRecord" />
+
+`concurrentMap` と `concurrentAll` は最初の操作の Fault でフェイルファストし、実行中の兄弟タスクをアボートします（バッチ内でそれより先に開かれたストリームやセッションも閉じます）。一方、`concurrentMapSettled` と `concurrentAllSettled` は兄弟タスクをキャンセルせず、各要素のエラーファーストタプルをすべて収集します。`options.concurrency` のデフォルトは `Infinity` で、正でない値や整数でない値を渡すと同期的に `RangeError` をスローします。[同時実行数制限とプールされた呼び出し](/ja-JP/recipes/concurrency-limit) を参照してください。
 
 [Client ガイド](/ja-JP/docs/client) を見てください。

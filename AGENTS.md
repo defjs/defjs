@@ -11,14 +11,16 @@ Defjs separates the two sides of an SDK:
 
 Definitions can be published on their own; the consuming application keeps ownership of endpoint, credentials, interceptors, and transports.
 
-| Path                            | Package                       | Owns                                                                                                                                                                                                    | Boundary                                                                        |
-| ------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `packages/core`                 | `@defjs/core`                 | HTTP / SSE / WebSocket definitions, `struct`, client, interceptors                                                                                                                                      | No runtime dependencies; platform-neutral ESM                                   |
-| `packages/react`                | `@defjs/react`                | `ClientProvider`, `useClient`                                                                                                                                                                           | Thin plugin; not a query/cache/state library                                    |
-| `packages/vue`                  | `@defjs/vue`                  | `HTTP_CLIENT`, `createClientPlugin`, `injectClient`                                                                                                                                                     | Thin plugin; not a query/cache/state library                                    |
-| `packages/opentelemetry-server` | `@defjs/opentelemetry-server` | Server-side outbound OpenTelemetry for core clients                                                                                                                                                     | Does not initialize the OTel SDK; no bodies or full headers captured by default |
-| `doc`                           | private                       | Fumadocs + React Router + Vite documentation site                                                                                                                                                       | Content and site code only                                                      |
-| `test`                          | root                          | Root test infrastructure: `runtime-matrix.ts`, `spec-matrix.ts`, `vitest-shared.ts`, `runtime-guard.ts`, `no-skip-reporter.ts`, `unit-node.ts`, `assert-pack.ts`, Firefox env, and the `root-bun` specs | Not a package                                                                   |
+| Path                            | Package                       | Owns                                                                                                                                                                                                            | Boundary                                                                                                              |
+| ------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `packages/core`                 | `@defjs/core`                 | HTTP / SSE / WebSocket definitions, `struct`, client, interceptors, `MessagePort` & `webext` proxy subpaths                                                                                                     | No runtime dependencies; platform-neutral ESM                                                                         |
+| `packages/cli`                  | `@defjs/cli`                  | Development-time CLI (`defjs`), `defjs.config.ts` via native `import()`, 2-space AST printer, OpenAPI-to-Defjs generator via `@scalar/openapi-parser` (bundled into single-file ESM CLI with zero runtime deps) | Dev-time Node/Bun CLI only; generates stateless ESM definitions; optional `@defjs/core` peer; never bundled into core |
+| `packages/react`                | `@defjs/react`                | `ClientProvider`, `useClient`                                                                                                                                                                                   | Thin plugin; not a query/cache/state library                                                                          |
+| `packages/vue`                  | `@defjs/vue`                  | `HTTP_CLIENT`, `createClientPlugin`, `injectClient`                                                                                                                                                             | Thin plugin; not a query/cache/state library                                                                          |
+| `packages/opentelemetry-server` | `@defjs/opentelemetry-server` | Server-side outbound OpenTelemetry for core clients                                                                                                                                                             | Does not initialize the OTel SDK; no bodies or full headers captured by default                                       |
+| `doc`                           | private                       | Fumadocs + React Router + Vite documentation site                                                                                                                                                               | Content and site code only                                                                                            |
+| `bench`                         | root                          | Standalone performance benchmark suite comparing `@defjs/core` against fetch/competitor baselines                                                                                                               | Benchmarks only; excluded from workspaces, releases, and unit gates                                                   |
+| `test`                          | root                          | Root test infrastructure: `runtime-matrix.ts`, `spec-matrix.ts`, `vitest-shared.ts`, `runtime-guard.ts`, `no-skip-reporter.ts`, `unit-node.ts`, `assert-pack.ts`, Firefox env, and the `root-bun` specs         | Not a package                                                                                                         |
 
 Read the reference that matches your change before editing:
 
@@ -32,11 +34,11 @@ Read the reference that matches your change before editing:
 3. **`builder` is a synchronous pure function.** It returns `{ path?, query?, headers?, body? }`, runs at execution time, and a throw becomes `REQ_BUILD_FAILED`.
 4. **Results are error-first tuples.** An operation returns `[err, ...]`; request, response, and transport failures do not throw at the call site. A call the types reject has no specified result and is not a `Fault`; a `signal` option that is not an `AbortSignal`, an HTTP `output` or `error` that is not a struct, or no client at all fails with a `TypeError` in practice, not by contract. Preserve the fault codes and causes documented in `doc/content/en-US/docs/errors.mdx` and the TSDoc of the `error/` exports.
 5. **`struct` only declares structure.** Instances have no `.parse()`; there is no public `struct.encode`, no `setErrorMap`, and no zero-filling or partial results. Validation DSL and business rules belong to the application.
-6. **`@defjs/core` stays dependency-free and platform-neutral.** `packages/core/package.json` has no `dependencies`. Do not import Node-only APIs into `packages/*/src`. Test code (`packages/*/test`, root `test/`) may use them where the runtime layer needs them, but the runtime-neutral fixture modules may not (see Testing rules).
+6. **`@defjs/core` stays dependency-free and platform-neutral.** `packages/core/package.json` has no `dependencies`. Do not import Node-only APIs into `packages/{core,react,vue}/src`. `packages/cli` is a development-time Node/Bun CLI package with zero runtime `dependencies` (build-time dependencies are bundled into `dist/`, with `@defjs/core` as an optional peer) and may use `node:` built-ins; test code (`packages/*/test`, root `test/`) may use them where the runtime layer needs them, but the runtime-neutral fixture modules may not (see Testing rules).
 7. **Plugins stay thin.** Two kinds share the rule that they add no caching and no state:
    - _Framework plugins_ (`@defjs/react`, `@defjs/vue`) share a typed client through framework primitives and add no transport behavior.
    - _Middleware plugins_ (`@defjs/opentelemetry-server`) are the plugin form of an interceptor chain: one appends interceptors to the application's client through the documented extension points (interceptors and client options) and never replaces or wraps a transport.
-8. **The public surface is the package root, plus the browser-only `@defjs/core/xsrf` entry.** `src/index.ts` → `src/public_api.ts` → per-module `public_api.ts`, and `src/xsrf/index.ts` → `src/xsrf/public_api.ts`. Anything outside those chains is internal.
+8. **The public surface is the package root, plus the subpath entries `@defjs/core/concurrent`, `@defjs/core/port`, `@defjs/core/port/webext`, and the browser-only `@defjs/core/xsrf`.** `src/index.ts` → `src/public_api.ts` → per-module `public_api.ts`, `src/concurrent/index.ts` → `src/concurrent/public_api.ts`, `src/port/index.ts` → `src/port/public_api.ts`, `src/port/webext/index.ts` → `src/port/webext/public_api.ts`, and `src/xsrf/index.ts` → `src/xsrf/public_api.ts`. Anything outside those chains is internal.
 9. **100% coverage is the floor** in every published package and in the documentation site's unit project (`app/lib`, `app/data`, `scripts`; branches, functions, lines, statements). Each runtime project (`core-chrome`, `core-node`, ...) checks the floor on its own against the files its specs load and writes `coverage/<runtime>/`; reports are not merged. New behavior arrives with tests in the same change.
 
 Authentication, tracing, and cross-request header changes belong in an interceptor. `builder` only places the current input. Application-defined request metadata belongs in the definition's `meta`.
@@ -49,28 +51,31 @@ Examples, READMEs, and guides follow the minimal example in `doc/examples/http/b
 
 ### `@defjs/core`
 
-| Module         | Contents                                          |
-| -------------- | ------------------------------------------------- |
-| `client/`      | client creation, derivation, request options      |
-| `error/`       | fault types and factory                           |
-| `http/`        | request definitions, request building, transports |
-| `xsrf/`        | browser-only `withXSRF` for `@defjs/core/xsrf`    |
-| `sse/`         | event-stream definitions and transports           |
-| `web_socket/`  | WebSocket definitions, codec, heartbeat           |
-| `struct/`      | schema constructors, parsing                      |
-| `interceptor/` | interceptor types and built-ins                   |
-| `internal/`    | shared internals; never exported from the package |
+| Module         | Contents                                                         |
+| -------------- | ---------------------------------------------------------------- |
+| `balancer/`    | client endpoint balancer, outlier detection, health strategies   |
+| `client/`      | client creation, derivation, request options                     |
+| `concurrent/`  | concurrency primitives for `@defjs/core/concurrent`              |
+| `error/`       | fault types and factory                                          |
+| `http/`        | request definitions, request building, transports                |
+| `port/`        | multiplexed `MessagePort` & `webext` proxy (`@defjs/core/port*`) |
+| `xsrf/`        | browser-only `withXSRF` for `@defjs/core/xsrf`                   |
+| `sse/`         | event-stream definitions and transports                          |
+| `web_socket/`  | WebSocket definitions, codec, heartbeat                          |
+| `struct/`      | schema constructors, parsing                                     |
+| `interceptor/` | interceptor types and built-ins                                  |
+| `internal/`    | shared internals; never exported from the package                |
 
 Specs live beside the source. `packages/core/test/` holds end-to-end specs and the shared fixture server (`packages/core/test/fixture/`); the naming table below decides which `core-<runtime>` projects run them.
 
 ### `doc`
 
-| Path            | Contents                                                                         |
-| --------------- | -------------------------------------------------------------------------------- |
-| `doc/app/`      | site application, components, generated API data, routing, LLM output            |
-| `doc/content/`  | guides and the 11 API overview pages per locale; entry pages are not stored here |
-| `doc/examples/` | complete, typechecked examples embedded by content pages                         |
-| `doc/scripts/`  | API extraction, build, build fingerprint, link check, site URL check             |
+| Path            | Contents                                                                                              |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| `doc/app/`      | site application, components, generated API data, routing, LLM output                                 |
+| `doc/content/`  | guides and the 12 API overview pages plus `api/index.mdx` per locale; entry pages are not stored here |
+| `doc/examples/` | complete, typechecked examples embedded by content pages                                              |
+| `doc/scripts/`  | API extraction, build, build fingerprint, link check, site URL check                                  |
 
 Documentation unit specs (`*.spec.ts`, run by the `doc-bun` project) sit beside the source in `app/`, `scripts/`, and `examples/`; there is no separate `doc/test/` directory. Specs are excluded from the build fingerprint, so editing one does not stale `doc/build`.
 
@@ -88,7 +93,7 @@ Documentation unit specs (`*.spec.ts`, run by the `doc-bun` project) sit beside 
   | `*.bun.spec.ts`     | Bun only                                           | Bun APIs                        |
   | `*.type.spec.ts`    | no runtime project; checked by `bun run typecheck` | type-level contracts            |
 
-  Runtime sets per package: `packages/core` runs chrome, firefox, node and bun; `packages/react` and `packages/vue` run chrome and firefox; `packages/opentelemetry-server` runs node and bun; `doc` unit specs and the root `test/` run on bun.
+  Runtime sets per package: `packages/core` runs chrome, firefox, node and bun; `packages/react` and `packages/vue` run chrome and firefox; `packages/cli` and `packages/opentelemetry-server` run node and bun; `doc` unit specs and the root `test/` run on bun.
 
 - The part of the name before the suffix is free (`balancer.end.spec.ts`, `http.upload_progress.worker.chrome.spec.ts`), but its last segment must not be a reserved word: `browser`, `server`, `chromium`, `webkit`, `safari`, `deno`, `edge`, `workerd`, `chrome`, `firefox`, `node`, `bun`, `type`, `test`, `spec`. `x.node.spec.ts` is valid; `x.browser.spec.ts`, `x.chrome.node.spec.ts` and `x.type.node.spec.ts` are not. `.test.` test files do not exist, and file names use only lowercase letters, digits, `_`, `-` and `.`. `test/spec-naming.bun.spec.ts` enforces this and compares `vitest list` output of every project with the expected table.
 - Do not skip inside a shared spec with `process.platform`-style checks. Put the test in the runtime-specific file. A package runs only the runtimes of its own `unit:<runtime>` scripts (React and Vue: chrome and firefox; OpenTelemetry: node and bun), so a runtime suffix that the package does not run fails the naming check instead of being ignored.
@@ -132,7 +137,7 @@ bunx --bun playwright install --with-deps chromium firefox
 git config core.hooksPath .githooks
 ```
 
-Playwright browsers are needed by the Core, React, and Vue browser projects. Bun runs everything except the Node projects: `node --run unit:node` is the only command that needs Node.js, 22.18 or newer (native type stripping: the root `test/unit-node.ts` runs as TypeScript, and an older Node.js fails to load it). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core` and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core` and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook fixes the fully staged files and stages them again, only checks a file that also has unstaged changes (so it never stages them), formats the staged files and runs the type check. It passes names with a `./` prefix so a file name starting with `-` is not read as an option. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun run lint` (the hook and CI do).
+Playwright browsers are needed by the Core, React, and Vue browser projects. Bun runs everything except the Node projects: `node --run unit:node` is the only command that needs Node.js, 22.18 or newer (native type stripping: the root `test/unit-node.ts` runs as TypeScript, and an older Node.js fails to load it). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core`, `packages/cli`, and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core`, `packages/cli`, and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook fixes the fully staged files and stages them again, only checks a file that also has unstaged changes (so it never stages them), formats the staged files and runs the type check. It passes names with a `./` prefix so a file name starting with `-` is not read as an option. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun run lint` (the hook and CI do).
 
 Run these in order from the repository root and stop at the first failure. CI runs `checks` (gates 1, 2, 3) first. Once it passes, `build` (gate 5) and `unit-chrome`, `unit-firefox`, `unit-bun`, `unit-node` (gate 4 split by runtime) run in parallel.
 
@@ -177,7 +182,7 @@ Pass a file to run one spec in its project, for example `bun run --cwd packages/
 
 Most gates run on Bun. `bun run` follows `bunfig.toml` `[run] bun = true`; the root and each workspace have one, so scripts such as `vitest run` execute with Bun rather than the Node shebang in Vitest's binary. The browser projects (chrome, firefox) also have their main Vitest process on Bun; the browser only hosts the tests.
 
-Node.js is a supported, tested runtime for the packages that define a `unit:node` script (`packages/core`, `packages/opentelemetry-server`). Run it with Node itself:
+Node.js is a supported, tested runtime for the packages that define a `unit:node` script (`packages/core`, `packages/opentelemetry-server`, `packages/cli`). Run it with Node itself:
 
 ```bash
 node --run unit:node                       # all Node projects from the root (test/unit-node.ts)
@@ -215,7 +220,7 @@ The build fails if its inputs change while it runs.
 
 ## Documentation site rules
 
-- There are 11 locales: `en-US`, `zh-Hans`, `zh-Hant-TW`, `zh-Hant-HK`, `ja-JP`, `ko-KR`, `de-DE`, `fr-FR`, `es-ES`, `ru-RU`, `ar`. Every locale carries every guide; there is no fallback to English for guides. API reference text is English TSDoc in every locale. Each locale keeps only its 11 overview pages: `api/index.mdx`, `client.mdx`, `errors.mdx`, `http.mdx`, `interceptors.md`, `opentelemetry-server.mdx`, `react.mdx`, `sse.mdx`, `struct.md`, `vue.mdx`, and `web-socket.mdx`. The 202 entry URLs come from generated data, so `navigation.spec.ts` asserts 246 unique URLs per locale.
+- There are 11 locales: `en-US`, `zh-Hans`, `zh-Hant-TW`, `zh-Hant-HK`, `ja-JP`, `ko-KR`, `de-DE`, `fr-FR`, `es-ES`, `ru-RU`, `ar`. Every locale carries every guide; there is no fallback to English for guides. API reference text is English TSDoc in every locale. Each locale keeps only its 13 API files (`api/index.mdx` plus 12 overview pages matching `overviewGroups`: `cli.mdx`, `client.mdx`, `errors.mdx`, `http.mdx`, `interceptors.md`, `opentelemetry-server.mdx`, `port.mdx`, `react.mdx`, `sse.mdx`, `struct.md`, `vue.mdx`, and `web-socket.mdx`). The 252 entry URLs come from generated data, so `navigation.spec.ts` asserts 305 unique URLs per locale.
 - Overview pages must not hand-copy a signature of a generated entry. Write `<ApiSignature name="withEndpoint" />`. Several names go in that attribute, comma-separated, in source order: `<ApiSignature name="ERR_ABORTED, ERR_TIMEOUT" />`. The MDX build replaces the tag with the generated signature before highlighting, so search and `llms` see the fence. An unknown or ambiguous name fails the build with the file path. `api-signatures.spec.ts` fails with `hand-copied signature of a generated entry` when a fence declares a catalog name. Example fences whose names are not entries stay hand-written.
 - Complete TS/TSX examples live in `doc/examples/` and are embedded with `<include>`. The export scan understands only `export { ... }`, `export type { ... }`, declarations, and `export * from`; a new form such as `export type * as ns from` fails `doc/app/data/exports.spec.ts`.
 - Vue single-file examples are not statically checked.
@@ -223,7 +228,7 @@ The build fails if its inputs change while it runs.
 - After rendering, the build checks local page links and anchors, including generated navigation and locale links.
 - Run `bun run --cwd doc extract-api` after changing public exports or their TSDoc, and commit the two files it writes: `api-entries.json` and `api-reference.json`. A public export needs an English, neutral TSDoc description. Use `@group` for its overview, `@see` for related exports, and `@exampleFile` for a type-checked example. Do not put site-relative links in comments; comments are the only input to generation. An export with no description fails extraction. Generation also fails when a signature is not syntactically valid TypeScript. `exports.spec.ts` still checks the catalog against the public exports in both directions, including kind.
 - Extraction builds the program with `typescript/async` under Bun. Parameter and member tables come from `doc/scripts/type-tables.ts`, a Bun-native port of `fumadocs-typescript`'s entry generation. `fumadocs-typescript` is not a dependency, and no Node process is started.
-- Set the repository variable `SITE_URL` to the confirmed HTTPS origin before deploying. Local builds default to localhost; the release job rejects a missing or local origin.
+- Set the repository variable `SITE_URL` to the confirmed HTTPS origin before deploying to Cloudflare Pages (`doc/scripts/check-site-url.ts` validates it during deployment). Local builds default to localhost; non-HTTPS, localhost, non-root paths, credentials, and query/hash components are rejected by `check-site-url.ts`.
 
 ### Skill references
 
@@ -233,7 +238,7 @@ The build fails if its inputs change while it runs.
 
 - The **Release** workflow is manual and pick-what-you-want. Versions come from the committed package manifests; nothing bumps them and no changesets are involved. Publishing invokes npm because it is the registry's OIDC trusted-publishing CLI; `bun publish` does not support npm trusted publishing (oven-sh/bun#22423). The packaging check (`bun test/assert-pack.ts <publish-dir>`) runs in the release workflow, where Node and Bun are both installed; it is not part of the unit gate.
 - **Release tags are mandatory.** After confirming that a package was published successfully, create its own lightweight Git tag on the exact commit used for publication. A package release is not complete until its tag has been pushed and verified on the remote to point to that commit.
-- Tag names are the package name without its `@defjs/` scope, `@`, then the published version: `core@0.6.0`, `react@0.0.3`, `vue@0.0.3`, `opentelemetry-server@0.0.3`. One tag per package, not one per release, because the packages version independently. Push explicit refs (`git push origin refs/tags/core@0.6.0`). The workflow neither reads nor creates tags, so a tag records a release and never drives one. `0.1.0`–`0.3.3` are the pre-convention core-only series; leave them in place.
+- Tag names are the package name without its `@defjs/` scope, `@`, then the published version: `core@0.6.0`, `cli@0.1.0`, `react@0.0.3`, `vue@0.0.3`, `opentelemetry-server@0.0.3`. One tag per package, not one per release, because the packages version independently. Push explicit refs (`git push origin refs/tags/core@0.6.0`). The workflow neither reads nor creates tags, so a tag records a release and never drives one. `0.1.0`–`0.3.3` are the pre-convention core-only series; leave them in place.
 - Each package builds with `tsdown` and publishes from `dist`. The bundle options and the published manifest are written once in the root `tsdown.shared.ts`: `libraryConfig` bundles the entries, copies `LICENSE` and the package `README.md`, and writes `dist/package.json` with `exports` derived from the entry names (`index` is the package root, every other entry a subpath). Each `build` script first runs `bun check --project tsconfig.build.json`, because tsdown emits declarations without checking them; `types: []` in that file is also what keeps a platform type out of Core. The scripts then call `bun --bun tsdown`, so they run on Bun from any directory, not only the repository root.
 - `bun test/assert-pack.ts <publish-dir>` must pass before publishing: it checks that `npm pack --dry-run` includes `LICENSE`, `README.md`, `package.json`, and every file referenced by the entry fields.
 - Packages that depend on Core build Core first: their build type-checks against `../core/dist`, so building one of them alone needs `bun run --cwd packages/core build` before it. The root `build` script runs the workspaces one after another in workspace order (`--sequential`), which puts `core` before the plugins and `doc`, because `@defjs/opentelemetry-server` names Core only as a peer dependency and would otherwise build in parallel with it. A Core patch within a plugin's peer range does not require a release of that plugin.
@@ -243,10 +248,10 @@ The build fails if its inputs change while it runs.
 
 - Run `bun run fmt`; the formatter is `bun fmt`.
 - Edit generated output: `dist/`, `coverage/`, `doc/build/`, `doc/.react-router/`, `test-out/`.
-- Reintroduce removed APIs: global client, `client.execute`, command objects, `executeHttpCommand` and the other `execute*Command` exports, `withTimeout`, the `timeout` and `abort` request options, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, OpenAPI generation.
+- Reintroduce removed APIs in `@defjs/core`: global client, `client.execute`, command objects, `executeHttpCommand` and the other `execute*Command` exports, `withTimeout`, the `timeout` and `abort` request options, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, built-in/runtime OpenAPI generation.
 - Add a `.js`, `.mjs`, or `.cjs` file anywhere in the repository.
 - Put authentication or tracing into `builder`, or infer request placement from `input` field names.
-- Add a runtime dependency to `@defjs/core`, or import Node-only modules into `packages/*/src`.
+- Add a runtime dependency to `@defjs/core`, or import Node-only modules into `packages/{core,react,vue}/src` (Node built-ins and `@scalar/openapi-parser` belong only in `@defjs/cli` or runtime-specific test code).
 - Leave a new public export without TSDoc, or skip regenerating the API data.
 - Add retries, sleeps, skips (`.skip`, `.todo`, conditional skips), platform checks in shared specs, or lowered coverage to make a gate pass.
 - Add a `.test.` test file, a `.browser.spec` or `.server.spec` file, or name a spec with a reserved word as its last segment.

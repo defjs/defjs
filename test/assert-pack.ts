@@ -7,6 +7,7 @@
  */
 
 const entryFields = [
+  "bin",
   "exports",
   "types",
   "main",

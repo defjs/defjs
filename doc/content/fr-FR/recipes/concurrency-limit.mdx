@@ -1,0 +1,25 @@
+---
+title: "Limites de concurrence & appels groupés"
+description: Protégez vos origines en aval avec concurrencyLimitHttpInterceptor et parallélisez proprement via @defjs/core/concurrent.
+---
+
+# Limites de concurrence & appels groupés
+
+Utilisez `concurrencyLimitHttpInterceptor` sur le `Client` comme bulkhead à l'échelle du client (file FIFO avec protection optionnelle contre le débordement via `maxQueue`), et utilisez `@defjs/core/concurrent` (`concurrentMap`, `concurrentMapSettled`, `concurrentAll`, `concurrentAllSettled`) pour des appels parallèles fail-fast ou complets liés directement à ce `Client`.
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Consultez [API Client](/fr-FR/api/client) et [API Intercepteurs](/fr-FR/api/interceptors).

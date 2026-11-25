@@ -94,7 +94,6 @@ await getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 });
 
 ## 下一步
 
-- 如果是在业务项目中整理前后端请求层，先看 [应用接口层](/zh-Hans/docs/application-api) 和 [测试指南](/zh-Hans/docs/testing)。
-- 阅读 [核心架构设计](/zh-Hans/docs/design-decisions)，理解六条响应解码规则和设计约束。
+- 阅读 [核心架构设计](/zh-Hans/docs/design-decisions)，理解架构规则与六条响应解码原则。
 - 在 [数据结构 / Struct](/zh-Hans/docs/struct) 中学习复杂表单、嵌套对象和双向字段别名。
-- 如果要打包独立 SDK 发布到 npm，看 [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)。
+- 通过 [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk) 将接口定义打包发布到 npm。

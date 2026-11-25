@@ -12,6 +12,8 @@ const DEFAULT_METHODS: readonly string[] = [
   "DELETE",
 ];
 
+const DEFAULT_STATUS_CODES: readonly number[] = [429, 502, 503, 504];
+
 /** `RetryOptions` with every default applied. HTTP, SSE and WebSocket read the same record. */
 export interface RetryPolicy {
   readonly maxRetries: number;
@@ -22,6 +24,9 @@ export interface RetryPolicy {
   readonly attemptTimeoutMs: number | undefined;
   /** Upper-cased, so a method is compared with `includes(method.toUpperCase())`. */
   readonly methods: readonly string[];
+  readonly statusCodes: readonly number[];
+  readonly retryAfter: boolean;
+  readonly maxRetryAfterMs: number;
   readonly shouldRetry: RetryOptions["shouldRetry"];
 }
 
@@ -42,6 +47,9 @@ export function resolveRetryPolicy(
     methods: (options.methods ?? DEFAULT_METHODS).map((method) =>
       method.toUpperCase(),
     ),
+    statusCodes: (options.statusCodes ?? DEFAULT_STATUS_CODES).slice(),
+    retryAfter: options.retryAfter ?? true,
+    maxRetryAfterMs: options.maxRetryAfterMs ?? 60_000,
     shouldRetry: options.shouldRetry,
   };
 }

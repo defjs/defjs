@@ -1,0 +1,473 @@
+{
+  "environment": {
+    "timestamp": "2026-11-24T07:55:39.331Z",
+    "gitSha": "f54ebbe0",
+    "os": "darwin 27.2.0",
+    "arch": "arm64",
+    "cpuModel": "Apple M1 Max",
+    "cpuCores": 10,
+    "memoryGb": 32,
+    "bunVersion": "1.4.5",
+    "nodeVersion": "v26.13.1",
+    "seed": 20261124,
+    "versions": {
+      "@defjs/core": "1.0.0",
+      "arktype": "2.2.10",
+      "axios": "1.21.1",
+      "esbuild": "0.28.2",
+      "hono": "4.13.21",
+      "ky": "2.2.0",
+      "mitata": "1.0.34",
+      "ofetch": "1.5.1",
+      "openapi-fetch": "0.17.0",
+      "@orpc/client": "1.16.5",
+      "undici": "8.13.1",
+      "valibot": "1.5.0",
+      "zod": "4.6.7"
+    }
+  },
+  "struct": [
+    {
+      "scenario": "flat-6-fields",
+      "library": "@defjs/core",
+      "avgNs": 247.81,
+      "medianNs": 235.6,
+      "p75Ns": 242.09,
+      "p99Ns": 525.55,
+      "opsPerSec": 4035354
+    },
+    {
+      "scenario": "flat-6-fields",
+      "library": "zod",
+      "avgNs": 60.55,
+      "medianNs": 53.68,
+      "p75Ns": 55.82,
+      "p99Ns": 215.35,
+      "opsPerSec": 16516163
+    },
+    {
+      "scenario": "flat-6-fields",
+      "library": "valibot",
+      "avgNs": 89.98,
+      "medianNs": 85.72,
+      "p75Ns": 88.84,
+      "p99Ns": 214.03,
+      "opsPerSec": 11113184
+    },
+    {
+      "scenario": "flat-6-fields",
+      "library": "arktype",
+      "avgNs": 29.05,
+      "medianNs": 27.98,
+      "p75Ns": 30.34,
+      "p99Ns": 42.07,
+      "opsPerSec": 34425347
+    },
+    {
+      "scenario": "nested-3-level-alias-date",
+      "library": "@defjs/core",
+      "avgNs": 368.82,
+      "medianNs": 359.18,
+      "p75Ns": 372.56,
+      "p99Ns": 589.88,
+      "opsPerSec": 2711369
+    },
+    {
+      "scenario": "nested-3-level-alias-date",
+      "library": "zod",
+      "avgNs": 213.53,
+      "medianNs": 192.84,
+      "p75Ns": 206.34,
+      "p99Ns": 448.59,
+      "opsPerSec": 4683220
+    },
+    {
+      "scenario": "nested-3-level-alias-date",
+      "library": "valibot",
+      "avgNs": 214.73,
+      "medianNs": 195.55,
+      "p75Ns": 207.26,
+      "p99Ns": 500.11,
+      "opsPerSec": 4657094
+    },
+    {
+      "scenario": "nested-3-level-alias-date",
+      "library": "arktype",
+      "avgNs": 1822.97,
+      "medianNs": 1704.67,
+      "p75Ns": 1913.76,
+      "p99Ns": 3076.87,
+      "opsPerSec": 548554
+    },
+    {
+      "scenario": "array-1000-items",
+      "library": "@defjs/core",
+      "avgNs": 205943.28,
+      "medianNs": 186500,
+      "p75Ns": 191459,
+      "p99Ns": 538041,
+      "opsPerSec": 4856
+    },
+    {
+      "scenario": "array-1000-items",
+      "library": "zod",
+      "avgNs": 62996.78,
+      "medianNs": 46792,
+      "p75Ns": 49042,
+      "p99Ns": 323917,
+      "opsPerSec": 15874
+    },
+    {
+      "scenario": "array-1000-items",
+      "library": "valibot",
+      "avgNs": 73754.18,
+      "medianNs": 68875,
+      "p75Ns": 69833,
+      "p99Ns": 124583,
+      "opsPerSec": 13559
+    },
+    {
+      "scenario": "array-1000-items",
+      "library": "arktype",
+      "avgNs": 18980.51,
+      "medianNs": 18541,
+      "p75Ns": 18625,
+      "p99Ns": 31208,
+      "opsPerSec": 52686
+    },
+    {
+      "scenario": "invalid-array-first",
+      "library": "@defjs/core",
+      "avgNs": 508.98,
+      "medianNs": 491.93,
+      "p75Ns": 523.39,
+      "p99Ns": 684.46,
+      "opsPerSec": 1964724
+    },
+    {
+      "scenario": "invalid-array-first",
+      "library": "zod",
+      "avgNs": 50623.21,
+      "medianNs": 50420.13,
+      "p75Ns": 50692.46,
+      "p99Ns": 50904.6,
+      "opsPerSec": 19754
+    },
+    {
+      "scenario": "invalid-array-first",
+      "library": "valibot",
+      "avgNs": 69543.89,
+      "medianNs": 65959,
+      "p75Ns": 67500,
+      "p99Ns": 99667,
+      "opsPerSec": 14379
+    },
+    {
+      "scenario": "invalid-array-first",
+      "library": "arktype",
+      "avgNs": 355091.66,
+      "medianNs": 327417,
+      "p75Ns": 342292,
+      "p99Ns": 1055000,
+      "opsPerSec": 2816
+    },
+    {
+      "scenario": "invalid-nested-deep",
+      "library": "@defjs/core",
+      "avgNs": 1209.51,
+      "medianNs": 847.29,
+      "p75Ns": 1388.03,
+      "p99Ns": 3808.33,
+      "opsPerSec": 826781
+    },
+    {
+      "scenario": "invalid-nested-deep",
+      "library": "zod",
+      "avgNs": 312.11,
+      "medianNs": 229.59,
+      "p75Ns": 260.69,
+      "p99Ns": 1414.88,
+      "opsPerSec": 3203953
+    },
+    {
+      "scenario": "invalid-nested-deep",
+      "library": "valibot",
+      "avgNs": 271.42,
+      "medianNs": 259.35,
+      "p75Ns": 271.94,
+      "p99Ns": 449.14,
+      "opsPerSec": 3684317
+    },
+    {
+      "scenario": "invalid-nested-deep",
+      "library": "arktype",
+      "avgNs": 2882.32,
+      "medianNs": 2865.4,
+      "p75Ns": 2964.67,
+      "p99Ns": 3116.38,
+      "opsPerSec": 346943
+    }
+  ],
+  "bundleSize": [
+    {
+      "label": "@defjs/core (minimal: defineRequest + struct)",
+      "rawBytes": 56101,
+      "gzipBytes": 19205,
+      "brotliBytes": 17095
+    },
+    {
+      "label": "@defjs/core (resilient: p2c + outlierDetection + retry + middleware)",
+      "rawBytes": 59379,
+      "gzipBytes": 20477,
+      "brotliBytes": 18206
+    },
+    {
+      "label": "@defjs/core (full root entry)",
+      "rawBytes": 94435,
+      "gzipBytes": 31773,
+      "brotliBytes": 28052
+    },
+    {
+      "label": "ky (minimal)",
+      "rawBytes": 31117,
+      "gzipBytes": 10964,
+      "brotliBytes": 9895
+    },
+    {
+      "label": "ofetch (minimal)",
+      "rawBytes": 10137,
+      "gzipBytes": 4046,
+      "brotliBytes": 3708
+    },
+    {
+      "label": "axios (minimal)",
+      "rawBytes": 58689,
+      "gzipBytes": 22304,
+      "brotliBytes": 20123
+    },
+    {
+      "label": "openapi-fetch + zod",
+      "rawBytes": 460693,
+      "gzipBytes": 95377,
+      "brotliBytes": 78636
+    },
+    {
+      "label": "@orpc/client + zod",
+      "rawBytes": 476320,
+      "gzipBytes": 100943,
+      "brotliBytes": 83471
+    }
+  ],
+  "httpOverhead": [
+    {
+      "mode": "sequential",
+      "library": "native fetch",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 310.79,
+      "reqPerSec": 16088,
+      "p50Ms": 0.059,
+      "p95Ms": 0.094,
+      "p99Ms": 0.119
+    },
+    {
+      "mode": "sequential",
+      "library": "@defjs/core (fetch + struct)",
+      "schemaValidated": true,
+      "requests": 5000,
+      "durationMs": 462.59,
+      "reqPerSec": 10808.7,
+      "p50Ms": 0.08,
+      "p95Ms": 0.153,
+      "p99Ms": 0.275
+    },
+    {
+      "mode": "sequential",
+      "library": "@defjs/core (undici.Pool + struct)",
+      "schemaValidated": true,
+      "requests": 5000,
+      "durationMs": 485.84,
+      "reqPerSec": 10291.5,
+      "p50Ms": 0.085,
+      "p95Ms": 0.15,
+      "p99Ms": 0.209
+    },
+    {
+      "mode": "sequential",
+      "library": "ky",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 476.63,
+      "reqPerSec": 10490.3,
+      "p50Ms": 0.078,
+      "p95Ms": 0.135,
+      "p99Ms": 0.23
+    },
+    {
+      "mode": "sequential",
+      "library": "ofetch",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 335.8,
+      "reqPerSec": 14890,
+      "p50Ms": 0.062,
+      "p95Ms": 0.099,
+      "p99Ms": 0.126
+    },
+    {
+      "mode": "sequential",
+      "library": "axios",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 516,
+      "reqPerSec": 9690,
+      "p50Ms": 0.092,
+      "p95Ms": 0.151,
+      "p99Ms": 0.225
+    },
+    {
+      "mode": "sequential",
+      "library": "openapi-fetch",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 347.12,
+      "reqPerSec": 14404.1,
+      "p50Ms": 0.064,
+      "p95Ms": 0.097,
+      "p99Ms": 0.121
+    },
+    {
+      "mode": "concurrent-16",
+      "library": "native fetch",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 122.73,
+      "reqPerSec": 40740.8,
+      "p50Ms": 0.384,
+      "p95Ms": 0.55,
+      "p99Ms": 0.709
+    },
+    {
+      "mode": "concurrent-16",
+      "library": "@defjs/core (fetch + struct)",
+      "schemaValidated": true,
+      "requests": 5000,
+      "durationMs": 202.98,
+      "reqPerSec": 24632.6,
+      "p50Ms": 0.567,
+      "p95Ms": 1.138,
+      "p99Ms": 1.938
+    },
+    {
+      "mode": "concurrent-16",
+      "library": "@defjs/core (undici.Pool + struct)",
+      "schemaValidated": true,
+      "requests": 5000,
+      "durationMs": 338.1,
+      "reqPerSec": 14788.6,
+      "p50Ms": 1.002,
+      "p95Ms": 1.485,
+      "p99Ms": 3.218
+    },
+    {
+      "mode": "concurrent-16",
+      "library": "ky",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 206.97,
+      "reqPerSec": 24157.6,
+      "p50Ms": 0.57,
+      "p95Ms": 1.163,
+      "p99Ms": 1.961
+    },
+    {
+      "mode": "concurrent-16",
+      "library": "ofetch",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 138.97,
+      "reqPerSec": 35980.2,
+      "p50Ms": 0.409,
+      "p95Ms": 0.729,
+      "p99Ms": 1.016
+    },
+    {
+      "mode": "concurrent-16",
+      "library": "axios",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 391.91,
+      "reqPerSec": 12758.2,
+      "p50Ms": 1.142,
+      "p95Ms": 1.763,
+      "p99Ms": 3.128
+    },
+    {
+      "mode": "concurrent-16",
+      "library": "openapi-fetch",
+      "schemaValidated": false,
+      "requests": 5000,
+      "durationMs": 141.4,
+      "reqPerSec": 35359.8,
+      "p50Ms": 0.402,
+      "p95Ms": 0.763,
+      "p99Ms": 1.034
+    }
+  ],
+  "resilience": [
+    {
+      "library": "bare fetch (round-robin, no retry)",
+      "logicalCalls": 200,
+      "wireRequests": 200,
+      "successCount": 142,
+      "errorCount": 58,
+      "successRatePct": 71,
+      "retryAmplification": 1,
+      "p50Ms": 6.13,
+      "p95Ms": 301.85,
+      "p99Ms": 305.73,
+      "meanMs": 54.2,
+      "upstreamCounts": {
+        "A": 67,
+        "B": 67,
+        "C": 66
+      }
+    },
+    {
+      "library": "ky (round-robin, retry: 2)",
+      "logicalCalls": 200,
+      "wireRequests": 293,
+      "successCount": 162,
+      "errorCount": 38,
+      "successRatePct": 81,
+      "retryAmplification": 1.47,
+      "p50Ms": 9.64,
+      "p95Ms": 1628.01,
+      "p99Ms": 2026.03,
+      "meanMs": 356.27,
+      "upstreamCounts": {
+        "A": 67,
+        "B": 67,
+        "C": 159
+      }
+    },
+    {
+      "library": "@defjs/core (p2c + outlierDetection + withRetry)",
+      "logicalCalls": 200,
+      "wireRequests": 207,
+      "successCount": 200,
+      "errorCount": 0,
+      "successRatePct": 100,
+      "retryAmplification": 1.03,
+      "p50Ms": 7.17,
+      "p95Ms": 12.87,
+      "p99Ms": 1017.74,
+      "meanMs": 28.45,
+      "upstreamCounts": {
+        "A": 195,
+        "B": 3,
+        "C": 9
+      }
+    }
+  ]
+}

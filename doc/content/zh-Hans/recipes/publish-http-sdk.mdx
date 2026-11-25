@@ -73,10 +73,10 @@ Defjs SDK 将共享的 `struct` schema（`src/schema/`）与按业务域划分�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.8.0"
+    "@defjs/core": "^0.9.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.8.0",
+    "@defjs/core": "^0.9.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,7 +126,7 @@ bun pm pack
 把 SDK 与 `@defjs/core` 一起安装：
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.8.0
+bun add @company/s3-sdk @defjs/core@^0.9.0
 ```
 
 由于 SDK 不绑定任何客户端，消费方应用自行掌控服务端点（AWS S3、Cloudflare R2 或 MinIO）、签名拦截器与重试策略，并以纯函数方式直接调用导入的操作定义。因为 `syncReport` 发起三次调用，所以它按步骤给每个错误命名（`putErr`、`listErr`、`getErr`），并返回错误优先元组，其中的错误包装了失败的那一步，就像 Go 的 `fmt.Errorf("put object: %w", err)`。只有 `main` 会记录它：

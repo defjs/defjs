@@ -12,6 +12,7 @@ Defjs trennt den API-Vertrag, den ein SDK-Team veröffentlicht, von der Client-K
 - [Übersicht](/de-DE)
 - [Schnellstart](/de-DE/docs/start)
 - [Kernarchitektur](/de-DE/docs/design-decisions)
+- [Vergleich & hybride Architektur](/de-DE/docs/comparison-and-architecture)
 
 ## SDKs definieren [#defining-sdks]
 
@@ -26,6 +27,7 @@ Defjs trennt den API-Vertrag, den ein SDK-Team veröffentlicht, von der Client-K
 - [Fehlerbehandlung](/de-DE/docs/errors)
 - [Interceptors](/de-DE/docs/interceptors)
 - [Lastverteilung & Failover](/de-DE/docs/load-balancing)
+- [Port-Transport](/de-DE/docs/port)
 
 ## Best Practices [#best-practices]
 
@@ -40,5 +42,6 @@ Defjs trennt den API-Vertrag, den ein SDK-Team veröffentlicht, von der Client-K
 - [React](/de-DE/docs/integrations/react)
 - [Vue](/de-DE/docs/integrations/vue)
 - [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server)
+- [CLI & OpenAPI-Generator](/de-DE/docs/integrations/cli)
 - [Skill](/de-DE/docs/ai)
 - [llms.txt](/de-DE/docs/ai-api)

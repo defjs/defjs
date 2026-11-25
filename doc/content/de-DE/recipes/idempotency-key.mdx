@@ -1,0 +1,25 @@
+---
+title: "Idempotenzschlüssel"
+description: Mutierende POST- oder PATCH-Requests sicher mit idempotencyKeyHttpInterceptor und nativem 429-Retry-After-Backoff wiederholen.
+---
+
+# Idempotenzschlüssel
+
+Standardmäßig wiederholt `withRetry` nur idempotente HTTP-Methoden (`GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`). Wenn du Retries für `POST`- oder `PATCH`-Endpunkte aktivierst, kombiniere `withRetry` mit `idempotencyKeyHttpInterceptor()`, sodass jeder Wiederholungsversuch desselben logischen Aufrufs `req.correlationId` als `Idempotency-Key`-Header wiederverwendet, während nachfolgende Aufrufe frische Schlüssel erhalten.
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Siehe [Interceptors](/de-DE/docs/interceptors) und [Lastverteilung](/de-DE/docs/load-balancing) für Retry-Budgets und den Umgang mit `Retry-After`.

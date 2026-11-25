@@ -1,9 +1,14 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import type { RetryContext, RetryOptions } from "../client/config";
 import { createClient } from "../client/client";
 import { withEndpoint, withRetry, withSSEHandle } from "../client/option";
 import { struct } from "../struct";
 import { defineEventStream } from "./sse";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 const HEADERS = { "content-type": "text/event-stream" };
 
@@ -169,7 +174,7 @@ test("a normal end of the stream is not a failure", async () => {
   expect(handle).toHaveBeenCalledOnce();
 });
 
-test.each([400, 404, 429, 500])(
+test.each([400, 404, 500])(
   "a %i handshake is not retried by default",
   async (code) => {
     const contexts: RetryContext[] = [];
@@ -190,10 +195,10 @@ test.each([400, 404, 429, 500])(
 );
 
 test("the policy function can retry a status the default does not", async () => {
-  const handle = handleOf(status(429), ok());
+  const handle = handleOf(status(500), ok());
   const { operation, client } = setup(handle, {
     shouldRetry: (context) =>
-      context.transport === "sse" && context.status === 429,
+      context.transport === "sse" && context.status === 500,
   });
   const [fault, stream] = await operation(client);
   expect(fault).toBeNull();
@@ -367,4 +372,115 @@ test("maxRetries 0 with attemptTimeoutMs only limits the handshake", async () =>
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("retries 429 handshake by default, honors statusCodes, exposes headers/retryAfterMs, and respects maxRetryAfterMs", async () => {
+  const defaultHandle = handleOf(status(429), ok());
+  const defaultSetup = setup(defaultHandle);
+  const [defaultFault, defaultStream] = await defaultSetup.operation(
+    defaultSetup.client,
+  );
+  expect(defaultFault).toBeNull();
+  await drain(defaultStream);
+  expect(defaultHandle).toHaveBeenCalledTimes(2);
+
+  const optOutHandle = handleOf(status(429), ok());
+  const optOutSetup = setup(optOutHandle, { statusCodes: [502, 503, 504] });
+  expect((await optOutSetup.operation(optOutSetup.client))[0]?.code).toBe(
+    "HTTP_STATUS",
+  );
+  expect(optOutHandle).toHaveBeenCalledOnce();
+
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const contexts: RetryContext[] = [];
+  const firstTimed = Promise.withResolvers<void>();
+  let timedCalls = 0;
+  const timedHandle = vi.fn(() => {
+    firstTimed.resolve();
+    return Promise.resolve(
+      timedCalls++ === 0
+        ? new Response("busy", {
+            status: 429,
+            headers: { "retry-after": "2", "x-sse-rate-limit": "1" },
+          })
+        : new Response(body("data: a\n\n"), { headers: HEADERS }),
+    );
+  });
+  const timedClient = createClient(
+    withEndpoint("https://api.test"),
+    withSSEHandle(timedHandle),
+    withRetry({
+      delayMs: 50,
+      jitter: 0,
+      shouldRetry(context) {
+        contexts.push(context);
+        return context.retryable;
+      },
+    }),
+  );
+  const pending = read(timedClient);
+  await firstTimed.promise;
+  await vi.advanceTimersByTimeAsync(0);
+  expect(timedHandle).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(1);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(timedHandle).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(1);
+  const [timedFault, timedStream] = await pending;
+  expect(timedFault).toBeNull();
+  await drain(timedStream);
+  expect(timedHandle).toHaveBeenCalledTimes(2);
+  expect(contexts[0]?.transport).toBe("sse");
+  if (contexts[0]?.transport === "sse") {
+    expect(contexts[0].retryAfterMs).toBe(2000);
+    expect(contexts[0].headers?.get("x-sse-rate-limit")).toBe("1");
+    expect(contexts[0].open?.response.headers.get("x-sse-rate-limit")).toBe(
+      "1",
+    );
+  }
+
+  const firstDisabled = Promise.withResolvers<void>();
+  let disabledCalls = 0;
+  const disabledHandle = vi.fn(() => {
+    firstDisabled.resolve();
+    return Promise.resolve(
+      disabledCalls++ === 0
+        ? new Response("busy", {
+            status: 503,
+            headers: { "retry-after": "30" },
+          })
+        : new Response(body("data: a\n\n"), { headers: HEADERS }),
+    );
+  });
+  const disabledClient = createClient(
+    withEndpoint("https://api.test"),
+    withSSEHandle(disabledHandle),
+    withRetry({ delayMs: 25, jitter: 0, retryAfter: false }),
+  );
+  const pendingDisabled = read(disabledClient);
+  await firstDisabled.promise;
+  await vi.advanceTimersByTimeAsync(0);
+  expect(disabledHandle).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(25);
+  const [disabledFault, disabledStream] = await pendingDisabled;
+  expect(disabledFault).toBeNull();
+  await drain(disabledStream);
+
+  const shouldRetry = vi.fn(() => true);
+  const oversizedHandle = handleOf(
+    () =>
+      new Response("busy", {
+        status: 503,
+        headers: { "retry-after": "120" },
+      }),
+    ok(),
+  );
+  const oversizedClient = createClient(
+    withEndpoint("https://api.test"),
+    withSSEHandle(oversizedHandle),
+    withRetry({ maxRetryAfterMs: 60_000, shouldRetry }),
+  );
+  expect((await read(oversizedClient))[0]?.code).toBe("HTTP_STATUS");
+  expect(oversizedHandle).toHaveBeenCalledOnce();
+  expect(shouldRetry).not.toHaveBeenCalled();
 });

@@ -107,16 +107,16 @@ Defjs 先看 `response.ok` 决定走 `output`（`2xx`）还是 `error`（非 `2x
 
 下面这些在其他客户端里常见的模式，Defjs 都刻意去掉了，对应的替代做法也很直接：
 
-| 刻意不提供                                      | 在 Defjs 里该怎么写                                                    |
-| ----------------------------------------------- | ---------------------------------------------------------------------- |
-| 全局 Client 单例                                | 由应用自己用 `createClient(...)` 创建，调用时传给操作                  |
-| 把操作挂在 Client 方法上（`client.getOrder()`） | 直接调用函数：`getOrder(client, input)`                                |
-| Client 级全局超时或 `timeout` / `abort` 配置项  | 传 `client({ signal: AbortSignal.timeout(ms) })` 或 `AbortController`  |
-| `defineRequest` 上的 `responseType` 选项        | 通过 `output` 的 struct 类型决定（`string`/`blob`/`arrayBuffer`/JSON） |
-| struct 实例上的 `.parse()` 或 `struct.encode`   | 统一使用 `struct.parse(schema, value)` 和 `builder` 映射               |
-| 自定义 WebSocket 握手请求头                     | 走 Cookie、短期查询参数票据或 `protocols`                              |
-| WebSocket 消息自动包装或路由信封                | 使用 `struct.discriminatedUnion` 配合 `session.onRuntimeError`         |
-| OpenAPI 代码生成器                              | 把 OpenAPI 当外部接口规范文档，在边界处用 `struct` 做契约校验          |
+| 刻意不提供                                      | 在 Defjs 里该怎么写                                                                                           |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 全局 Client 单例                                | 由应用自己用 `createClient(...)` 创建，调用时传给操作                                                         |
+| 把操作挂在 Client 方法上（`client.getOrder()`） | 直接调用函数：`getOrder(client, input)`                                                                       |
+| Client 级全局超时或 `timeout` / `abort` 配置项  | 传 `client({ signal: AbortSignal.timeout(ms) })` 或 `AbortController`                                         |
+| `defineRequest` 上的 `responseType` 选项        | 通过 `output` 的 struct 类型决定（`string`/`blob`/`arrayBuffer`/JSON）                                        |
+| struct 实例上的 `.parse()` 或 `struct.encode`   | 统一使用 `struct.parse(schema, value)` 和 `builder` 映射                                                      |
+| 自定义 WebSocket 握手请求头                     | 走 Cookie、短期查询参数票据或 `protocols`                                                                     |
+| WebSocket 消息自动包装或路由信封                | 使用 `struct.discriminatedUnion` 配合 `session.onRuntimeError`                                                |
+| `@defjs/core` 内置 / 运行时 OpenAPI 代码生成    | 开发期用 [`@defjs/cli`](/zh-Hans/docs/integrations/cli) 生成无状态 ESM 定义，或在边界处用 `struct` 做契约校验 |
 
 ## 相关阅读
 

@@ -1,0 +1,25 @@
+---
+title: "幂等键"
+description: 结合 idempotencyKeyHttpInterceptor 与原生 429 Retry-After 退避，安全地重试变更类 POST 或 PATCH 请求。
+---
+
+# 幂等键
+
+默认情况下，`withRetry` 只会重试幂等的 HTTP 方法（`GET`、`HEAD`、`PUT`、`DELETE`、`OPTIONS`、`TRACE`）。当需要为 `POST` 或 `PATCH` 接口启用重试时，请将 `withRetry` 与 `idempotencyKeyHttpInterceptor()` 配合使用，使同一次逻辑调用的每一次重试都复用 `req.correlationId` 作为 `Idempotency-Key` 请求头，而后续新发起的调用则获得全新的键。
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+关于重试预算与 `Retry-After` 处理规则，请参阅[拦截器](/zh-Hans/docs/interceptors)和[负载均衡与故障转移](/zh-Hans/docs/load-balancing)。

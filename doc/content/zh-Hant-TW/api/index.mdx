@@ -13,24 +13,26 @@ description: 查閱 SDK 定義 API、應用程式 client 設定與具型別的�
 
 ## 套件
 
-| 套件                                                                  | 查閱內容                                                          |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`@defjs/core`](/zh-Hant-TW/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
-| [`@defjs/vue`](/zh-Hant-TW/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
-| [`@defjs/react`](/zh-Hant-TW/api/react)                               | `ClientProvider`, `useClient`                                     |
-| [`@defjs/opentelemetry-server`](/zh-Hant-TW/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                  |
+| 套件                                                                  | 查閱內容                                                                                                        |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](/zh-Hant-TW/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket, `@defjs/core/concurrent`, `@defjs/core/port` |
+| [`@defjs/cli`](/zh-Hant-TW/api/cli)                                   | `defineConfig`, `generateOpenApi`, `runCli`, OpenAPI target options                                             |
+| [`@defjs/vue`](/zh-Hant-TW/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`                                                             |
+| [`@defjs/react`](/zh-Hant-TW/api/react)                               | `ClientProvider`, `useClient`                                                                                   |
+| [`@defjs/opentelemetry-server`](/zh-Hant-TW/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                                                                |
 
 ## @defjs/core
 
-| 頁面                                         | 查閱內容                                                              |
-| -------------------------------------------- | --------------------------------------------------------------------- |
-| [Client](/zh-Hant-TW/api/client)             | `createClient`, `with*` options, `Client`                             |
-| [HTTP](/zh-Hant-TW/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
-| [Struct](/zh-Hant-TW/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
-| [Errors](/zh-Hant-TW/api/errors)             | `Fault` 的各個變體與 factory 函式                                     |
-| [Interceptors](/zh-Hant-TW/api/interceptors) | HTTP／SSE／WebSocket 的攔截器輔助函式                                 |
-| [SSE](/zh-Hant-TW/api/sse)                   | `defineEventStream`, 串流 handle                                      |
-| [WebSocket](/zh-Hant-TW/api/web-socket)      | `defineWebSocket`, 工作階段                                           |
+| 頁面                                         | 查閱內容                                                                              |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Client](/zh-Hant-TW/api/client)             | `createClient`, `with*` options, `Client`, `@defjs/core/concurrent`                   |
+| [HTTP](/zh-Hant-TW/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse`                 |
+| [Struct](/zh-Hant-TW/api/struct)             | `struct.*`, `Infer`, `StructError`                                                    |
+| [Errors](/zh-Hant-TW/api/errors)             | `Fault` 的各個變體與 factory 函式                                                     |
+| [Interceptors](/zh-Hant-TW/api/interceptors) | HTTP／SSE／WebSocket／內建攔截器輔助函式                                              |
+| [SSE](/zh-Hant-TW/api/sse)                   | `defineEventStream`, 串流 handle                                                      |
+| [WebSocket](/zh-Hant-TW/api/web-socket)      | `defineWebSocket`, 工作階段                                                           |
+| [Port](/zh-Hant-TW/api/port)                 | `withPortTransport`, `attachPortHost`, `createPort*Handle`, `@defjs/core/port/webext` |
 
 ## 相關
 

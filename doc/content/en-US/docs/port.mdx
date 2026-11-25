@@ -1,0 +1,53 @@
+---
+title: Port transport (Workers & WebExtensions)
+description: Proxy HTTP, SSE, and WebSocket operations across MessagePort, Workers, iframes, Electron, and MV3 WebExtension runtime.Port with default-deny origin policies.
+---
+
+# Port transport (`@defjs/core/port`)
+
+`@defjs/core/port` lets an isolated context (`SharedWorker`, Dedicated Worker, sandboxed `iframe`, Electron renderer, or a WebExtension Popup / Side Panel / Content Script) execute pure `@defjs/core` SDK definitions over a single multiplexed port without coupling definitions to the proxy transport.
+
+- Zero runtime dependencies; ships as optional `@defjs/core/port` and `@defjs/core/port/webext` subpath exports with zero bundle overhead unless imported
+- Shares one port concurrently across HTTP (including `ReadableStream` uploads/downloads), SSE (`text/event-stream`), and WebSocket connections
+- **Fail-closed security by default**: `attachPortHost` refuses all traffic unless the host specifies `allowedOrigins`, `allowRequest`, or explicit `allowAnyOrigin: true`
+
+```bash
+bun add @defjs/core
+```
+
+## MessagePort bridge (Workers, iframes, Electron)
+
+Both sides keep your SDK definitions unchanged. The privileged host runs real `fetch` / `WebSocket` calls; the sandboxed client attaches `withPortTransport(port)` to its `Client`:
+
+<Tabs items={["sdk/orders.ts", "host.ts", "client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/host.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+When calling `attachPortHost`, keep a reference to the returned `PortHostHandle` and call `host.close()` (or `using host = attachPortHost(...)`) on teardown so in-flight HTTP/SSE channels and WebSocket sessions close cleanly.
+
+## MV3 WebExtension proxy (`@defjs/core/port/webext`)
+
+WebExtension `runtime.Port` cannot transfer `ArrayBuffer` objects directly across Chromium/Firefox/Safari extension boundaries and disconnects whenever a Manifest V3 Service Worker suspends. `@defjs/core/port/webext` provides a zero-dependency structural adapter `fromWebExtPort` (requiring no `@types/chrome`) that uses `"json"` chunked Base64 framing and supports lazy connector functions for automatic reconnect after Service Worker hibernation:
+
+<include cwd lang="typescript">
+  examples/port/webext.ts#example
+</include>
+
+See the [Port API reference](/api/port).

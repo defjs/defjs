@@ -55,16 +55,16 @@ Ein HTTP-Interceptor kann eine synthetische Antwort zurückgeben, ohne `next(req
 
 ## 3. Retries und `Retry-After`
 
-HTTP-Retries sind standardmäßig aus. Um einen Verbindungsfehler, einen Timeout oder einen `502`, `503` oder `504` an einem anderen Endpunkt zu wiederholen, verwende [`withRetry()`](/de-DE/docs/load-balancing#retries). Nach der Backoff-Verzögerung lässt es den Balancer erneut wählen, baut den Request neu und führt die vollständige Interceptor-Kette erneut aus.
+HTTP-Retries sind standardmäßig aus. Um einen Verbindungsfehler, einen Timeout oder einen Status aus `statusCodes` (standardmäßig `429`, `502`, `503` oder `504`) mit nativer RFC-9110-`Retry-After`-Unterstützung bei `429` und `503` (`retryAfter: true`, `maxRetryAfterMs: 60_000`) zu wiederholen, verwende [`withRetry()`](/de-DE/docs/load-balancing#retries). Nach der Verzögerung lässt es den Balancer erneut wählen, baut den Request neu und führt die vollständige Interceptor-Kette erneut aus.
 
-Ein Anwendungs-Interceptor kann stattdessen Statusbehandlung auf demselben Endpunkt umsetzen, etwa für `429` und `Retry-After`:
+Wenn eine Anwendung eine **eigene Statusbehandlung auf demselben Endpunkt** braucht – etwa um auf dem gewählten Endpunkt ohne erneutes Ausführen von `builder` oder äußeren Interceptors zu wiederholen, eine Fallback-Wartezeit zu verwenden, wenn `Retry-After` fehlt, oder Wartezeiten zu deckeln statt sofort abzubrechen –, kann ein Interceptor direkt über `next(request)` schleifen:
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **Zwei Retry-Schichten**: Diese `next(request)`-Schleife bleibt auf dem ausgewählten Endpunkt und führt weder den Builder noch die äußeren Interceptors erneut aus. Verbindungsfehler und `502`/`503`/`504` gehören zu `withRetry`.
-- **`Retry-After`-Policy**: Core-`withRetry` liest diesen Header nicht. Die 30-Sekunden-Obergrenze und der 250-ms-Fallback des Rezepts sind Entscheidungen der Anwendung. Das Deckeln einer längeren Server-Wartezeit kann früher als angefordert erneut versuchen; ist das nicht akzeptabel, warte die volle Dauer oder gib stattdessen die Antwort zurück.
+- **Zwei Retry-Schichten**: Diese `next(request)`-Schleife bleibt auf dem ausgewählten Endpunkt und führt weder den Builder noch die äußeren Interceptors erneut aus. Verbindungsfehler, endpunktübergreifendes Failover und die Standard-Policies für `429`/`502`/`503`/`504` gehören zu `withRetry`.
+- **Eingebaute vs. eigene `Retry-After`-Policy**: Core-`withRetry()` berücksichtigt standardmäßig RFC 9110 `Retry-After` bei `429` und `503` (und scheitert sofort ohne Retry, wenn die vom Server angeforderte Wartezeit `maxRetryAfterMs` überschreitet). Wenn du `429` in einem eigenen Interceptor wie im Rezept oben behandelst, konfiguriere `withRetry({ retryAfter: false })` (oder lasse `429` aus `statusCodes` weg), um doppelte Retries zu vermeiden; die 30-Sekunden-Obergrenze und der 250-ms-Fallback des Rezepts sind Entscheidungen der Anwendung, und das Deckeln einer längeren Server-Wartezeit kann früher als angefordert erneut versuchen.
 - **Schreibzugriffe nach 401**: Das [Bearer-Refresh-Rezept](/de-DE/recipes/refresh-bearer-once) kann einen JSON-POST zweimal zustellen. Verlange eine Ablehnung durch die Authentifizierung vor der Geschäftsverarbeitung sowie einen stabilen Idempotenzschlüssel mit serverseitiger Deduplizierung, oder spiele Schreibzugriffe nicht automatisch erneut ab. Streaming-Request-Bodys werden nicht erneut gesendet.
 - **Umgang mit Transport-Rejections**: `next(request)` schlägt fehl (rejectet), sobald ein Netzwerkfehler auftritt (es gibt keine Status-0-Antwort). Das Abfangen und erneute Werfen dieser Rejection erhält den ursprünglichen `NET_*`-Fault-Code.
 - **Requests, die nicht gesendet werden können**: In einem HTTP-Interceptor lehnt `next(request)`, wenn die Plattform den Request ablehnt (eine ungültige oder verbotene Methode, ein GET- oder HEAD-Body, eine URL mit Zugangsdaten, ein ungültiger `Content-Type`) oder ein `finalizeHeaders`-Hook wirft, mit dem eigenen Fehler der Plattform (einem `TypeError`) oder dem vom Hook geworfenen Wert ab, nicht mit dem `BodyFailure`-Wrapper der Bibliothek. Erneutes Werfen behält den Fault-Code (`REQ_BUILD_FAILED` oder `EXT_HOOK_FAILED`); das Werfen eines anderen Fehlers macht den Fehler zu deinem (`EXT_INTERCEPTOR_FAILED`). Die übrigen Fehler rund um den Transport erreichen `next(request)` weiterhin als `BodyFailure`: ein Response-Body, der nicht gelesen, dekodiert oder seinem Medientyp zugeordnet werden kann, ein abgeschnittener Body und ein werfender Upload-Fortschrittsbeobachter (`EXT_OBSERVER_FAILED`), was auch vor dem Senden des Requests geschehen kann.
@@ -96,17 +96,23 @@ Ein Transport-Interceptor sieht jeweils einen Request: Ein Input, der die Validi
 
 ## 6. Eingebaute Factories und Helfer
 
-| Export                                         | Transport | Beschreibung                                                                                                    |
-| ---------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | Umhüllt `(req, next) => Promise<HttpResponse<unknown>>`                                                         |
-| `createSSEInterceptor(fn)`                     | SSE       | Umhüllt `(req, next) => Promise<EventStreamHandle<unknown>>`                                                    |
-| `createWebSocketInterceptor(fn)`               | WebSocket | Umhüllt `(req, next) => Promise<WebSocketSessionLike>`                                                          |
-| `createOperationInterceptor(fn)`               | Alle      | Umhüllt `(call, next) => Promise<result>` um einen ganzen Operationsaufruf                                      |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injiziert `Authorization: Basic ...` über einen synchronen Credential-Provider, der pro Request aufgerufen wird |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injiziert `Authorization: Basic ...` bei SSE-Handshakes                                                         |
+| Export                                         | Transport | Beschreibung                                                                                                                                                                    |
+| ---------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | Umhüllt `(req, next) => Promise<HttpResponse<unknown>>`                                                                                                                         |
+| `createSSEInterceptor(fn)`                     | SSE       | Umhüllt `(req, next) => Promise<EventStreamHandle<unknown>>`                                                                                                                    |
+| `createWebSocketInterceptor(fn)`               | WebSocket | Umhüllt `(req, next) => Promise<WebSocketSessionLike>`                                                                                                                          |
+| `createOperationInterceptor(fn)`               | Alle      | Umhüllt `(call, next) => Promise<result>` um einen ganzen Operationsaufruf                                                                                                      |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injiziert `Authorization: Basic ...` über einen synchronen Credential-Provider, der pro Request aufgerufen wird                                                                 |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injiziert `Authorization: Basic ...` bei SSE-Handshakes                                                                                                                         |
+| `concurrencyLimitHttpInterceptor(options)`     | HTTP      | Begrenzt gleichzeitige laufende Versuche pro Bucket (`ConcurrencyLimitInterceptorOptions`); reiht bis `maxQueue` FIFO ein und lehnt Überlauf mit `BulkheadOverflowError` ab     |
+| `idempotencyKeyHttpInterceptor(options?)`      | HTTP      | Injiziert einen Idempotenzschlüssel-Header (`IdempotencyKeyInterceptorOptions`, Standard `Idempotency-Key`) bei mutierenden Methoden (`POST`, `PATCH`) über `req.correlationId` |
+
+`concurrencyLimitHttpInterceptor` gibt Permits während `withRetry`-Backoff-Wartezeiten frei, sodass Retries den Bulkhead nicht in einen Deadlock treiben können, und wirft `BulkheadOverflowError` (als `EXT_INTERCEPTOR_FAILED` mit `{ attempted: false }` gemeldet), wenn `maxQueue` überschritten wird. Siehe die [Interceptors-API-Referenz](/de-DE/api/interceptors).
 
 ## Weiterführende Links
 
+- [Idempotenzschlüssel bei Retries](/de-DE/recipes/idempotency-key)
+- [Bulkhead-Concurrency-Limits](/de-DE/recipes/concurrency-limit)
 - [Token nach 401 erneuern](/de-DE/recipes/refresh-bearer-once)
 - [ETag-Bedingungsanfragen](/de-DE/recipes/etag-revalidate)
 - [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server)

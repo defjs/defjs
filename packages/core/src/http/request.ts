@@ -28,6 +28,8 @@ export function createHttpRequest(
     errorResponseType?: HttpResponseType;
     querySerializer?: QuerySerializer;
     responseType?: HttpResponseType;
+    correlationId?: string;
+    retryAttempt?: number;
     uploadProgress?: HttpProgressFn;
     withCredentials?: boolean;
     finalizeHeaders?: HttpRequest["finalizeHeaders"];
@@ -56,6 +58,8 @@ export function createHttpRequest(
     downloadProgress: options.downloadProgress,
     errorResponseType: options.errorResponseType,
     responseType: options.responseType,
+    correlationId: options.correlationId,
+    retryAttempt: options.retryAttempt,
     uploadProgress: options.uploadProgress,
     finalizeHeaders: options.finalizeHeaders,
   };

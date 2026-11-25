@@ -43,6 +43,10 @@ import { AsyncQueue } from "../../internal/async_queue";
 import { computeReconnectDelay, wait } from "../../internal/backoff";
 import type { RetryPolicy } from "../../internal/retry";
 import { isRetryMethod, retryStep } from "../../internal/retry";
+import {
+  computeRetryAfterDelay,
+  parseRetryAfter,
+} from "../../internal/retry_after";
 import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
 import type { HttpRequest, HttpResponseType } from "../../http/http_request";
 import type { DecodedResponse, HttpResponse } from "../../http/http_response";
@@ -509,15 +513,29 @@ export async function fetchEventStream<
           return;
         }
 
-        // A fatal error is final. A non-2xx handshake is not: the retry policy decides, and only 502, 503 and 504
-        // retry by default. A stream body is spent by the first attempt and the request is built once per execute,
-        // so nothing can be retried and the caller gets the real failure. Keyed on the body type, not `locked`:
-        // when a failed attempt locks the stream differs by runtime.
+        // A fatal error is final. A non-2xx handshake is not: the retry policy decides, and statusCodes (429, 502, 503,
+        // and 504 by default) retry automatically. A stream body is spent by the first attempt and the request is built
+        // once per execute, so nothing can be retried and the caller gets the real failure. Keyed on the body type, not
+        // `locked`: when a failed attempt locks the stream differs by runtime.
         const { error } = result;
         if (
           result.kind === "fatal" ||
           policy === undefined ||
           isReadableStreamBody(request.body)
+        ) {
+          finishError(error, faultCode(result));
+          return;
+        }
+        const handshakeHeaders = result.response?.headers;
+        const retryAfterMs =
+          result.kind === "status" &&
+          policy.retryAfter &&
+          (result.response.status === 429 || result.response.status === 503)
+            ? parseRetryAfter(result.response.headers.get("retry-after"))
+            : undefined;
+        if (
+          retryAfterMs !== undefined &&
+          retryAfterMs > policy.maxRetryAfterMs
         ) {
           finishError(error, faultCode(result));
           return;
@@ -529,11 +547,13 @@ export async function fetchEventStream<
           retryable:
             isRetryMethod(policy, request.method) &&
             (result.kind !== "status" ||
-              statusOutcome(result.response.status) === "NET_UNAVAILABLE"),
+              policy.statusCodes.includes(result.response.status)),
           method: request.method,
           lastEventId,
           open: latest.open,
           status: result.response?.status,
+          headers: handshakeHeaders,
+          retryAfterMs,
         }));
         if (step === "stop") {
           finishError(error, faultCode(result));
@@ -562,15 +582,20 @@ export async function fetchEventStream<
         // Release this attempt before the backoff so it is not in flight while waiting.
         settleAttempt();
         try {
-          await wait(
-            computeReconnectDelay(
-              serverRetryMs === undefined
-                ? policy
-                : { ...policy, delayMs: serverRetryMs },
-              retried,
-            ),
-            stop,
-          );
+          const delay =
+            retryAfterMs !== undefined
+              ? computeRetryAfterDelay(
+                  retryAfterMs,
+                  policy.jitter,
+                  policy.maxRetryAfterMs,
+                )
+              : computeReconnectDelay(
+                  serverRetryMs === undefined
+                    ? policy
+                    : { ...policy, delayMs: serverRetryMs },
+                  retried,
+                );
+          await wait(delay, stop);
         } catch {
           // wait() rejects only when the stream is stopped.
           finishStopped();

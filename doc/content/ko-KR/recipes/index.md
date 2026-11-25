@@ -14,6 +14,10 @@ export된 SDK 정의부터 npm 패키지 배포와 애플리케이션 연동까�
 - [취소와 시간 제한](/ko-KR/recipes/cancel-http) — 호출자의 `AbortController`와 `AbortSignal.timeout(...)`을 결합하고 `NET_ABORTED`와 `NET_TIMEOUT`을 명확히 구분합니다.
 - [ETag 조건부 요청](/ko-KR/recipes/etag-revalidate) — `If-None-Match`를 전송하고, `304 Not Modified`를 `HTTP_STATUS` 결함으로 처리하며, 캐시 `Map`을 애플리케이션 코드에서 관리합니다.
 - [GraphQL 요청](/ko-KR/recipes/graphql-http-envelope) — HTTP `POST`를 통해 GraphQL 쿼리를 전송하고 애플리케이션 헬퍼에서 `errors[]`와 `.nullish()` `data`를 분리합니다.
+- [커서 페이지네이션](/ko-KR/recipes/cursor-pagination) — 비동기 제너레이터로 페이지네이션된 API 결과를 스트리밍하고 페이지별 `AbortSignal` 취소를 전달합니다.
+- [멱등성 키](/ko-KR/recipes/idempotency-key) — `idempotencyKeyHttpInterceptor`를 사용해 `POST`/`PATCH` 재시도 전반에 자동으로 `Idempotency-Key` 헤더를 첨부합니다.
+- [동시성 제한 및 풀링된 호출](/ko-KR/recipes/concurrency-limit) — `concurrencyLimitHttpInterceptor`로 진행 중인 요청 수를 제한하고 `@defjs/core/concurrent` 프리미티브로 팬아웃합니다.
+- [Undici Pool HTTP 핸들](/ko-KR/recipes/undici-pool) — Node.js의 keep-alive 연결 풀링을 위해 `undici.Pool`을 `withHTTPHandle`에 연결합니다.
 
 ## 인증
 

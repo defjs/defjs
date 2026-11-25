@@ -1,0 +1,53 @@
+---
+title: Port-Transport (Worker & WebExtensions)
+description: HTTP-, SSE- und WebSocket-Operationen über MessagePort, Worker, iframes, Electron und MV3-WebExtension-runtime.Port mit Default-Deny-Origin-Richtlinien proxien.
+---
+
+# Port-Transport (`@defjs/core/port`)
+
+`@defjs/core/port` ermöglicht es einem isolierten Kontext (`SharedWorker`, Dedicated Worker, Sandbox-`iframe`, Electron-Renderer oder einem WebExtension-Popup / Side Panel / Content Script), reine `@defjs/core`-SDK-Definitionen über einen einzelnen gemultiplexten Port auszuführen, ohne Definitionen an den Proxy-Transport zu koppeln.
+
+- Keine Laufzeitabhängigkeiten; wird als optionale Subpath-Exporte `@defjs/core/port` und `@defjs/core/port/webext` ohne Bundle-Overhead bei Nichtverwendung bereitgestellt
+- Teilt einen Port gleichzeitig über HTTP (einschließlich `ReadableStream`-Uploads/-Downloads), SSE (`text/event-stream`) und WebSocket-Verbindungen hinweg
+- **Standardmäßig Fail-Closed-Sicherheit**: `attachPortHost` lehnt jeglichen Datenverkehr ab, sofern der Host nicht `allowedOrigins`, `allowRequest` oder explizit `allowAnyOrigin: true` festlegt
+
+```bash
+bun add @defjs/core
+```
+
+## MessagePort-Brücke (Worker, iframes, Electron)
+
+Beide Seiten behalten deine SDK-Definitionen unverändert bei. Der privilegierte Host führt echte `fetch`- / `WebSocket`-Aufrufe aus; der isolierte Client hängt `withPortTransport(port)` an seinen `Client`:
+
+<Tabs items={["sdk/orders.ts", "host.ts", "client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/host.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Behalte beim Aufruf von `attachPortHost` eine Referenz auf das zurückgegebene `PortHostHandle` und rufe beim Abbau `host.close()` (oder `using host = attachPortHost(...)`) auf, damit laufende HTTP-/SSE-Kanäle und WebSocket-Sitzungen sauber geschlossen werden.
+
+## MV3-WebExtension-Proxy (`@defjs/core/port/webext`)
+
+Ein WebExtension-`runtime.Port` kann `ArrayBuffer`-Objekte nicht direkt über Chromium-/Firefox-/Safari-Erweiterungsgrenzen hinweg transferieren und trennt die Verbindung, sobald ein Manifest-V3-Service-Worker pausiert. `@defjs/core/port/webext` liefert den abhängigkeitsfreien strukturellen Adapter `fromWebExtPort` (ohne dass `@types/chrome` benötigt wird), der `"json"`-gechunktes Base64-Framing nutzt und Lazy-Connector-Funktionen für automatisches Wiederverbinden nach dem Ruhezustand des Service-Workers unterstützt:
+
+<include cwd lang="typescript">
+  examples/port/webext.ts#example
+</include>
+
+Siehe die [Port-API-Referenz](/de-DE/api/port).

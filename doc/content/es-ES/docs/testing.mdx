@@ -26,7 +26,7 @@ Importa las operaciones `defineRequest` reales de tu proyecto y crea un `Client`
 
 - **Por qué `https://fixture.invalid`**: `createClient` valida la URL base antes de llegar a `withHTTPHandle`; `.invalid` está reservado por RFC y nunca consultará un DNS real aunque olvides algo.
 - **Un tipo de handle por transporte**: `withHTTPHandle` solo intercepta HTTP (`defineRequest`). Usa `withSSEHandle` para `defineEventStream` y `withWebSocketHandle` para `defineWebSocket`.
-- **Reintentos por defecto y trampa de `withRetry(undefined)`**: Sin `withRetry`, los reintentos están desactivados; omítelo en pruebas unitarias ordinarias para que `502`/`503`/`504` y los fallos de red devuelvan resultado tras un solo intento sin esperar retrocesos de `1s + 2s + 4s`. Ojo: llamar a `withRetry()` o `withRetry(undefined)` activa **3 reintentos por defecto**. Para desactivarlos explícitamente desde un helper común, pasa `withRetry({ maxRetries: 0 })`.
+- **Reintentos por defecto y trampa de `withRetry(undefined)`**: Sin `withRetry`, los reintentos están desactivados; omítelo en pruebas unitarias ordinarias para que `429`/`502`/`503`/`504` y los fallos de red devuelvan resultado tras un solo intento sin esperar retrocesos de `1s + 2s + 4s`. Ojo: llamar a `withRetry()` o `withRetry(undefined)` activa **3 reintentos por defecto**. Para desactivarlos explícitamente desde un helper común, pasa `withRetry({ maxRetries: 0 })`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>

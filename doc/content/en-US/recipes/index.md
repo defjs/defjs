@@ -14,6 +14,10 @@ Start with [Build and publish an SDK](/recipes/publish-http-sdk) for the end-to-
 - [Cancellation and timeouts](/recipes/cancel-http) — combine a caller `AbortController` with `AbortSignal.timeout(...)` and distinguish `NET_ABORTED` from `NET_TIMEOUT`.
 - [ETag conditional requests](/recipes/etag-revalidate) — send `If-None-Match`, handle `304 Not Modified` as an `HTTP_STATUS` fault, and keep the cache `Map` in application code.
 - [GraphQL requests](/recipes/graphql-http-envelope) — send a GraphQL query over HTTP `POST` and unwrap `errors[]` vs. `.nullish()` `data` in an application helper.
+- [Cursor pagination](/recipes/cursor-pagination) — stream paginated API results with an async generator and forward per-page `AbortSignal` cancellation.
+- [Idempotency keys](/recipes/idempotency-key) — attach automatic `Idempotency-Key` headers across `POST`/`PATCH` retries using `idempotencyKeyHttpInterceptor`.
+- [Concurrency limits & pooled calls](/recipes/concurrency-limit) — bound in-flight requests with `concurrencyLimitHttpInterceptor` and `@defjs/core/concurrent` primitives.
+- [Undici Pool HTTP handle](/recipes/undici-pool) — bridge `undici.Pool` into `withHTTPHandle` for Node.js keep-alive connection pooling.
 
 ## Authentication
 

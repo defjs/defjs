@@ -14,6 +14,10 @@ Starte mit [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk
 - [Abbruch und Zeitlimits](/de-DE/recipes/cancel-http) — Einen aufruferseitigen `AbortController` mit `AbortSignal.timeout(...)` kombinieren und `NET_ABORTED` von `NET_TIMEOUT` unterscheiden.
 - [ETag-Bedingungsanfragen](/de-DE/recipes/etag-revalidate) — `If-None-Match` senden, `304 Not Modified` als `HTTP_STATUS`-Fault behandeln und die Cache-`Map` im Anwendungscode verwalten.
 - [GraphQL-Anfragen](/de-DE/recipes/graphql-http-envelope) — Eine GraphQL-Abfrage über HTTP `POST` senden und `errors[]` gegenüber `.nullish()` `data` in einer Anwendungs-Hilfsfunktion auflösen.
+- [Cursor-Paginierung](/de-DE/recipes/cursor-pagination) — Paginierte API-Ergebnisse mit einem Async-Generator streamen und Abbrüche per `AbortSignal` pro Seite durchreichen.
+- [Idempotenzschlüssel](/de-DE/recipes/idempotency-key) — Mit `idempotencyKeyHttpInterceptor` automatisch `Idempotency-Key`-Header über `POST`-/`PATCH`-Retries hinweg anhängen.
+- [Concurrency-Limits & gepoolte Aufrufe](/de-DE/recipes/concurrency-limit) — Laufende Anfragen mit `concurrencyLimitHttpInterceptor` begrenzen und über `@defjs/core/concurrent` sauber auffächern.
+- [Undici-Pool-HTTP-Handle](/de-DE/recipes/undici-pool) — `undici.Pool` über `withHTTPHandle` für Keep-Alive-Verbindungspooling in Node.js einbinden.
 
 ## Authentifizierung
 

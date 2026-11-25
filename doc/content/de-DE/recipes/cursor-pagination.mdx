@@ -1,0 +1,31 @@
+---
+title: "Cursor-Paginierung"
+description: Paginierte Endpunkte sauber mit einem Async-Generator und AbortSignal-Abbruch pro Seite streamen.
+---
+
+# Cursor-Paginierung
+
+Behalte die paginierte Operation im SDK-Modul (`listOrders`) und kapsle die Cursor-Fortsetzung in einer reinen Anwendungs-Hilfsfunktion (`listAllOrders`), die `[err, item]`-Tupel im Go-Stil liefert (`yield`) und bei Fehlern oder Abbruch durch den Aufrufer sofort stoppt.
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Siehe [Client](/de-DE/docs/client) und [HTTP-Operationen](/de-DE/docs/http) für die Ableitungsregeln von `signal` pro Aufruf.

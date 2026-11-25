@@ -1,0 +1,25 @@
+---
+title: "冪等性キー"
+description: idempotencyKeyHttpInterceptor とネイティブの 429 Retry-After バックオフを組み合わせて、状態を変更する POST または PATCH リクエストを安全にリトライします。
+---
+
+# 冪等性キー
+
+デフォルトでは、`withRetry` は冪等な HTTP メソッド（`GET`、`HEAD`、`PUT`、`DELETE`、`OPTIONS`、`TRACE`）のみをリトライします。`POST` や `PATCH` のエンドポイントでリトライを有効にする場合は、`withRetry` と `idempotencyKeyHttpInterceptor()` を組み合わせてください。これにより、同じ論理呼び出しの各リトライ試行では `req.correlationId` が `Idempotency-Key` ヘッダーとして再利用され、後続の新しい呼び出しには新しいキーが割り当てられます。
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+リトライバジェットや `Retry-After` の処理については、[インターセプター](/ja-JP/docs/interceptors) および [ロードバランシング](/ja-JP/docs/load-balancing) を参照してください。

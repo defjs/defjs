@@ -18,7 +18,12 @@ interface NavigationGroup {
 const guideGroups = [
   {
     titleKey: "nav.guide.preface",
-    paths: ["", "/docs/start", "/docs/design-decisions"],
+    paths: [
+      "",
+      "/docs/start",
+      "/docs/design-decisions",
+      "/docs/comparison-and-architecture",
+    ],
   },
   {
     titleKey: "nav.guide.definingSdks",
@@ -31,6 +36,7 @@ const guideGroups = [
       "/docs/errors",
       "/docs/interceptors",
       "/docs/load-balancing",
+      "/docs/port",
     ],
   },
   {
@@ -55,6 +61,7 @@ export const integrationGroups = [
       "/docs/integrations/react",
       "/docs/integrations/vue",
       "/docs/integrations/opentelemetry-server",
+      "/docs/integrations/cli",
     ],
   },
 ] as const satisfies readonly NavigationGroup[];
@@ -67,6 +74,10 @@ export const exampleGroups = [
       "/recipes/cancel-http",
       "/recipes/etag-revalidate",
       "/recipes/graphql-http-envelope",
+      "/recipes/cursor-pagination",
+      "/recipes/idempotency-key",
+      "/recipes/concurrency-limit",
+      "/recipes/undici-pool",
     ],
   },
   {
@@ -83,7 +94,12 @@ export const exampleGroups = [
   },
 ] as const satisfies readonly NavigationGroup[];
 
-const integrationApis = ["/api/react", "/api/vue", "/api/opentelemetry-server"];
+const integrationApis = [
+  "/api/react",
+  "/api/vue",
+  "/api/opentelemetry-server",
+  "/api/cli",
+];
 
 /** What the four reading areas are built from. */
 interface NavigationContext {
@@ -270,7 +286,19 @@ const relatedTopics = [
     "/recipes/cancel-http",
     "/recipes/refresh-bearer-once",
   ],
-  ["/docs/interceptors", "/api/interceptors", "/recipes/refresh-bearer-once"],
+  [
+    "/docs/interceptors",
+    "/api/interceptors",
+    "/recipes/refresh-bearer-once",
+    "/recipes/idempotency-key",
+    "/recipes/concurrency-limit",
+  ],
+  [
+    "/docs/design-decisions",
+    "/docs/comparison-and-architecture",
+    "/docs/load-balancing",
+    "/recipes/undici-pool",
+  ],
   ["/docs/integrations", "/docs/integrations/react", "/api/react"],
   ["/docs/integrations", "/docs/integrations/vue", "/api/vue"],
   [
@@ -279,6 +307,8 @@ const relatedTopics = [
     "/api/opentelemetry-server",
     "/docs/interceptors",
   ],
+  ["/docs/integrations", "/docs/integrations/cli", "/api/cli"],
+  ["/docs/port", "/api/port", "/docs/client"],
 ] as const;
 
 export function getRelatedNavigation(

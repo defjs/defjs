@@ -1,0 +1,44 @@
+---
+title: Port
+description: 適用於 Defjs client 嘅多工 MessagePort 與 MV3 WebExtension 代理傳輸層。
+---
+
+# Port 傳輸層（`@defjs/core/port` & `@defjs/core/port/webext`）
+
+多工 `MessagePort` 同 WebExtension `runtime.Port` 傳輸 handle，連同預設拒絕來源嘅 host 橋接器。詳情請參閱 [Port 傳輸層指南](/zh-Hant-HK/docs/port)。
+
+## 快速範例
+
+<include cwd>examples/api/port.ts#example</include>
+
+## Client handles（`@defjs/core/port`）
+
+### withPortTransport
+
+<ApiSignature name="withPortTransport" />
+
+### createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle
+
+<ApiSignature name="createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle" />
+
+<ApiSignature name="PortClientOptions, PortWebSocketHandle, PortWebSocketHandleConstructor" />
+
+## Host 掛載（`@defjs/core/port`）
+
+### attachPortHost
+
+<ApiSignature name="attachPortHost" />
+
+<ApiSignature name="PortHostOptions, PortHostHandle, PortRequestCheckContext, PortWebSocketConstructor" />
+
+## Port 抽象介面
+
+<ApiSignature name="PortLike, PortEndpoint, PortWireMode, PortMessageListener, PortDisconnectListener" />
+
+## WebExtension 適配器（`@defjs/core/port/webext`）
+
+### fromWebExtPort
+
+<ApiSignature name="fromWebExtPort" />
+
+<ApiSignature name="WebExtPort, WebExtEvent, WebExtPortOptions" />

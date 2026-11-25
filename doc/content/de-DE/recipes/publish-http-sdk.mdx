@@ -73,10 +73,10 @@ Am Beispiel eines zu Amazon S3 kompatiblen Objektspeicher-SDKs (`@company/s3-sdk
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.8.0"
+    "@defjs/core": "^0.9.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.8.0",
+    "@defjs/core": "^0.9.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,7 +126,7 @@ bun pm pack
 Installiere dein SDK zusammen mit `@defjs/core`:
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.8.0
+bun add @company/s3-sdk @defjs/core@^0.9.0
 ```
 
 Da das SDK keinen Client bindet, besitzt die konsumierende Anwendung den Endpunkt (AWS S3, Cloudflare R2 oder MinIO), den Signatur-Interceptor und die Retry-Richtlinie und ruft jede importierte Operation direkt als reine Funktion auf. Da `syncReport` drei Aufrufe macht, benennt die Funktion jeden Fehler nach seinem Schritt (`putErr`, `listErr`, `getErr`) und gibt ein Error-first-Tupel zurück, dessen Fehler den fehlgeschlagenen Schritt umhüllt, wie Gos `fmt.Errorf("put object: %w", err)`. Nur `main` protokolliert ihn:

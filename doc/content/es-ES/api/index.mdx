@@ -13,24 +13,26 @@ Las firmas son el contrato. Sigue el [inicio rápido](/es-ES/docs/start) y la [g
 
 ## Paquetes
 
-| Paquete                                                          | Qué consultas                                                     |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`@defjs/core`](/es-ES/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
-| [`@defjs/vue`](/es-ES/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
-| [`@defjs/react`](/es-ES/api/react)                               | `ClientProvider`, `useClient`                                     |
-| [`@defjs/opentelemetry-server`](/es-ES/api/opentelemetry-server) | `withOpenTelemetryServer`, opciones por transporte                |
+| Paquete                                                          | Qué consultas                                                                                                   |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](/es-ES/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket, `@defjs/core/concurrent`, `@defjs/core/port` |
+| [`@defjs/cli`](/es-ES/api/cli)                                   | `defineConfig`, `generateOpenApi`, `runCli`, opciones de destino OpenAPI                                        |
+| [`@defjs/vue`](/es-ES/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`                                                             |
+| [`@defjs/react`](/es-ES/api/react)                               | `ClientProvider`, `useClient`                                                                                   |
+| [`@defjs/opentelemetry-server`](/es-ES/api/opentelemetry-server) | `withOpenTelemetryServer`, opciones por transporte                                                              |
 
 ## @defjs/core
 
-| Página                                   | Qué consultas                                                         |
-| ---------------------------------------- | --------------------------------------------------------------------- |
-| [Cliente](/es-ES/api/client)             | `createClient`, opciones `with*`, `Client`                            |
-| [HTTP](/es-ES/api/http)                  | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
-| [Struct](/es-ES/api/struct)              | `struct.*`, `Infer`, `StructError`                                    |
-| [Errores](/es-ES/api/errors)             | Variantes de `Fault` y fábricas                                       |
-| [Interceptores](/es-ES/api/interceptors) | Helpers de interceptor HTTP / SSE / WebSocket                         |
-| [SSE](/es-ES/api/sse)                    | `defineEventStream`, handle del flujo                                 |
-| [WebSocket](/es-ES/api/web-socket)       | `defineWebSocket`, sesión                                             |
+| Página                                   | Qué consultas                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Cliente](/es-ES/api/client)             | `createClient`, opciones `with*`, `Client`, `@defjs/core/concurrent`                  |
+| [HTTP](/es-ES/api/http)                  | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse`                 |
+| [Struct](/es-ES/api/struct)              | `struct.*`, `Infer`, `StructError`                                                    |
+| [Errores](/es-ES/api/errors)             | Variantes de `Fault` y fábricas                                                       |
+| [Interceptores](/es-ES/api/interceptors) | Helpers de interceptor HTTP / SSE / WebSocket / integrados                            |
+| [SSE](/es-ES/api/sse)                    | `defineEventStream`, handle del flujo                                                 |
+| [WebSocket](/es-ES/api/web-socket)       | `defineWebSocket`, sesión                                                             |
+| [Port](/es-ES/api/port)                  | `withPortTransport`, `attachPortHost`, `createPort*Handle`, `@defjs/core/port/webext` |
 
 ## Relacionado
 

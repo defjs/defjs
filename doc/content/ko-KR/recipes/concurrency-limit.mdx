@@ -1,0 +1,25 @@
+---
+title: "동시성 제한 및 풀링된 호출"
+description: concurrencyLimitHttpInterceptor로 다운스트림 오리진을 보호하고 @defjs/core/concurrent로 깔끔하게 팬아웃합니다.
+---
+
+# 동시성 제한 및 풀링된 호출
+
+`Client`에서는 클라이언트 전체의 벌크헤드(선택적 `maxQueue` 오버플로 보호를 갖춘 FIFO 큐잉)로 `concurrencyLimitHttpInterceptor`를 사용하고, 해당 `Client`에 직접 바인딩된 fail-fast 또는 settled 병렬 호출에는 `@defjs/core/concurrent`(`concurrentMap`, `concurrentMapSettled`, `concurrentAll`, `concurrentAllSettled`)를 사용하세요.
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+자세한 내용은 [Client API](/ko-KR/api/client) 및 [Interceptors API](/ko-KR/api/interceptors)를 참조하세요.

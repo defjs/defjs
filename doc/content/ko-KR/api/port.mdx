@@ -1,0 +1,44 @@
+---
+title: Port
+description: Defjs 클라이언트를 위한 다중화된 MessagePort 및 MV3 WebExtension 프록시 전송이에요.
+---
+
+# Port 전송 (`@defjs/core/port` & `@defjs/core/port/webext`)
+
+다중화된 `MessagePort` 및 WebExtension `runtime.Port` 전송 핸들과 기본 거부(default-deny) 호스트 브리지예요. [Port 전송 가이드](/ko-KR/docs/port)를 참조하세요.
+
+## 빠른 예제
+
+<include cwd>examples/api/port.ts#example</include>
+
+## 클라이언트 핸들 (`@defjs/core/port`)
+
+### withPortTransport
+
+<ApiSignature name="withPortTransport" />
+
+### createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle
+
+<ApiSignature name="createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle" />
+
+<ApiSignature name="PortClientOptions, PortWebSocketHandle, PortWebSocketHandleConstructor" />
+
+## 호스트 연결 (`@defjs/core/port`)
+
+### attachPortHost
+
+<ApiSignature name="attachPortHost" />
+
+<ApiSignature name="PortHostOptions, PortHostHandle, PortRequestCheckContext, PortWebSocketConstructor" />
+
+## 포트 추상화
+
+<ApiSignature name="PortLike, PortEndpoint, PortWireMode, PortMessageListener, PortDisconnectListener" />
+
+## WebExtension 어댑터 (`@defjs/core/port/webext`)
+
+### fromWebExtPort
+
+<ApiSignature name="fromWebExtPort" />
+
+<ApiSignature name="WebExtPort, WebExtEvent, WebExtPortOptions" />

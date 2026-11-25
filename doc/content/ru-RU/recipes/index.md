@@ -14,6 +14,10 @@ description: Соберите и опубликуйте переиспользу
 - [Отмена и таймауты](/ru-RU/recipes/cancel-http) — объединение `AbortController` с `AbortSignal.timeout(...)` и разделение `NET_ABORTED` и `NET_TIMEOUT`.
 - [Условные запросы ETag](/ru-RU/recipes/etag-revalidate) — отправка `If-None-Match`, обработка `304 Not Modified` как сбоя `HTTP_STATUS` и хранение кэша `Map` в коде приложения.
 - [Запросы GraphQL](/ru-RU/recipes/graphql-http-envelope) — отправка GraphQL-запроса через HTTP `POST` и распаковка `errors[]` против `.nullish()` `data` во вспомогательной функции.
+- [Курсорная пагинация](/ru-RU/recipes/cursor-pagination) — потоковое получение постраничных результатов API через асинхронный генератор с передачей отмены `AbortSignal` для каждой страницы.
+- [Ключи идемпотентности](/ru-RU/recipes/idempotency-key) — автоматическое добавление заголовков `Idempotency-Key` при повторных попытках `POST`/`PATCH` с помощью `idempotencyKeyHttpInterceptor`.
+- [Ограничения параллелизма и пулы вызовов](/ru-RU/recipes/concurrency-limit) — ограничение числа параллельных запросов с помощью `concurrencyLimitHttpInterceptor` и примитивов `@defjs/core/concurrent`.
+- [HTTP-хэндл на Undici Pool](/ru-RU/recipes/undici-pool) — подключение `undici.Pool` к `withHTTPHandle` для keep-alive пулинга соединений в Node.js.
 
 ## Аутентификация
 

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
+import { nodePackages } from "./runtime-matrix.ts";
 import { listRepoFiles } from "./spec-naming.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -213,6 +214,34 @@ test("bypassFindings reports every ignored-failure key with its path", () => {
 
 test("unit-node tests on the LTS line", () => {
   expect(workflowJobs()["unit-node"]?.nodeVersions).toEqual(["lts/*"]);
+});
+
+test("unit-node caches the package-lock.json of every Node package", () => {
+  const jobs = workflowDocument()["jobs"];
+  if (!isRecord(jobs)) throw new Error("jobs is not a mapping");
+  const unitNode = jobs["unit-node"];
+  if (!isRecord(unitNode) || !Array.isArray(unitNode["steps"])) {
+    throw new Error("unit-node steps missing");
+  }
+  const setupStep = unitNode["steps"].find(
+    (step): step is Record<string, unknown> =>
+      isRecord(step) && step["uses"] === setupNode,
+  );
+  expect(setupStep).toBeDefined();
+  const withBlock = setupStep?.["with"];
+  if (
+    !isRecord(withBlock) ||
+    typeof withBlock["cache-dependency-path"] !== "string"
+  ) {
+    throw new Error("unit-node cache-dependency-path missing");
+  }
+  const cachedPaths = withBlock["cache-dependency-path"]
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  expect(cachedPaths).toEqual(
+    nodePackages.map((pkg) => `${pkg}/package-lock.json`).toSorted(),
+  );
 });
 
 test("no unit run passes --passWithNoTests", () => {

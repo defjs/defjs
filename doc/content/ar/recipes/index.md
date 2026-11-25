@@ -14,6 +14,10 @@ description: ابنِ وانشر حزمة SDK قابلة لإعادة الاست
 - [الإلغاء والمهل الزمنية](/ar/recipes/cancel-http) — الجمع بين `AbortController` الخاص بالمستدعي و`AbortSignal.timeout(...)`، والتمييز بين `NET_ABORTED` و`NET_TIMEOUT`.
 - [طلبات ETag الشرطية](/ar/recipes/etag-revalidate) — إرسال `If-None-Match`، ومعالجة `304 Not Modified` كخطأ `HTTP_STATUS`، والاحتفاظ بذاكرة التخزين المؤقت `Map` داخل كود التطبيق.
 - [طلبات GraphQL](/ar/recipes/graphql-http-envelope) — إرسال استعلام GraphQL عبر طلب HTTP `POST` وفك تغليف `errors[]` مقابل بيانات `data` القابلة للغياب (`.nullish()`) عبر دالة مساعدة في التطبيق.
+- [التصفح بالمؤشر (Cursor pagination)](/ar/recipes/cursor-pagination) — دفق نتائج API المقسَّمة إلى صفحات باستخدام مولّد غير متزامن وتمرير إلغاء `AbortSignal` لكل صفحة.
+- [مفاتيح تساوي الأثر (Idempotency keys)](/ar/recipes/idempotency-key) — إرفاق ترويسات `Idempotency-Key` تلقائياً عبر محاولات إعادة إرسال `POST`/`PATCH` باستخدام `idempotencyKeyHttpInterceptor`.
+- [حدود التزامن والاستدعاءات المجمّعة](/ar/recipes/concurrency-limit) — تقييد الطلبات الجارية باستخدام `concurrencyLimitHttpInterceptor` وتوزيع الاستدعاءات المتوازية عبر دوال `@defjs/core/concurrent`.
+- [مقبض HTTP عبر Undici Pool](/ar/recipes/undici-pool) — ربط `undici.Pool` مع `withHTTPHandle` لإعادة استخدام مجمّعات اتصال keep-alive في Node.js.
 
 ## المصادقة
 

@@ -1,18 +1,18 @@
 ---
 title: Defjs
-description: 用可重用嘅 API 定義同由應用程式擁有嘅 client，設計並發佈 TypeScript SDK 或整理業務介面層。
+description: TypeScript SDK 與高韌性 Client 工具組 — 將可重用嘅 HTTP、SSE 同 WebSocket 契約定義，同應用程式擁有嘅高韌性 client 分開設計。
 ---
 
 # Defjs
 
-**寫一次 API 契約定義，執行細節按每個應用程式自己設定。**
+**TypeScript SDK 與高韌性 Client 工具組 — 寫一次 API 契約定義，按每個應用程式分別配置執行細節。**
 
-無論你係要發佈獨立嘅 npm SDK，定係想將項目內部前後端介面層整理得好啲，Defjs 都將兩邊職責清楚拆開：
+Defjs 將 TypeScript SDK 嘅兩面清楚拆開：
 
-- **介面契約定義 (`@defjs/core`)** — 用 `defineRequest`、`defineEventStream` 同 `defineWebSocket` 宣告帶型別嘅 HTTP、SSE 同 WebSocket 操作，配合 `struct` 定義資料結構。定義純粹係資料：只 import 佢唔會發起網絡請求，亦唔會綁死全域 client。
-- **應用程式執行** — 業務應用程式建立自己嘅 `Client`（`createClient(withEndpoint(...))`），掛上憑證同攔截器、配置負載平衡，然後喺呼叫操作嗰陣傳入該 client。
+- **SDK 定義 (`@defjs/core`, `@defjs/cli`)** — 宣告帶型別嘅 HTTP、SSE 同 WebSocket 操作，並配合其 `struct` schema（可以手寫，亦可以由 OpenAPI 2.0/3.0/3.1/3.2 規格生成無狀態 ESM）。定義純粹係資料：只 import 佢唔會發起網絡呼叫，亦唔會綁死全域 client。
+- **高韌性應用程式執行 (`@defjs/core`)** — 應用程式建立自己嘅 `Client`（`createClient(withEndpoint(...))`），掛上憑證同攔截器（`basicAuth*`、`idempotencyKeyHttpInterceptor`、`concurrencyLimitHttpInterceptor`），配置 P2C 負載平衡與 `outlierDetection`（`halfOpen`、`maxEjectionPercent`），啟用 `429`/`Retry-After` 重試，透過 `@defjs/core/concurrent` 扇出並行呼叫，或者用 `@defjs/core/port` 橋接 worker 同瀏覽器擴充功能。
 
-## 快速睇睇：介面定義 vs 應用程式執行
+## 快速睇睇：SDK 定義 vs. 應用程式執行
 
 <Tabs items={["get-health.ts", "app.ts"]}>
 <Tab>
@@ -31,44 +31,46 @@ description: 用可重用嘅 API 定義同由應用程式擁有嘅 client，設�
 </Tab>
 </Tabs>
 
-呼叫 `getHealth(client)` 就會真正執行請求，並回傳一個 error-first tuple。讀取解碼後嘅成功結果之前，先檢查 `if (err)` 並提前 `return` 退出。
+呼叫 `getHealth(client)` 會執行 I/O 並解析為一個 error-first tuple。讀取解碼後嘅成功結果之前，先檢查 `if (err)` 並提前 `return` 退出。
 
 ## 點解要將定義同 Client 分開？
 
-| 職責     | 介面定義（專案 `src/api/` 或公開 SDK）                                                       | 應用程式（執行時期）                                            |
+| 職責     | SDK 作者（定義）                                                                             | 應用程式（執行）                                                |
 | -------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | **擁有** | Method、路徑模板、`input` / `output` / `error` schema、`builder` 映射，以及可選嘅自訂 `meta` | Base URL、憑證、認證攔截器、負載平衡、逾時設定同資源釋放        |
 | **交付** | 可重用嘅 ESM 模組同 `.d.ts` 宣告                                                             | 瀏覽器、伺服器或測試環境嘅 runtime 設定                         |
-| **好處** | 完全零環境耦合；同一份定義唔使改寫就喺瀏覽器、SSR 同本機測試通用                             | 完全掌控重試、故障轉移（failover）、遙測（telemetry）同生命週期 |
+| **好處** | 零環境耦合；喺瀏覽器、SSR 同測試之間通用                                                     | 完全掌控重試、故障轉移（failover）、遙測（telemetry）同生命週期 |
 
 ## 揀選你嘅閱讀路徑
 
-1. **[快速開始](/zh-Hant-HK/docs/start)** — 定義第一個操作，用本地 Fetch handle 離線測試一次，再對接真實服務。
+1. **[快速開始](/zh-Hant-HK/docs/start)** — 定義一個操作，用本地 Fetch handle 離線測試一次，再將 client 指向真實服務。
 2. **[核心架構](/zh-Hant-HK/docs/design-decisions)** — 了解六條回應解碼規則、error-first tuple 同資源擁有權。
-3. **[定義介面與契約](/zh-Hant-HK/docs/struct)** — 用 [Struct](/zh-Hant-HK/docs/struct) 宣告網絡資料契約，並匯出 [HTTP](/zh-Hant-HK/docs/http)、[SSE](/zh-Hant-HK/docs/sse) 同 [WebSocket](/zh-Hant-HK/docs/web-socket) 操作。
-4. **[Client 與執行](/zh-Hant-HK/docs/client)** — 設定 [Client](/zh-Hant-HK/docs/client)、處理型別化嘅 [錯誤](/zh-Hant-HK/docs/errors)、掛載 [攔截器](/zh-Hant-HK/docs/interceptors)、配置 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)。
-5. **[工程規範與測試](/zh-Hant-HK/docs/best-practices)** — 跟從 [工程規範](/zh-Hant-HK/docs/best-practices)，規劃項目內嘅 [應用程式 API 層](/zh-Hant-HK/docs/application-api) 或設計 [公開 SDK](/zh-Hant-HK/docs/public-sdk)，並編寫穩定可重現嘅本地 [測試](/zh-Hant-HK/docs/testing)。
+3. **[比較與混合 BFF 架構](/zh-Hant-HK/docs/comparison-and-architecture)** — 將 Defjs 同 `fetch`、`ky`、`ofetch`、`openapi-fetch` 同 `oRPC` 作比較，並查看 Defjs + oRPC/Hono BFF 藍圖與基準測試數據。
+4. **[定義 SDK](/zh-Hant-HK/docs/struct)** — 用 [Struct](/zh-Hant-HK/docs/struct) 宣告網絡契約，並匯出 [HTTP](/zh-Hant-HK/docs/http)、[SSE](/zh-Hant-HK/docs/sse) 同 [WebSocket](/zh-Hant-HK/docs/web-socket) 操作。
+5. **[Client 與執行](/zh-Hant-HK/docs/client)** — 設定 [Client](/zh-Hant-HK/docs/client)、處理帶型別嘅 [錯誤](/zh-Hant-HK/docs/errors)、掛載 [攔截器](/zh-Hant-HK/docs/interceptors)，並配置 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)。
+6. **[最佳實踐與測試](/zh-Hant-HK/docs/best-practices)** — 跟從 [工程規範](/zh-Hant-HK/docs/best-practices)，組織 [應用程式 API 層](/zh-Hant-HK/docs/application-api) 或 [公開 SDK](/zh-Hant-HK/docs/public-sdk)，並編寫確定性 [測試](/zh-Hant-HK/docs/testing)。
 
 ## 支援嘅傳輸層與結果 tuple
 
-每個操作都會回傳一個三項式 error-first tuple，配合相應傳輸嘅生命週期：
+每個操作都會回傳一個三項式 error-first tuple，配合相應傳輸層嘅生命週期：
 
-| 傳輸層                                       | 入口函式            | tuple 形狀                   | 點樣取消或釋放資源                                                        |
+| 傳輸層                                       | 入口函式            | Tuple 形狀                   | 生命週期擁有權                                                            |
 | -------------------------------------------- | ------------------- | ---------------------------- | ------------------------------------------------------------------------- |
 | **[HTTP](/zh-Hant-HK/docs/http)**            | `defineRequest`     | `[err, data, response]`      | 透過 `client({ signal })` 取消進行中嘅請求                                |
 | **[SSE](/zh-Hant-HK/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | 透過 `await using` 或 `stream.close()` + `await stream.closed` 釋放資源   |
 | **[WebSocket](/zh-Hant-HK/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | 透過 `await using` 或 `session.close()` + `await session.closed` 釋放資源 |
 
-喺 HTTP 失敗嗰陣，tuple 會係 `[err, undefined, undefined]`，因為 `err` 本身已經包含咗 `HttpMeta` 回應元數據。至於 SSE 同 WebSocket，只要喺失敗前已經捕獲到啟動 snapshot，第三個位就會保留佢。
+喺 HTTP 失敗嗰陣，tuple 會係 `[err, undefined, undefined]`，因為 `err` 本身已經包含咗任何 `HttpMeta` 回應元數據。至於 SSE 同 WebSocket，只要喺失敗前已經捕獲到啟動 snapshot，第三個位就會保留佢。
 
 ## 官方套件
 
 | 套件                          | 角色                                                                          | 指南                                                                         |
 | ----------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `@defjs/core`                 | 零依賴嘅介面定義、`struct`、client 與攔截器                                   | [快速開始](/zh-Hant-HK/docs/start)                                           |
+| `@defjs/core`                 | 零依賴 SDK 定義、`struct`、client、高韌性機制、中介層、`concurrent`、`port`   | [快速開始](/zh-Hant-HK/docs/start)                                           |
+| `@defjs/cli`                  | 從 OpenAPI 2.0–3.2 規格生成無狀態 ESM 定義嘅開發期 CLI                        | [CLI 整合](/zh-Hant-HK/docs/integrations/cli)                                |
 | `@defjs/react`                | 適用於 React 18+ 嘅 `ClientProvider` 同 `useClient()` context 注入            | [React 整合](/zh-Hant-HK/docs/integrations/react)                            |
 | `@defjs/vue`                  | 適用於 Vue 3 或以上嘅 `createClientPlugin`、`HTTP_CLIENT` 同 `injectClient()` | [Vue 整合](/zh-Hant-HK/docs/integrations/vue)                                |
-| `@defjs/opentelemetry-server` | 伺服器端 outbound span、metrics 與診斷日誌                                    | [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server) |
+| `@defjs/opentelemetry-server` | 伺服器端 outbound spans、metrics 與診斷日誌                                   | [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server) |
 
 ## 常見實戰範例
 
@@ -76,7 +78,11 @@ description: 用可重用嘅 API 定義同由應用程式擁有嘅 client，設�
 - [發送與驗證 JSON](/zh-Hant-HK/recipes/post-json)
 - [處理已宣告嘅 404](/zh-Hant-HK/recipes/get-declared-404)
 - [取消 HTTP 呼叫](/zh-Hant-HK/recipes/cancel-http)
+- [游標分頁串流](/zh-Hant-HK/recipes/cursor-pagination)
+- [重試時使用冪等鍵](/zh-Hant-HK/recipes/idempotency-key)
+- [隔艙並發限制](/zh-Hant-HK/recipes/concurrency-limit)
+- [使用 Undici Pool 重用連線](/zh-Hant-HK/recipes/undici-pool)
 - [401 後更新 Bearer token 一次](/zh-Hant-HK/recipes/refresh-bearer-once)
 - [使用 SSE 事件流](/zh-Hant-HK/recipes/consume-sse)
 - [開啟 WebSocket 會話](/zh-Hant-HK/recipes/websocket-session)
-- [使用本地 Fetch Handle 進行測試](/zh-Hant-HK/recipes/test-with-handle)
+- [使用本地 Fetch handle 進行測試](/zh-Hant-HK/recipes/test-with-handle)

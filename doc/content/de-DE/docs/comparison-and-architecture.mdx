@@ -1,0 +1,78 @@
+---
+title: Vergleich & hybride Architektur
+description: Objektiver Vergleich mit fetch, ky, ofetch, openapi-fetch und oRPC sowie die hybride Defjs + oRPC/Hono-BFF-Architektur samt reproduzierbaren Benchmarks.
+---
+
+# Vergleich & hybride Architektur
+
+Defjs liegt an der Schnittstelle zweier Ökosysteme: **Browser-/Node-HTTP-Clients** (`fetch`, `ky`, `ofetch`, `axios`, `openapi-fetch`) und **Contract-first-RPC-Frameworks** (`oRPC`, tRPC). Dieser Leitfaden klärt, wo welches Werkzeug passt, wann Defjs unnötiger Overhead ist und wie Teams beides in der Produktion kombinieren.
+
+## Ökosystem-Vergleich
+
+| Fähigkeit                              | Rohes `fetch`                         | `ky` / `ofetch`                            | `openapi-fetch`                               | `oRPC`                                     | Defjs (`@defjs/core`)                                                             |
+| -------------------------------------- | ------------------------------------- | ------------------------------------------ | --------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
+| Primäres Design                        | Plattform-Primitiv                    | App-HTTP-Wrapper                           | Typisierter OpenAPI-Fetch-Client              | Full-Stack-TS-RPC-Framework                | SDK-Definition + resilientes Client-Kit                                           |
+| Trennung von Definition & Client       | Manuell                               | Koppelt Instanz pro Basis-URL              | Pfadtypen geteilt; Client besitzt Aufrufe     | Router & Client über RPC-Vertrag gekoppelt | Erstklassig (`define*`-Daten vs. `Client`)                                        |
+| Einheitliche Transporte                | Nur HTTP                              | Nur HTTP                                   | Nur HTTP                                      | HTTP + SSE/Event-Iterator (serverseitig)   | HTTP, SSE und WebSocket unter einem Client                                        |
+| Laufzeit-Wire-Verträge & Aliase        | Keine                                 | Keine                                      | Optionale Middleware                          | Externer Validator (Zod/Valibot/ArkType)   | Abhängigkeitsfreies `struct` mit bidirektionalem `.alias()`                       |
+| Fehlersemantik                         | Reject bei Netzwerkfehlern; `!res.ok` | Wirft `HTTPError`                          | `{ data, error }` (Wirft oder Network-Reject) | Sichere/werfbare RPC-Fehler                | Niemals werfendes `[err, value, meta]`-Tupel im Go-Stil                           |
+| Multi-Upstream-Lastverteilung          | Keine                                 | Keine                                      | Keine                                         | Link-Plugins (kein eingebautes P2C EWMA)   | Eingebauter `p2cBalancer` + `outlierDetection` (`halfOpen`, `maxEjectionPercent`) |
+| `429` + `Retry-After` + Correlation-ID | Manuell                               | `ky` behandelt `Retry-After`; einzelne URL | Nichts eingebaut                              | Client-Retry-Plugin                        | Natives `429`/RFC-`Retry-After`, Retry-Budget & `correlationId`                   |
+| Strukturierte Parallelität             | Rohes `Promise.all`                   | Rohes `Promise.all`                        | Rohes `Promise.all`                           | Batch-Plugin / `Promise.all`               | `@defjs/core/concurrent` gebunden an Client + Abbruch                             |
+| OpenAPI-Codegenerierung                | Keine                                 | Keine                                      | Nur `openapi-typescript`-Typen                | OpenAPI-Spec-Export aus oRPC-Router        | `@defjs/cli` generiert zustandsloses ESM + `struct`                               |
+| Proxy über Grenzen hinweg              | Manuelles `postMessage`               | Manuell                                    | Manuell                                       | MessagePort- / Worker-Adapter              | `@defjs/core/port` + `/webext` (HTTP, SSE, WS + Default-Deny-Origin)              |
+
+### Wann du stattdessen eine Alternative wählen solltest
+
+- **Wähle rohes `fetch`, `ofetch` oder `ky`**, wenn eine Anwendung nur wenige Same-Origin-Endpunkte aufruft, ohne ein SDK zu veröffentlichen, ohne Multi-Upstream-Failover und ohne Laufzeit-Schemavalidierung (~4–10 KB Brotli).
+- **Wähle `openapi-fetch`**, wenn du bereits `openapi-typescript`-Typen pflegst und lediglich Compile-Time-Typen mit minimalen Fetch-Wrappern ohne Laufzeit-Wire-Dekodierung benötigst.
+- **Wähle `oRPC` (oder Hono RPC)** für **First-Party-Frontend-zu-BFF- / Full-Stack-RPC**, wenn dein Team sowohl den TypeScript-Server als auch den Browser-Client besitzt und End-to-End-Prozedur-Inferenz wünscht, ohne separate HTTP-Verträge zu pflegen.
+
+---
+
+## Hybrider BFF-Blueprint: oRPC / Hono am Edge, Defjs nachgelagert
+
+Das häufigste Produktionsmuster im großen Maßstab stellt Defjs nicht gegen `oRPC` oder `Hono`, sondern kombiniert beide über die Vertrauensgrenze hinweg:
+
+```txt
+┌──────────────┐   First-Party-RPC (oRPC / Hono)   ┌─────────────────────────────────┐
+│ Browser /    │ ────────────────────────────────▶ │ BFF (Hono- / oRPC-Server)       │
+│ Mobile-App   │ ◀──────────────────────────────── │                                 │
+└──────────────┘                                   │  @defjs/core Client:            │
+                                                   │  • undici.Pool handle           │
+                                                   │  • p2cBalancer({                │
+                                                   │      outlierDetection: {        │
+                                                   │        halfOpen: true           │
+                                                   │      }                          │
+                                                   │    })                           │
+                                                   │  • withRetry (429 / 503)        │
+                                                   │  • bulkhead + idempotency       │
+                                                   │  • @defjs/opentelemetry-server  │
+                                                   └────────────────┬────────────────┘
+                                                                    │
+                                        Downstream REST / SSE / WS  │
+                               ┌────────────────────────────────────┴────────┐
+                               ▼                                             ▼
+                    Drittanbieter-SaaS-APIs                      Interne Microservices
+                    (generiert via @defjs/cli)                   (Failover über Nodes A, B, C)
+```
+
+In dieser Aufteilung:
+
+1. **Browser ↔ BFF** nutzt `oRPC` oder `Hono` für schnelle First-Party-RPC-Entwicklung.
+2. **BFF ↔ Nachgelagerte APIs** nutzt `@defjs/core` (häufig mit Operationen, die per `@defjs/cli` aus Anbieter-OpenAPI-Specs generiert und über [`undici.Pool`](/de-DE/recipes/undici-pool) gepoolt werden), sodass eine einzelne langsame nachgelagerte Instanz (`B`) oder eine ratenbegrenzte (`429` / `503`) Instanz (`C`) über `p2cBalancer` + `outlierDetection` isoliert wird, bevor sie die Worker-Kapazität des BFF erschöpft.
+
+---
+
+## Reproduzierbare Benchmark-Highlights
+
+Alle unten genannten Zahlen stammen aus der isolierten, per Lockfile fixierten Benchmark-Suite in [`bench/`](https://github.com/defjs/defjs/blob/main/bench/REPORT.md) (`bun run build && cd bench && bun install --frozen-lockfile && bun run all`, Apple M1 Max, Bun `1.4.5`, Node `v26.13.1`, deterministischer Seed `SEED=20261124`).
+
+| Dimension                    | Szenario                                                                                                                                   | Ergebnis-Highlight                                                                                                                                                                                                                                                           | Methodik / Fairness-Hinweis                                                                                                                                                                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Multi-Upstream-Resilienz     | 200 Aufrufe @ Parallelität 8 über Gesund `A` (5 ms), Long-Tail `B` (40 % 300 ms), Instabil `C` (40 % `503`, 40 % `429` + `Retry-After: 1`) | `@defjs/core` (`p2c` + `outlierDetection` + `withRetry`): **100.0% Erfolg**, **1.03x** Wire-Amplifikation, **11.01 ms p95** (`A:195 / B:3 / C:9`) vs. `ky`: **81.5%**, **1.49x**, **1626.30 ms p95** (`A:67 / B:67 / C:163`) und rohes `fetch`: **71.0%**, **302.18 ms p95** | PRNG-Zustand und Upstream-Zähler werden vor jedem Client-Durchlauf identisch zurückgesetzt; `@defjs/core` validiert zusätzlich Antworten über `struct`.                                                                                               |
+| ESM-Browser-Bundle-Größe     | `esbuild` Minify + Tree-Shake (Brotli-11 / Gzip-9)                                                                                         | Minimales `@defjs/core` (`defineRequest` + `struct`): **16.69 KB br / 18.75 KB gzip**; voller Resilienz-Stack (`p2c` + `outlierDetection` + `withRetry` + Middleware): **17.78 KB br / 20.00 KB gzip**                                                                       | `ofetch` (**3.62 KB br**) und `ky` (**9.66 KB br**) verzichten auf Schema-Dekodierung; `openapi-fetch + zod` (**76.79 KB br**) und `@orpc/client + zod` (**81.51 KB br**) bundlen Zod.                                                                |
+| HTTP-Keep-Alive-Overhead     | Lokaler Loopback-Hono-Server, 5.000 Requests (Parallelität 16 / sequenziell)                                                               | `@defjs/core` (`fetch` + `struct`): **23,481 req/s** (`0.57 ms` p50) bei Parallelität 16; **9,926 req/s** (`0.09 ms` p50) sequenziell                                                                                                                                        | Beide `@defjs/core`-Varianten führen bei jeder Antwort eine vollständige `struct`-Ausgabevalidierung aus; bei Parallelität 16 liefern `ky` (**21,310 req/s**), `ofetch` (**28,921 req/s**) und `openapi-fetch` (**34,393 req/s**) unvalidiertes JSON. |
+| Schema-Fail-Fast-Dekodierung | Array mit 1.000 Elementen, Index `0` ungültig (`mitata`)                                                                                   | `@defjs/core`: **506.5 ns** (`1,974,438 ops/s`) vs. `zod`: **51.25 us**, `valibot`: **70.82 us**, `arktype`: **334.86 us**                                                                                                                                                   | `@defjs/core` bricht bei der ersten Strukturverletzung sofort ab; bei gültigen Eingaben (`flat-6-fields`, `array-1000-items`) laufen ArkType JIT, Zod v4 und Valibot schneller.                                                                       |
+
+Sieh dir die rohen JSON-Metriken und alle festgelegten Umgebungs-Versionen im [vollständigen Benchmark-Bericht](https://github.com/defjs/defjs/blob/main/bench/REPORT.md) an.

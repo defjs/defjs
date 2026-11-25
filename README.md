@@ -12,11 +12,11 @@
 </p>
 <br/>
 
-**Designed for better SDKs.**
+**TypeScript SDK & Resilient Client Kit.**
 
-Define reusable TypeScript APIs for HTTP, SSE, and WebSocket. Let each application own its client.
+Define reusable TypeScript APIs for HTTP, SSE, and WebSocket (`struct`, `defineRequest`, `defineEventStream`, `defineWebSocket`), and give every application a resilient client with explicit placement, error-first tuples, P2C load balancing, outlier detection, `429`/`Retry-After` retries, built-in interceptors, structured concurrency (`@defjs/core/concurrent`), cross-boundary `MessagePort` / MV3 WebExtension proxies (`@defjs/core/port` and `@defjs/core/port/webext`), and OpenAPI code generation (`@defjs/cli`).
 
-For complete guides, examples, and the API reference, visit **[defjs.lyz.cloud](https://defjs.lyz.cloud)**.
+For complete guides, examples, architecture comparisons, and the API reference, visit **[defjs.lyz.cloud](https://defjs.lyz.cloud)**.
 
 ## Quick start
 
@@ -50,6 +50,20 @@ async function main() {
 
 void main();
 ```
+
+## Packages
+
+| Package                                                                  | Role                                                                                                                                                                                               |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](packages/core/README.md)                                 | Zero-dependency SDK definitions, `struct`, client, retries, load balancing, built-in interceptors, `@defjs/core/concurrent`, `@defjs/core/xsrf`, `@defjs/core/port`, and `@defjs/core/port/webext` |
+| [`@defjs/cli`](packages/cli/README.md)                                   | Development-time CLI (`defjs openapi generate`) turning Swagger 2.0 / OpenAPI 3.0–3.2 specs into stateless ESM definitions                                                                         |
+| [`@defjs/react`](packages/react/README.md)                               | `ClientProvider` and `useClient` context injection for React 18+                                                                                                                                   |
+| [`@defjs/vue`](packages/vue/README.md)                                   | `createClientPlugin`, `HTTP_CLIENT`, and `injectClient` for Vue 3+                                                                                                                                 |
+| [`@defjs/opentelemetry-server`](packages/opentelemetry-server/README.md) | Server-side outbound spans, metrics, and logs for Defjs clients                                                                                                                                    |
+
+## Benchmarks
+
+Reproducible benchmarks against `zod`, `valibot`, `arktype`, `fetch`, `ky`, `ofetch`, `axios`, `openapi-fetch`, and `@orpc/client` live in [`bench/`](bench/README.md). See the latest run results in [`bench/REPORT.md`](bench/REPORT.md).
 
 ## License
 

@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { createBrowserApiSetup } from "./browser-api-server-setup.ts";
+import { setup as setupCli } from "../packages/cli/test/setup.ts";
 import { setup as setupCore } from "../packages/core/test/setup.ts";
 import { setup as setupOtel } from "../packages/opentelemetry-server/test/setup.ts";
 import { assertRuntime, expectedRuntime } from "./runtime-guard.ts";
@@ -12,6 +13,8 @@ const bunMessage = "This project must run on Bun (main process).";
 test.each([
   ["core-node", "node"],
   ["core-bun", "bun"],
+  ["cli-node", "node"],
+  ["cli-bun", "bun"],
   ["root-bun", "bun"],
   ["core-chrome", "bun"],
   ["react-firefox", "bun"],
@@ -80,6 +83,10 @@ describe("globalSetup wiring", () => {
       }),
     ).rejects.toThrow(nodeMessage);
     expect(provide).not.toHaveBeenCalled();
+  });
+
+  test("cli setup rejects a node project under Bun", () => {
+    expect(() => setupCli({ name: "cli-node" })).toThrow(nodeMessage);
   });
 
   test("browser api setup refuses a non-Bun main process before selecting a startup layer", async () => {

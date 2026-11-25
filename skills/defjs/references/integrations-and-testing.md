@@ -1,6 +1,6 @@
 # Framework Integrations (`@defjs/react`, `@defjs/vue`), OpenTelemetry (`@defjs/opentelemetry-server`), Testing, and SDK Packaging
 
-Contents: [React integration (`@defjs/react`)](#1-react-integration-defjsreact) · [Vue integration (`@defjs/vue`)](#2-vue-integration-defjsvue) · [Server-side OpenTelemetry (`@defjs/opentelemetry-server`)](#3-server-side-opentelemetry-defjsopentelemetry-server) · [Testing your Defjs project (`with*Handle`)](#4-testing-your-defjs-project-withhandle) · [In-app API layer & public SDK architecture](#5-in-app-api-layer--public-sdk-architecture) · [What Defjs intentionally does not provide](#6-what-defjs-intentionally-does-not-provide)
+Contents: [React integration (`@defjs/react`)](#1-react-integration-defjsreact) · [Vue integration (`@defjs/vue`)](#2-vue-integration-defjsvue) · [Server-side OpenTelemetry (`@defjs/opentelemetry-server`)](#3-server-side-opentelemetry-defjsopentelemetry-server) · [Testing your Defjs project (`with*Handle`)](#4-testing-your-defjs-project-withhandle) · [In-app API layer & public SDK architecture](#5-in-app-api-layer--public-sdk-architecture) · [OpenAPI codegen (`@defjs/cli`) and `MessagePort` proxy (`@defjs/core/port`)](#6-openapi-codegen-defjscli-and-messageport-proxy-defjscoreport) · [What Defjs intentionally does not provide](#7-what-defjs-intentionally-does-not-provide)
 
 For full English guide pages on the official site (no locale prefix), fetch `https://defjs.lyz.cloud/llms.mdx/docs/integrations/react/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/integrations/vue/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/integrations/opentelemetry-server/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/testing/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/best-practices/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/application-api/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/public-sdk/content.md`, and `https://defjs.lyz.cloud/llms.mdx/recipes/publish-http-sdk/content.md`.
 
@@ -703,7 +703,7 @@ it("renders order status with createClientPlugin", async () => {
 
 ### 4.6 Common testing pitfalls
 
-- **`withRetry(undefined)` vs. `withRetry({ maxRetries: 0 })`**: Passing `undefined` falls back to default retry policy (`maxRetries: 2`, backoff enabled); set `{ maxRetries: 0 }` explicitly (or omit `withRetry`) when retries must stay disabled.
+- **`withRetry(undefined)` vs. `withRetry({ maxRetries: 0 })`**: Passing `undefined` falls back to default retry policy (`maxRetries: 3`, backoff enabled); set `{ maxRetries: 0 }` explicitly (or omit `withRetry`) when retries must stay disabled.
 - **`methods: ["POST"]` replaces defaults**: Passing `withRetry({ methods: ["POST"] })` overrides Defjs's default idempotent method list; include `"GET"` / `"HEAD"` too if one test client shares retries across read and write calls.
 - **`401` / error `err.data` stays `undefined` without `error:` schema**: Non-2xx bodies are only decoded into `err.data` when `defineRequest` declares `error: ApiError` (a `struct`).
 - **`content-type` headers in handles**: Mock JSON HTTP responses with `Response.json(...)` (sets `content-type: application/json`), and mock SSE responses in `withSSEHandle` with `"content-type": "text/event-stream"`; wrong or missing content types fail with `RES_MEDIA_TYPE_INVALID` before reading the body.
@@ -732,7 +732,7 @@ Defjs supports two primary project layouts that share the same `schema/` + `requ
 │   │   ├── buckets.ts    # listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts    # listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts          # Flat barrel re-exports (or client.ts in an in-app src/api/ layer)
-├── package.json          # "type": "module", "sideEffects": false, peerDependencies: { "@defjs/core": "^0.8.0" }
+├── package.json          # "type": "module", "sideEffects": false, peerDependencies: { "@defjs/core": "^0.9.0" }
 └── tsconfig.json
 ```
 
@@ -740,7 +740,7 @@ Defjs supports two primary project layouts that share the same `schema/` + `requ
   1. **Pure functions, never `Service` classes**: Unlike legacy OpenAPI generators that wrap endpoints in stateful classes (`ObjectsService.putObject(...)` or `new S3Client()`), every operation in `src/request/*.ts` is exported directly as a standalone `defineRequest` / `defineEventStream` / `defineWebSocket` value and called as `await putObject(client, input)` or `await getObject(client({ signal }), input)`. Never wrap operations in a `class` or a namespace object—standalone exports preserve per-call `client(options)` derivation and allow bundlers to tree-shake unused operations when `"sideEffects": false` is set.
   2. **Same-name `struct` + `Infer` exports in `schema/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
   3. **Keep `request/*.ts` client-free in both scenarios**: Even inside an application's `src/api/`, never import `apiClient` inside `src/api/request/*.ts`. Keep `createClient(...)` in `src/api/client.ts` so operations remain directly testable with `withHTTPHandle` and reusable across browser singletons and SSR per-request clients.
-  4. **Public SDK package metadata**: When publishing an external SDK package, declare `"@defjs/core": "^0.8.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
+  4. **Public SDK package metadata**: When publishing an external SDK package, declare `"@defjs/core": "^0.9.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
 
 ### Best practice: hand-written S3 SDK (`schema/` + `request/` + application consumer)
 
@@ -952,7 +952,14 @@ void main();
 
 ---
 
-## 6. What Defjs intentionally does not provide
+## 6. OpenAPI codegen (`@defjs/cli`) and `MessagePort` proxy (`@defjs/core/port`)
+
+- **`@defjs/cli` (dev-only OpenAPI codegen)**: Run `npx @defjs/cli openapi generate` (configured via `defineConfig` in `defjs.config.ts`) or call `generateOpenApi` programmatically. Emits stateless ESM `@defjs/core` definitions (`ts`, `tsx`, `js` + `.d.ts`, `mjs` + `.d.mts`) without binding clients; supports `sync`, `scaffold`, and `--check`. See [docs/integrations/cli](https://defjs.lyz.cloud/llms.mdx/docs/integrations/cli/content.md) and [api/cli](https://defjs.lyz.cloud/llms.mdx/api/cli/content.md).
+- **`@defjs/core/port` & `@defjs/core/port/webext` (Worker, iframe, Electron, and MV3 WebExtension proxies)**: Call `withPortTransport(port)` (or `createPortHTTPHandle` / `createPortSSEHandle` / `createPortWebSocketHandle`) inside sandboxed/UI contexts, and `attachPortHost(port, { allowedOrigins: [...] })` on the privileged host. Hosts fail closed unless `allowedOrigins`, `allowRequest`, or `allowAnyOrigin: true` is supplied, and must call `host.close()` (or `using host = ...`). For MV3 `runtime.Port`, adapt with `fromWebExtPort(() => chrome.runtime.connect(...))` on the client and `fromWebExtPort(rawPort)` on the host. See [docs/port](https://defjs.lyz.cloud/llms.mdx/docs/port/content.md) and [api/port](https://defjs.lyz.cloud/llms.mdx/api/port/content.md).
+
+---
+
+## 7. What Defjs intentionally does not provide
 
 | Removed or non-existent feature                           | What to write instead                                                               |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------- |

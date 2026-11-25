@@ -1,0 +1,53 @@
+---
+title: Port トランスポート（Workers & WebExtensions）
+description: デフォルト拒否のオリジンポリシーを備えたプロキシトランスポートにより、MessagePort、Workers、iframe、Electron、MV3 WebExtension runtime.Port 越しの HTTP、SSE、WebSocket 操作を実現します。
+---
+
+# Port トランスポート (`@defjs/core/port`)
+
+`@defjs/core/port` を使用すると、分離されたコンテキスト（`SharedWorker`、Dedicated Worker、サンドボックス化された `iframe`、Electron レンダラー、または WebExtension の Popup / Side Panel / Content Script）から、SDK 定義をプロキシトランスポートに結合することなく、単一の多重化ポート経由で純粋な `@defjs/core` SDK 定義を実行できます。
+
+- 実行時依存関係ゼロ；オプションの `@defjs/core/port` および `@defjs/core/port/webext` サブパスエクスポートとして提供され、インポートしない限りバンドルサイズへの影響はありません
+- 1 つのポートを HTTP（`ReadableStream` のアップロード／ダウンロードを含む）、SSE（`text/event-stream`）、WebSocket 接続で同時共有
+- **デフォルトで fail-closed のセキュリティ**: ホスト側が `allowedOrigins`、`allowRequest`、または明示的な `allowAnyOrigin: true` を指定しない限り、`attachPortHost` はすべてのトラフィックを拒否します
+
+```bash
+bun add @defjs/core
+```
+
+## MessagePort ブリッジ（Workers、iframe、Electron）
+
+両側で SDK 定義をそのまま維持できます。権限を持つホスト側が実際の `fetch` / `WebSocket` 呼び出しを実行し、サンドボックス側のクライアントは自身の `Client` に `withPortTransport(port)` をアタッチします。
+
+<Tabs items={["sdk/orders.ts", "host.ts", "client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/host.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+`attachPortHost` を呼び出す際は、返された `PortHostHandle` への参照を保持し、終了時に `host.close()`（または `using host = attachPortHost(...)`）を呼び出して、実行中の HTTP/SSE チャネルと WebSocket セッションをクリーンに閉じてください。
+
+## MV3 WebExtension プロキシ (`@defjs/core/port/webext`)
+
+WebExtension の `runtime.Port` は Chromium / Firefox / Safari の拡張機能境界を越えて `ArrayBuffer` オブジェクトを直接転送できず、さらに Manifest V3 の Service Worker がサスペンドするたびに切断されます。`@defjs/core/port/webext` は、`"json"` チャンク分割 Base64 フレーミングを使用し、Service Worker の休止復帰後の自動再接続のために遅延コネクター関数をサポートする依存関係ゼロの構造アダプター `fromWebExtPort`（`@types/chrome` 不要）を提供します。
+
+<include cwd lang="typescript">
+  examples/port/webext.ts#example
+</include>
+
+詳細は [Port API リファレンス](/ja-JP/api/port) を参照してください。

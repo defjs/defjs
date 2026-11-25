@@ -6,8 +6,9 @@ import { envWithoutVitest, run } from "./spawn.ts";
 
 const root = resolve(import.meta.dirname, "..");
 
-// Coverage is off in the nested runs: Vitest cleans the Node report directory before
-// the guard fails and still writes an empty report after it, which wipes local results.
+// Coverage and fsModuleCache are off in the nested runs: Vitest cleans the Node
+// report directory before the guard fails and shares `node_modules/.vitest-cache`
+// across lockfiles, which wipes reports or races with concurrent Vitest runs.
 const cases = [
   {
     label: "core vitest config",
@@ -19,17 +20,41 @@ const cases = [
       "--config",
       "vitest.config.node.ts",
       "--coverage.enabled=false",
+      "--no-fsModuleCache",
     ],
   },
   {
     label: "core unit:node script",
     cwd: "packages/core",
-    args: ["run", "unit:node", "--", "--coverage.enabled=false"],
+    args: [
+      "run",
+      "unit:node",
+      "--",
+      "--coverage.enabled=false",
+      "--no-fsModuleCache",
+    ],
+  },
+  {
+    label: "cli unit:node script",
+    cwd: "packages/cli",
+    args: [
+      "run",
+      "unit:node",
+      "--",
+      "--coverage.enabled=false",
+      "--no-fsModuleCache",
+    ],
   },
   {
     label: "opentelemetry-server unit:node script",
     cwd: "packages/opentelemetry-server",
-    args: ["run", "unit:node", "--", "--coverage.enabled=false"],
+    args: [
+      "run",
+      "unit:node",
+      "--",
+      "--coverage.enabled=false",
+      "--no-fsModuleCache",
+    ],
   },
 ] as const;
 

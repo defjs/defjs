@@ -58,7 +58,7 @@ description: 用 defineEventStream 声明强类型的 SSE 事件流契约，并�
   - **常规失败**：返回 `HTTP_STATUS`；如果定义了 `error` struct，解码后的错误内容挂在 `err.data`。
   - **声明了 `error` 但响应体解不出来**：此时操作本身会和 HTTP 一样转成对应的解码 Fault（例如网关 `503` 返回了 HTML 页导致 JSON `error` struct 触发 `RES_MEDIA_TYPE_INVALID`、流损坏报 `RES_DECODE_FAILED`、字段对不上报 `RES_STRUCT_MISMATCH`），状态码保存在 `err.status` 和 `err.response` 上，解码失败原因挂在 `err.cause`；不过拦截器、`shouldRetry` 和断线重连失败后的 `stream.closed` 依然会按 `HTTP_STATUS` 识别这个响应，所以网关 `503` 无论 body 长啥样都会照常进重试流程。
   - **服务端注意结束非 `2xx` 响应体**：只要操作声明了 JSON `error` struct，客户端就会把非 `2xx` 握手 body 一直读到结束（除了 `304` 或 `Content-Type` 不是 JSON 时提前跳过）；若服务端一直挂着不结束 body，调用会一直等待直到外部 `signal` 中止或连接被切掉（`attemptTimeoutMs` 管握手建连阶段，不限制已经拿到响应头后读取失败体这段时间）。如果不声明 `error`，客户端拿到状态码后就会直接取消并丢弃 body。
-  - **怎么触发重试**：未配 `withRetry` 时直接结束；配了 `withRetry` 时，只有 `502`/`503`/`504` 按连接重试规则重连，其他非 `2xx` 状态会带着 `retryable: false` 询问 `shouldRetry`，默认不再重试。耗尽或拒绝后返回 `HTTP_STATUS`；下一次调用重新按均衡器挑节点。
+  - **怎么触发重试**：未配 `withRetry` 时直接结束；配了 `withRetry` 时，状态码在 `statusCodes` 中（默认 `429`、`502`、`503` 或 `504`）的握手会按第 4 节的连接重试规则重连（启用 `retryAfter` 时会对 `429` 和 `503` 遵守 RFC 9110 `Retry-After`），其他非 `2xx` 状态会带着 `retryable: false`、`status` 与 `headers` 询问 `shouldRetry`，默认不再重试。耗尽或拒绝后返回 `HTTP_STATUS`；下一次调用重新按均衡器挑节点。
 - **`2xx` 但 `Content-Type` 不对**：不是 `text/event-stream` 的 `2xx` 响应（包括 `204` 和 `205`）会直接报 `RES_MEDIA_TYPE_INVALID`。
 - **`2xx` 带 `text/event-stream` 但没有响应体**：像 Node.js / Bun 里带 `text/event-stream` 的 `204`/`205` 空响应会被看作一条空流——建连成功，随后立即以 `{ kind: "eof" }` 正常结束，不触发重试。
 - **`startupOpen` vs `stream.open`**：元组第三项 `startupOpen` 是首次建连瞬间的历史快照；`stream.open` 则会在后面每次自动重连成功时实时刷新。哪怕某次重连握手收到非 `2xx` 导致流终止（迭代器 reject、`stream.closed` 返回 `HTTP_STATUS`），`stream.open.response.status` 也会保留最后那次重连收到的状态码。
@@ -82,14 +82,14 @@ SSE 断线重连默认**不开启**，需要使用与 HTTP / WebSocket 相同的
 - **按“单次建连后的断线次数”计 `maxRetries`**：默认值是 `3`。每当一次重连握手成功，已用重试次数和退避倍数就会**清零**——也就是说哪怕只配 `maxRetries: 1`，只要每次都能重新连上再被踢下线，长会话也可能一直连下去；如果你发现服务端刚握手就反复踢人，要在 `shouldRetry` 里主动拦住。注意：服务端正常关流结束（EOF）不算失败，不会重连。
 - **游标自动续传（`Last-Event-ID`）**：只有读到事件末尾的空行时，Defjs 才会把这条事件的 `id:` 提交成最新游标，并在下次重连请求头带上 `Last-Event-ID`。半截没收完的帧绝不会更新游标；连接上哪怕后来收到没有带 `id:` 的事件，也会继续沿用上次提交的游标，直到遇到一个空的 `id:` 字段才会清空它（清空后下次重连不再发 `Last-Event-ID`）。当然，服务端本身必须实现按这个游标重放历史事件。
 - **哪些请求方法允许自动重试**：默认只重试 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT`、`DELETE`。像 AI 对话常用 `POST` 发起 SSE 流，如果想支持断线重连，必须在 `methods` 里显式加上 `"POST"`，或通过 `shouldRetry` 放行。如果请求带了 `ReadableStream` 流式 body，首轮已经消费掉了，永远不会重试。
-- **为什么 `502`/`503`/`504` 也会重试**：遇到这三种网关错误（不管首次还是重连），Defjs 会按和网络断连一样的规则（受 `methods`、`maxRetries`、`shouldRetry` 控制）自动退避重连；其他非 `2xx` 则以 `retryable: false` 交给 `shouldRetry`。原生浏览器 `EventSource` 只要遇到非 `200` 就会永久放弃，Defjs 在网关临时抖动时表现得更有韧性。
+- **限流与网关握手（`statusCodes`、`Retry-After`）**：匹配 `statusCodes`（默认 `429`、`502`、`503` 或 `504`）的握手响应（不管首次还是重连），Defjs 会按和网络断连一样的规则（受 `methods`、`shouldRetry`、`maxRetries`、`ReadableStream` body 控制）自动退避重连。对于 `429` 和 `503` 握手，当 `retryAfter` 开启时（默认开启），有效的 RFC 9110 `Retry-After` 响应头会替换指数退避，并附带正向抖动，上限为 `maxRetryAfterMs`（默认 `60_000` ms）；若服务端要求的延迟超过 `maxRetryAfterMs`，流会立即结束而不调用 `shouldRetry`。`SSERetryContext` 会收到 `headers` 与 `retryAfterMs`。其他非 `2xx` 则以 `retryable: false` 交给 `shouldRetry`，默认结束流。重试耗尽与被拒绝的重试都会以 `HTTP_STATUS` 结束。对这些瞬态状态码（`429`、`502`、`503`、`504`）进行重试是对 HTML 标准的刻意偏离：原生浏览器 `EventSource` 只要遇到非 `200` 事件流就会永久放弃，而 Defjs 会像处理连接被拒绝一样处理限流或临时不可用的网关。
 - **握手超时（`attemptTimeoutMs`）**：这个选项只限制“发 Fetch 到拿到响应头”这一步耗时，不会限制连上后整个流能开多久！由于 `attemptTimeoutMs` 挂在 `withRetry` 下，写 `withRetry({ attemptTimeoutMs })` 默认仍带 3 次重试；**只想要握手超时不要重连**请写成 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。某次握手超时后会向负载均衡上报 `NET_UNREACHABLE`，从而切下一个节点，全耗尽后报 `NET_TIMEOUT`。
 
 ### Node.js 下长连接没消息会断？[#idle-streams]
 
 Node.js 原生 `fetch`（底层是 undici）默认给每个响应流设置了 300 秒的 `bodyTimeout`（按两次收到数据块的间隔计算）。如果服务端超过 5 分钟一句话不发，就算连接其实健在，Node.js 运行时也会主动把流掐断：
 
-- **实际现象**：`for await` 会抛出运行时生成的 `TypeError("terminated")`（`cause.code === "UND_ERR_BODY_TIMEOUT"`），同时 `stream.closed` 结束为 `{ kind: "error", code: "NET_UNREACHABLE" }`。没开 `withRetry` 就到此结束了；开了 `withRetry` 则按 [重连规则](#reconnect) 带上 `Last-Event-ID` 自动续连，并给均衡器上报一次 `NET_UNREACHABLE`。
+- **实际现象**：`for await` 会抛出运行时生成的 `TypeError("terminated")`（`cause.code === "UND_ERR_BODY_TIMEOUT"`），同时 `stream.closed` 结束为 `{ kind: "error", code: "NET_UNREACHABLE" }`。没开 `withRetry` 就到此结束了；开了 `withRetry` 则按 [重连规则](#reconnect) 带上 `Last-Event-ID` 自动续连，并给均衡器上报一次 `NET_UNREACHABLE`（见[负载均衡](/zh-Hans/docs/load-balancing)）。
 - **怎么彻底避免**：最稳妥是在服务端定期推一条空注释心跳行（比如每 15 秒发一次 `: keepalive\n\n`），这既符合 HTML 规范建议（防止各种中间网关/代理杀空闲连接），parser 也会自动忽略注释行，但底层的字节到达会把 Node 的空闲计时器清零。
 - **客户端能调吗**：Defjs 没有覆盖这个运行时底层超时选项；如果服务端实在不发心跳，静默满 300 秒必然会被 Node.js 切断。
 

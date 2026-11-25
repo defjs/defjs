@@ -1,0 +1,31 @@
+---
+title: "游標分頁"
+description: 使用非同步產生器（async generator）串流讀取分頁端點，並轉傳每一頁的 AbortSignal 取消訊號。
+---
+
+# 游標分頁
+
+將分頁操作保留在 SDK 模組（`listOrders`）內，並把游標接續邏輯包裝進純粹的應用程式輔助函式（`listAllOrders`）中，以 Go 風格逐筆 yield `[err, item]` tuple，在遭遇失敗或呼叫端中止時立即停止。
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+單次呼叫 `signal` 的衍生規則，請參閱 [Client](/zh-Hant-TW/docs/client) 與 [HTTP 操作](/zh-Hant-TW/docs/http)。

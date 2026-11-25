@@ -1,0 +1,31 @@
+---
+title: "Pagination par curseur"
+description: Parcourez proprement des endpoints paginés à l'aide d'un générateur asynchrone et de l'annulation AbortSignal par page.
+---
+
+# Pagination par curseur
+
+Conservez l'opération paginée dans le module SDK (`listOrders`) et encapsulez la continuation par curseur dans un helper applicatif pur (`listAllOrders`) qui produit des tuples Go-style `[err, item]` et s'arrête immédiatement en cas d'échec ou d'annulation de l'appelant.
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Consultez [Client](/fr-FR/docs/client) et [Opérations HTTP](/fr-FR/docs/http) pour les règles de dérivation du `signal` par appel.

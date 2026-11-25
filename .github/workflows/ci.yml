@@ -79,6 +79,7 @@ jobs:
           node-version: lts/*
           cache: npm
           cache-dependency-path: |
+            packages/cli/package-lock.json
             packages/core/package-lock.json
             packages/opentelemetry-server/package-lock.json
       - name: Install packages that run on Node

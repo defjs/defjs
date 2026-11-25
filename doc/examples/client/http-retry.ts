@@ -24,11 +24,11 @@ const client = createClient(
     attemptTimeoutMs: 2_000,
     delayMs: 500,
     maxDelayMs: 5_000,
-    // The default retries a connection failure, a 502, 503, or 504, and a timeout.
-    // This policy also retries a 429 and leaves every other decision to the default.
+    // The default retries a connection failure, a 429, 502, 503, or 504, and a timeout.
+    // This policy also retries a 408 Request Timeout and leaves every other decision to the default.
     shouldRetry: (context) =>
       context.retryable ||
-      (context.transport === "http" && context.status === 429),
+      (context.transport === "http" && context.status === 408),
     budget: {
       percentCanRetry: 0.2,
       minRetriesPerSecond: 10,

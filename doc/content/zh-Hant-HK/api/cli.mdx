@@ -1,0 +1,40 @@
+---
+title: "@defjs/cli"
+description: OpenAPI-to-Defjs 生成器、設定輔助函式，以及 CLI 執行器。
+---
+
+# CLI (`@defjs/cli`)
+
+開發期 CLI 同程式化生成器，將 Swagger 2.0 同 OpenAPI 3.0–3.2 規格轉換成無狀態 ESM `@defjs/core` 模組。詳情請參閱 [CLI 整合指南](/zh-Hant-HK/docs/integrations/cli)。
+
+## 快速範例
+
+<include cwd>examples/api/cli.ts#example</include>
+
+## 設定
+
+### defineConfig
+
+<ApiSignature name="defineConfig" />
+
+### DefjsConfig, OpenApiTargetConfig, OpenApiOutputConfig, OpenApiInput
+
+<ApiSignature name="DefjsConfig, OpenApiTargetConfig, OpenApiOutputConfig, OpenApiInput, OpenApiDocumentObject" />
+
+### 策略與格式型別
+
+<ApiSignature name="OpenApiOutputFormat, OpenApiGenerationMode, OpenApiErrorStrategy, OpenApiMixed2xxStrategy" />
+
+## 程式化與 CLI 執行
+
+### generateOpenApi
+
+<ApiSignature name="generateOpenApi" />
+
+<ApiSignature name="GenerateOpenApiOptions, OpenApiGenerateResult, CliDiagnostic, CliDiagnosticSeverity" />
+
+### runCli
+
+<ApiSignature name="runCli" />
+
+<ApiSignature name="CliIo" />

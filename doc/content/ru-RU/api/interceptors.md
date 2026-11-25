@@ -63,4 +63,26 @@ description: Конструкторы перехватчиков HTTP, SSE и We
 
 Ставит `Authorization: Basic <encoded>` на каждый запрос. `fn` возвращает `{ username, password }` и вызывается на каждый запрос. Необязательный второй аргумент `{ encode }` получает эти учётные данные и возвращает часть после `Basic `; кодирование по умолчанию — ``btoa(`${username}:${password}`)``. Без `encode` создание перехватчика выбрасывает ошибку, если `btoa` недоступен.
 
+## Ограничение параллелизма
+
+### concurrencyLimitHttpInterceptor()
+
+### BulkheadOverflowError
+
+### ConcurrencyLimitInterceptorOptions
+
+<ApiSignature name="concurrencyLimitHttpInterceptor, BulkheadOverflowError, ConcurrencyLimitInterceptorOptions" />
+
+Ограничивает число одновременных активных HTTP-попыток на корзину (`key`, по умолчанию одна общая корзина). Запросы сверх `maxConcurrency` ждут в порядке FIFO до `maxQueue` (по умолчанию `Infinity`) или отклоняются с `BulkheadOverflowError` (возвращается как `EXT_INTERCEPTOR_FAILED` с `{ attempted: false }`). Разрешения освобождаются на время ожидания задержки повторов в `withRetry`, а заранее отменённые или отменённые в очереди запросы завершаются с `NET_ABORTED` или `NET_TIMEOUT`. См. [Ограничения параллелизма и пулированные вызовы](/ru-RU/recipes/concurrency-limit).
+
+## Ключ идемпотентности
+
+### idempotencyKeyHttpInterceptor()
+
+### IdempotencyKeyInterceptorOptions
+
+<ApiSignature name="idempotencyKeyHttpInterceptor, IdempotencyKeyInterceptorOptions" />
+
+Клонирует `req.headers` и устанавливает `headerName` (по умолчанию `'Idempotency-Key'`) на запросах, метод которых совпадает с `methods` (по умолчанию `['POST', 'PATCH']`), пропуская запросы, уже содержащие этот заголовок, когда `respectExisting` равно `true` (по умолчанию). Без `generate` переиспользует `req.correlationId` (или генерирует UUID v4 в качестве запасного варианта), так что каждая попытка `withRetry` одного вызова отправляет один и тот же ключ; с `generate` мемоизирует результат по `req.correlationId` в ограниченном кэше на 4 096 записей. См. [Ключи идемпотентности](/ru-RU/recipes/idempotency-key).
+
 См. [руководство по перехватчикам](/ru-RU/docs/interceptors).

@@ -1,0 +1,25 @@
+---
+title: "حدود التزامن والاستدعاءات المجمّعة"
+description: احمِ الخوادم الخلفية عبر concurrencyLimitHttpInterceptor ووزّع الاستدعاءات المتوازية بنظافة عبر @defjs/core/concurrent.
+---
+
+# حدود التزامن والاستدعاءات المجمّعة
+
+استخدم `concurrencyLimitHttpInterceptor` على `Client` كعازل سعة (bulkhead) على مستوى العميل (رتل FIFO مع حماية اختيارية ضد الفيض عبر `maxQueue`)، واستخدم `@defjs/core/concurrent` (`concurrentMap` و`concurrentMapSettled` و`concurrentAll` و`concurrentAllSettled`) للاستدعاءات المتوازية سريعة الفشل (fail-fast) أو المكتملة (settled) المربوطة مباشرة بذلك العميل `Client`.
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+راجع [مرجع واجهة برمجة العميل](/ar/api/client) و[مرجع واجهة برمجة المعترضات](/ar/api/interceptors).

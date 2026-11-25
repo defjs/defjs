@@ -246,13 +246,16 @@ function serveEndpoint(
       return respondResponse(registration.params, cors);
     case "gzip":
       return gzipResponse(registration.params, cors);
-    case "script":
+    case "script": {
+      const plan = registration.params.plan;
+      const step = plan[Math.min(request, plan.length - 1)];
       return scriptResponse(
-        registration.params.plan,
+        plan,
         request,
         (connection) => state.track(name, connection),
         c.req.raw.signal,
-      ).then((response) => applyCors(response, cors));
+      ).then((response) => applyCors(response, cors, step?.exposeHeaders));
+    }
     case "ws":
       if (!isWebSocketUpgrade(c)) {
         return applyCors(new Response(null, { status: 426 }), cors);
@@ -302,7 +305,11 @@ function dataCors(c: Context): DataCors {
   };
 }
 
-function applyCors(response: Response, cors: DataCors): Response {
+function applyCors(
+  response: Response,
+  cors: DataCors,
+  exposeHeaders = true,
+): Response {
   const own = [...response.headers.keys()];
   if (cors.origin !== undefined) {
     response.headers.set("access-control-allow-origin", cors.origin);
@@ -316,7 +323,7 @@ function applyCors(response: Response, cors: DataCors): Response {
     response.headers.set("access-control-max-age", "86400");
     return response;
   }
-  if (own.length > 0) {
+  if (exposeHeaders && own.length > 0) {
     response.headers.set("access-control-expose-headers", own.join(","));
   }
   return response;
@@ -498,8 +505,20 @@ function parseScriptStep(value: unknown): ScriptStep | undefined {
   }
   const headers = own(value, "headers");
   if (headers !== undefined && !isStringRecord(headers)) return undefined;
-  if (isStringRecord(headers)) return { status, chunks, then, headers };
-  return { status, chunks, then };
+  const exposeHeaders = own(value, "exposeHeaders");
+  if (exposeHeaders !== undefined && typeof exposeHeaders !== "boolean") {
+    return undefined;
+  }
+  const step: {
+    status: number;
+    chunks: readonly string[];
+    then: StepThen;
+    headers?: FixtureHeaders;
+    exposeHeaders?: boolean;
+  } = { status, chunks, then };
+  if (isStringRecord(headers)) step.headers = headers;
+  if (typeof exposeHeaders === "boolean") step.exposeHeaders = exposeHeaders;
+  return step;
 }
 
 function scriptResponse(

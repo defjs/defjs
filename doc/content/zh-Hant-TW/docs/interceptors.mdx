@@ -55,16 +55,16 @@ HTTP 攔截器可以用 `makeResponse(...)` 建構合成回應，不呼叫 `next
 
 ## 3. 重試與 `Retry-After`
 
-HTTP 重試預設關閉。若要在連線失敗、逾時，或 `502`、`503`、`504` 時改到另一個端點重試，請使用 [`withRetry()`](/zh-Hant-TW/docs/load-balancing#retries)。退避延遲之後，它會讓平衡器重新選取、重新建構請求，並重新執行完整的攔截器鏈。
+HTTP 重試預設關閉。若要在連線失敗、逾時，或 `statusCodes` 中的狀態碼（預設為 `429`、`502`、`503` 或 `504`）時進行重試，並對 `429` 與 `503` 原生支援 RFC 9110 `Retry-After`（預設 `retryAfter: true`、`maxRetryAfterMs: 60_000`），請使用 [`withRetry()`](/zh-Hant-TW/docs/load-balancing#retries)。退避延遲之後，它會讓平衡器重新選取、重新建構請求，並重新執行完整的攔截器鏈。
 
-應用程式攔截器也可以改為處理同一端點的狀態碼，例如 `429` 與 `Retry-After`：
+當應用程式需要**自訂的同端點**狀態碼處理時——例如在已選取的端點上重試但不重跑 `builder` 與外層攔截器、在缺少 `Retry-After` 時改用後備延遲，或對等待設上限而不是直接快速失敗——攔截器可以直接對 `next(request)` 做迴圈：
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **兩層重試**：這個 `next(request)` 迴圈會留在已選取的端點，不會重新執行 builder 或外層攔截器。連線失敗與 `502`/`503`/`504` 交給 `withRetry`。
-- **`Retry-After` 策略**：Core 的 `withRetry` 不會讀取這個標頭。範例中的 30 秒上限與 250 ms 後備值是應用程式的選擇。若伺服器要求的延遲更長，設定上限可能導致提早重試；若無法接受，請等待完整延遲，或直接回傳回應。
+- **兩層重試**：這個 `next(request)` 迴圈會留在已選取的端點，不會重新執行 builder 或外層攔截器。連線失敗、跨端點容錯移轉與預設的 `429`/`502`/`503`/`504` 策略交給 `withRetry`。
+- **內建 vs. 自訂 `Retry-After` 策略**：Core 的 `withRetry()` 預設會對 `429` 與 `503` 遵循 RFC 9110 `Retry-After`（若伺服器要求的延遲超過 `maxRetryAfterMs`，則直接快速失敗而不重試）。如果你像上面的範例一樣在自訂攔截器內處理 `429`，請設定 `withRetry({ retryAfter: false })`（或將 `429` 從 `statusCodes` 移除）以避免雙重重試；範例中的 30 秒上限與 250 ms 後備值是應用程式自己的選擇，若對更長的伺服器延遲設上限，可能會比伺服器要求的時間更早重試。
 - **401 寫入**：[Bearer 更新範例](/zh-Hant-TW/recipes/refresh-bearer-once) 可能傳遞同一個 JSON POST 兩次。必須確保身分驗證在業務處理前拒絕請求，並使用穩定的冪等鍵與伺服器端去重，否則不要自動重播寫入。串流請求本文不會重播。
 - **處理傳輸層拒絕**：發生網路錯誤時，`next(request)` 會拒絕（不會有狀態碼 0 的回應）。接住並重新拋出該拒絕，就能保留原本的 `NET_*` 錯誤碼。
 - **無法送出的請求**：在 HTTP 攔截器中，當平台拒絕該請求（無效或被禁止的方法、GET 或 HEAD 的本文、帶有憑證的 URL、無效的 `Content-Type`），或 `finalizeHeaders` hook 拋出例外時，`next(request)` 會以平台自己的錯誤（`TypeError`）或 hook 拋出的值拒絕，而不是函式庫的 `BodyFailure` 包裝。重新拋出它會保留 fault code（`REQ_BUILD_FAILED` 或 `EXT_HOOK_FAILED`）；拋出不同的錯誤則讓這次失敗歸你（`EXT_INTERCEPTOR_FAILED`）。傳輸層附近的其他失敗仍會以 `BodyFailure` 到達 `next(request)`：無法讀取、解碼或對上媒體型別的回應本文、被截斷的本文，以及會拋出例外的上傳進度觀察者（`EXT_OBSERVER_FAILED`），後者可能在請求送出前就發生。
@@ -96,17 +96,23 @@ WebSocket 攔截器**最多只能呼叫一次** `next(req)`。包裝回傳的 `W
 
 ## 6. 內建 factory 與輔助函式
 
-| 匯出名稱                                       | 傳輸協定  | 說明                                                              |
-| ---------------------------------------------- | --------- | ----------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | 包裝 `(req, next) => Promise<HttpResponse<unknown>>`              |
-| `createSSEInterceptor(fn)`                     | SSE       | 包裝 `(req, next) => Promise<EventStreamHandle<unknown>>`         |
-| `createWebSocketInterceptor(fn)`               | WebSocket | 包裝 `(req, next) => Promise<WebSocketSessionLike>`               |
-| `createOperationInterceptor(fn)`               | 全部      | 在整次操作呼叫外包裝 `(call, next) => Promise<result>`            |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 從每個請求都會呼叫的同步憑證提供者注入 `Authorization: Basic ...` |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 交握注入 `Authorization: Basic ...`                        |
+| 匯出名稱                                       | 傳輸協定  | 說明                                                                                                                                   |
+| ---------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | 包裝 `(req, next) => Promise<HttpResponse<unknown>>`                                                                                   |
+| `createSSEInterceptor(fn)`                     | SSE       | 包裝 `(req, next) => Promise<EventStreamHandle<unknown>>`                                                                              |
+| `createWebSocketInterceptor(fn)`               | WebSocket | 包裝 `(req, next) => Promise<WebSocketSessionLike>`                                                                                    |
+| `createOperationInterceptor(fn)`               | 全部      | 在整次操作呼叫外包裝 `(call, next) => Promise<result>`                                                                                 |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 從每個請求都會呼叫的同步憑證提供者注入 `Authorization: Basic ...`                                                                      |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 交握注入 `Authorization: Basic ...`                                                                                             |
+| `concurrencyLimitHttpInterceptor(options)`     | HTTP      | 依分桶限制進行中的並行嘗試數（`ConcurrencyLimitInterceptorOptions`）；以 FIFO 排隊至 `maxQueue`，溢位時以 `BulkheadOverflowError` 拒絕 |
+| `idempotencyKeyHttpInterceptor(options?)`      | HTTP      | 在異動方法（`POST`、`PATCH`）上注入冪等鍵標頭（`IdempotencyKeyInterceptorOptions`，預設 `Idempotency-Key`），重用 `req.correlationId`  |
+
+`concurrencyLimitHttpInterceptor` 會在 `withRetry` 退避等待期間釋放許可，使重試不會造成隔艙死鎖，並在超過 `maxQueue` 時拋出 `BulkheadOverflowError`（對外呈現為 `EXT_INTERCEPTOR_FAILED` 且帶有 `{ attempted: false }`）。請參閱 [Interceptors API 參考](/zh-Hant-TW/api/interceptors)。
 
 ## 相關閱讀
 
+- [重試時的冪等鍵](/zh-Hant-TW/recipes/idempotency-key)
+- [並行限制與池化呼叫](/zh-Hant-TW/recipes/concurrency-limit)
 - [遇到 401 時自動重新取得 Bearer Token 一次](/zh-Hant-TW/recipes/refresh-bearer-once)
 - [ETag 條件請求](/zh-Hant-TW/recipes/etag-revalidate)
 - [OpenTelemetry Server](/zh-Hant-TW/docs/integrations/opentelemetry-server)

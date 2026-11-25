@@ -1,0 +1,25 @@
+---
+title: "並行限制與池化呼叫"
+description: 以 concurrencyLimitHttpInterceptor 保護下游來源，並透過 @defjs/core/concurrent 優雅地進行並行扇出。
+---
+
+# 並行限制與池化呼叫
+
+在 `Client` 上配置 `concurrencyLimitHttpInterceptor` 作為用戶端層級的並行隔艙（支援 FIFO 排隊與選用的 `maxQueue` 溢位保護），並搭配 `@defjs/core/concurrent`（`concurrentMap`、`concurrentMapSettled`、`concurrentAll`、`concurrentAllSettled`）直接綁定該 `Client` 執行快速失敗（fail-fast）或全數收斂（settled）的並行呼叫。
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+請參閱 [Client API](/zh-Hant-TW/api/client) 與 [Interceptors API](/zh-Hant-TW/api/interceptors)。

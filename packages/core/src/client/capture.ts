@@ -26,7 +26,7 @@ export function snapshotProtocols(
   return value?.slice();
 }
 
-/** Captures the owned parts of a retry policy: the methods array and the budget record are copied. Callbacks keep their identity. */
+/** Captures the owned parts of a retry policy: the methods and statusCodes arrays and the budget record are copied. Callbacks keep their identity. */
 export function snapshotRetry(
   value: RetryOptions | undefined,
 ): RetryOptions | undefined {
@@ -39,6 +39,9 @@ export function snapshotRetry(
     jitter,
     attemptTimeoutMs,
     methods,
+    statusCodes,
+    retryAfter,
+    maxRetryAfterMs,
     shouldRetry,
     budget,
   } = value;
@@ -50,6 +53,9 @@ export function snapshotRetry(
     jitter,
     attemptTimeoutMs,
     methods: methods?.slice(),
+    statusCodes: statusCodes?.slice(),
+    retryAfter,
+    maxRetryAfterMs,
     shouldRetry,
     budget:
       budget === undefined || budget === false

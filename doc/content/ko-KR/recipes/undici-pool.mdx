@@ -1,0 +1,31 @@
+---
+title: "Undici Pool HTTP 핸들"
+description: SDK 정의를 변경하지 않고 withHTTPHandle을 사용해 Node.js의 undici.Pool 연결 풀을 Defjs 클라이언트에 연결합니다.
+---
+
+# Undici Pool HTTP 핸들
+
+처리량이 높은 Node.js BFF 및 백엔드 서비스에서는 SDK 정의(`sdk/orders.ts`)를 완전히 플랫폼 중립적으로 유지하면서도, 여러 업스트림 연결을 warm 상태로 유지하고 제한하기 위해 [`withHTTPHandle`](/ko-KR/api/core/withhttphandle)을 통해 공유 `undici.Pool`을 주입하세요. 종료 시에는 반드시 `await pool.close()`를 호출해야 합니다.
+
+<Tabs items={["sdk/orders.ts", "app/pool-handle.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/pool-handle.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+`undici.Pool`을 `p2cBalancer` 및 `outlierDetection`과 결합하는 방법은 [비교 및 하이브리드 아키텍처](/ko-KR/docs/comparison-and-architecture)를 참조하세요.

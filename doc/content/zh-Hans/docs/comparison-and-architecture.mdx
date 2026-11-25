@@ -1,0 +1,78 @@
+---
+title: 竞品对比与混合架构
+description: 客观对比 Defjs 与 fetch、ky、ofetch、openapi-fetch 及 oRPC，并介绍 Defjs + oRPC/Hono 混合 BFF 架构与可复现基准测试。
+---
+
+# 竞品对比与混合架构
+
+Defjs 位于两大生态的交汇点：**浏览器 / Node HTTP 客户端**（`fetch`、`ky`、`ofetch`、`axios`、`openapi-fetch`）与**契约优先的 RPC 框架**（`oRPC`、tRPC）。本指南说明各类工具的适用边界、何时使用 Defjs 反而是多余开销，以及团队如何在生产环境中将它们组合使用。
+
+## 生态能力对比
+
+| 能力维度                        | 原生 `fetch`                      | `ky` / `ofetch`                   | `openapi-fetch`                          | `oRPC`                                | Defjs (`@defjs/core`)                                                       |
+| ------------------------------- | --------------------------------- | --------------------------------- | ---------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------- |
+| 核心定位                        | 平台底层原语                      | 应用级 HTTP 封装                  | 带类型的 OpenAPI Fetch 客户端            | 全栈 TypeScript RPC 框架              | SDK 契约定义 + 弹性客户端工具包                                             |
+| 定义与客户端解耦                | 手动管理                          | 每个基地址绑定一个实例            | 共享路径类型；客户端持有调用             | 路由与客户端通过 RPC 契约耦合         | 一等公民（`define*` 纯数据定义 vs. `Client`）                               |
+| 统一传输协议                    | 仅 HTTP                           | 仅 HTTP                           | 仅 HTTP                                  | HTTP + SSE / 事件迭代器（服务端主导） | 同一 Client 下统一支持 HTTP、SSE 与 WebSocket                               |
+| 运行时线路契约与字段别名        | 无                                | 无                                | 可选中间件                               | 外部校验库（Zod/Valibot/ArkType）     | 零依赖 `struct`，内置可逆 `.alias()`                                        |
+| 失败语义                        | 网络错误 reject；手动判 `!res.ok` | 抛出 `HTTPError`                  | `{ data, error }`（会抛出或网络 reject） | 安全模式 / 可抛出的 RPC 错误          | 永不抛出的 `[err, value, meta]` Go 风格元组                                 |
+| 多上游负载均衡                  | 无                                | 无                                | 无                                       | Link 插件（无内置 P2C EWMA）          | 内置 `p2cBalancer` + `outlierDetection`（`halfOpen`、`maxEjectionPercent`） |
+| `429` + `Retry-After` + 关联 ID | 手动编写                          | `ky` 支持 `Retry-After`；仅单 URL | 无内置                                   | 客户端重试插件                        | 原生支持 `429`/RFC `Retry-After`、重试预算与 `correlationId`                |
+| 结构化并发                      | 原生 `Promise.all`                | 原生 `Promise.all`                | 原生 `Promise.all`                       | 批处理插件 / `Promise.all`            | `@defjs/core/concurrent` 直接绑定 Client 与取消信号                         |
+| OpenAPI 代码生成                | 无                                | 无                                | 仅生成 `openapi-typescript` 类型         | 从 oRPC 路由导出 OpenAPI 规范         | `@defjs/cli` 生成无状态 ESM 与 `struct`                                     |
+| 跨边界代理                      | 手写 `postMessage`                | 手动封装                          | 手动封装                                 | MessagePort / Worker 适配器           | `@defjs/core/port` + `/webext`（HTTP、SSE、WS + 默认拒绝源站策略）          |
+
+### 何时应该选择其他方案
+
+- **选择原生 `fetch`、`ofetch` 或 `ky`**：当应用只需要调用少数同源接口，不需要发布 SDK、不需要多上游故障转移，也不需要运行时 schema 校验（约 4–10 KB brotli）时。
+- **选择 `openapi-fetch`**：当你已经维护了一套 `openapi-typescript` 类型，只想要编译期类型提示配合极简 Fetch 封装，而不需要运行时网络数据解码校验时。
+- **选择 `oRPC`（或 Hono RPC）**：用于**一方前端到 BFF / 全栈 RPC** 场景——团队同时掌控 TypeScript 服务端与浏览器客户端，希望直接获得端到端的过程类型推导而无需单独维护 HTTP 契约。
+
+---
+
+## 混合 BFF 蓝图：边缘层用 oRPC / Hono，下游用 Defjs
+
+在高并发生产环境中，最常见的模式并不是把 Defjs 和 `oRPC` 或 `Hono` 对立起来，而是让它们在信任边界两侧各司其职：
+
+```txt
+┌──────────────────┐   一方 RPC（oRPC / Hono）   ┌─────────────────────────────────┐
+│ 浏览器 /         │ ──────────────────────────▶ │ BFF (Hono / oRPC Server)        │
+│ 移动端应用       │ ◀────────────────────────── │                                 │
+└──────────────────┘                             │  @defjs/core Client:            │
+                                                 │  • undici.Pool handle           │
+                                                 │  • p2cBalancer({                │
+                                                 │      outlierDetection: {        │
+                                                 │        halfOpen: true           │
+                                                 │      }                          │
+                                                 │    })                           │
+                                                 │  • withRetry (429 / 503)        │
+                                                 │  • 并发舱壁 + 幂等键            │
+                                                 │  • @defjs/opentelemetry-server  │
+                                                 └────────────────┬────────────────┘
+                                                                  │
+                                      下游 REST / SSE / WS        │
+                             ┌────────────────────────────────────┴────────┐
+                             ▼                                             ▼
+                    第三方 SaaS API                              内部微服务
+                    (由 @defjs/cli 生成)                         (节点 A、B、C 故障转移)
+```
+
+在这一分工下：
+
+1. **浏览器 ↔ BFF** 采用 `oRPC` 或 `Hono`，获得极快的一方 RPC 开发体验。
+2. **BFF ↔ 下游 API** 采用 `@defjs/core`（通常配合 `@defjs/cli` 从供应商 OpenAPI 规范生成的接口定义，并通过 [`undici.Pool`](/zh-Hans/recipes/undici-pool) 进行连接池复用），确保单个慢速下游实例（`B`）或被限流（`429` / `503`）的实例（`C`）在耗尽 BFF worker 容量之前，就先被 `p2cBalancer` + `outlierDetection` 隔离出去。
+
+---
+
+## 可复现基准测试亮点
+
+以下全部数据均来自独立且锁定依赖版本的基准测试套件 [`bench/`](https://github.com/defjs/defjs/blob/main/bench/REPORT.md)（执行命令 `bun run build && cd bench && bun install --frozen-lockfile && bun run all`，测试环境为 Apple M1 Max、Bun `1.4.5`、Node `v26.13.1`、固定随机种子 `SEED=20261124`）。
+
+| 测试维度             | 测试场景                                                                                                                           | 核心结果亮点                                                                                                                                                                                                                                                              | 测试方法与公平性说明                                                                                                                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 多上游弹性容错       | 200 次调用 @ 并发度 8，跨健康节点 `A`（5 ms）、长尾节点 `B`（40% 300 ms）、故障节点 `C`（40% `503`、40% `429` + `Retry-After: 1`） | `@defjs/core`（`p2c` + `outlierDetection` + `withRetry`）：**100.0% 成功率**、**1.03x** 物理请求放大、**11.01 ms p95**（`A:195 / B:3 / C:9`）；对比 `ky`：**81.5%**、**1.49x**、**1626.30 ms p95**（`A:67 / B:67 / C:163`）以及原生 `fetch`：**71.0%**、**302.18 ms p95** | 每次客户端运行前均以相同方式重置伪随机数状态与上游计数器；`@defjs/core` 同时执行 `struct` 响应校验。                                                                                           |
+| ESM 浏览器包体积     | `esbuild` 压缩 + tree-shake（brotli-11 / gzip-9）                                                                                  | 最小化 `@defjs/core`（`defineRequest` + `struct`）：**16.69 KB br / 18.75 KB gzip**；完整弹性栈（`p2c` + `outlierDetection` + `withRetry` + 中间件）：**17.78 KB br / 20.00 KB gzip**                                                                                     | `ofetch`（**3.62 KB br**）和 `ky`（**9.66 KB br**）不包含 schema 解码；`openapi-fetch + zod`（**76.79 KB br**）与 `@orpc/client + zod`（**81.51 KB br**）打包了 Zod。                          |
+| HTTP Keep-Alive 开销 | 本地回环 Hono 服务端，5,000 次请求（并发度 16 / 串行）                                                                             | `@defjs/core`（`fetch` + `struct`）：并发度 16 下 **23,481 req/s**（`0.57 ms` p50）；串行下 **9,926 req/s**（`0.09 ms` p50）                                                                                                                                              | 两种 `@defjs/core` 变体均对每次响应执行完整 `struct` 输出校验；在并发度 16 下，`ky`（**21,310 req/s**）、`ofetch`（**28,921 req/s**）与 `openapi-fetch`（**34,393 req/s**）返回未校验的 JSON。 |
+| Schema 快速失败解码  | 1,000 个元素数组且下标 `0` 非法（`mitata`）                                                                                        | `@defjs/core`：**506.5 ns**（`1,974,438 ops/s`）；对比 `zod`：**51.25 us**、`valibot`：**70.82 us**、`arktype`：**334.86 us**                                                                                                                                             | `@defjs/core` 在遇到第一处结构违规时立即中止；而在全部字段合法的输入（`flat-6-fields`、`array-1000-items`）下，ArkType JIT、Zod v4 与 Valibot 执行更快。                                       |
+
+可在[完整基准测试报告](https://github.com/defjs/defjs/blob/main/bench/REPORT.md)中查看原始 JSON 指标与每一项环境版本锁定信息。

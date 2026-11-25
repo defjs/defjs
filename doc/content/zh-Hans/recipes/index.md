@@ -14,6 +14,10 @@ description: 构建并发布可复用的 SDK，然后在消费方应用中配置
 - [取消与超时](/zh-Hans/recipes/cancel-http) —— 把调用方 `AbortController` 与 `AbortSignal.timeout(...)` 组合起来，并区分 `NET_ABORTED` 与 `NET_TIMEOUT`。
 - [ETag 条件请求](/zh-Hans/recipes/etag-revalidate) —— 发送 `If-None-Match`，把 `304 Not Modified` 当作 `HTTP_STATUS` Fault 处理，并把缓存 `Map` 留在应用代码中。
 - [GraphQL 请求](/zh-Hans/recipes/graphql-http-envelope) —— 通过 HTTP `POST` 发送 GraphQL 查询，并在应用辅助函数中解包 `errors[]` 与 `.nullish()` 的 `data`。
+- [游标分页](/zh-Hans/recipes/cursor-pagination) —— 使用异步生成器流式读取分页 API 结果，并透传每页的 `AbortSignal` 取消信号。
+- [幂等键](/zh-Hans/recipes/idempotency-key) —— 使用 `idempotencyKeyHttpInterceptor` 在 `POST`/`PATCH` 重试时自动附带 `Idempotency-Key` 请求头。
+- [并发限制与池化调用](/zh-Hans/recipes/concurrency-limit) —— 使用 `concurrencyLimitHttpInterceptor` 与 `@defjs/core/concurrent` 原语限制在途请求并发度。
+- [Undici Pool HTTP 句柄](/zh-Hans/recipes/undici-pool) —— 将 `undici.Pool` 接入 `withHTTPHandle`，实现 Node.js 场景下的长连接池复用。
 
 ## 身份认证
 

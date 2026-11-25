@@ -26,7 +26,7 @@ Import the real `defineRequest` operations from your project and create a test `
 
 - **Why `https://fixture.invalid`**: `createClient` validates the base URL before the request reaches `withHTTPHandle`; `.invalid` is RFC-reserved so accidental misconfiguration never queries public DNS.
 - **One handle kind per transport**: `withHTTPHandle` intercepts only HTTP operations (`defineRequest`). Use `withSSEHandle` for `defineEventStream` and `withWebSocketHandle` for `defineWebSocket`.
-- **Retry defaults and `withRetry(undefined)` trap**: Retries are disabled when `withRetry` is omitted—leave it off in ordinary unit tests so `502`/`503`/`504` and network-error cases return after a single attempt instead of waiting through `1s + 2s + 4s` backoff. Watch out: calling `withRetry()` or `withRetry(undefined)` turns **on** 3 default retries. When disabling retries from a shared test helper, pass `withRetry({ maxRetries: 0 })`.
+- **Retry defaults and `withRetry(undefined)` trap**: Retries are disabled when `withRetry` is omitted—leave it off in ordinary unit tests so `429`/`502`/`503`/`504` and network-error cases return after a single attempt instead of waiting through `1s + 2s + 4s` backoff. Watch out: calling `withRetry()` or `withRetry(undefined)` turns **on** 3 default retries. When disabling retries from a shared test helper, pass `withRetry({ maxRetries: 0 })`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
