@@ -5,7 +5,7 @@ import {
   makeStruct,
   NULLABLE_FLAGS,
 } from "./runtime";
-import { DEFINITION } from "./symbols";
+import { DEFINITION, type FAILED } from "./symbols";
 import type {
   ArrayStruct,
   DiscriminatedUnionStruct,
@@ -30,6 +30,81 @@ import type {
 } from "./definition";
 import { describeValue, expectedType } from "./errors";
 
+function isStringValue(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isNumberValue(value: unknown): value is number {
+  return typeof value === "number" && !Number.isNaN(value);
+}
+
+function isBooleanValue(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isNullValue(value: unknown): value is null {
+  return value === null;
+}
+
+function isBlobValue(value: unknown): value is Blob {
+  return value instanceof Blob;
+}
+
+function isBlobRuntime(value: unknown): boolean {
+  return typeof Blob !== "undefined" && value instanceof Blob;
+}
+
+function isFileValue(value: unknown): value is File {
+  return value instanceof File;
+}
+
+function isFileRuntime(value: unknown): boolean {
+  return typeof File !== "undefined" && value instanceof File;
+}
+
+function isArrayBufferValue(value: unknown): value is ArrayBuffer {
+  return value instanceof ArrayBuffer;
+}
+
+function isBigIntRuntime(value: unknown): value is bigint {
+  return typeof value === "bigint";
+}
+
+export function decodeBigIntValue(
+  value: unknown,
+  invalid: typeof FAILED,
+): bigint | typeof FAILED {
+  if (typeof value === "bigint") {
+    return value;
+  }
+  if (typeof value === "string") {
+    try {
+      return BigInt(value);
+    } catch {
+      return invalid;
+    }
+  }
+  return invalid;
+}
+
+function isDateRuntime(value: unknown): value is Date {
+  return value instanceof Date && !Number.isNaN(value.getTime());
+}
+
+export function decodeDateValue(
+  value: unknown,
+  invalid: typeof FAILED,
+): Date | typeof FAILED {
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? invalid : date;
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? invalid : value;
+  }
+  return invalid;
+}
+
 /**
  * Struct that accepts string values.
  *
@@ -42,7 +117,7 @@ import { describeValue, expectedType } from "./errors";
 export function createStringStruct(): StringStruct {
   return createPrimitiveStruct({
     expected: "string",
-    is: (value): value is string => typeof value === "string",
+    is: isStringValue,
     kind: "string",
   });
 }
@@ -59,8 +134,7 @@ export function createStringStruct(): StringStruct {
 export function createNumberStruct(): NumberStruct {
   return createPrimitiveStruct({
     expected: "number",
-    is: (value): value is number =>
-      typeof value === "number" && !Number.isNaN(value),
+    is: isNumberValue,
     kind: "number",
   });
 }
@@ -75,7 +149,7 @@ export function createNumberStruct(): NumberStruct {
 export function createBooleanStruct(): Struct<boolean, boolean> {
   return createPrimitiveStruct({
     expected: "boolean",
-    is: (value): value is boolean => typeof value === "boolean",
+    is: isBooleanValue,
     kind: "boolean",
   });
 }
@@ -93,7 +167,7 @@ export function createNullStruct(): Struct<null, null> {
   return makeStruct<Struct<null, null>>({
     expected: "null",
     flags: NULLABLE_FLAGS,
-    is: (value): value is null => value === null,
+    is: isNullValue,
     kind: "null",
   });
 }
@@ -506,10 +580,9 @@ export function createDiscriminatedUnionStruct<
 export function createBlobStruct(): Struct<Blob, Blob> {
   return createPrimitiveStruct({
     expected: "Blob",
-    is: (value): value is Blob => value instanceof Blob,
+    is: isBlobValue,
     kind: "blob",
-    runtimeIs: (value): value is Blob =>
-      typeof Blob !== "undefined" && value instanceof Blob,
+    runtimeIs: isBlobRuntime,
   });
 }
 
@@ -525,22 +598,13 @@ export function createBlobStruct(): Struct<Blob, Blob> {
  * @group struct
  */
 export function createBigIntStruct(): Struct<bigint | string, bigint> {
-  return createPrimitiveStruct({
-    decode: (input, invalid) => {
-      if (typeof input === "bigint") {
-        return input;
-      }
-      try {
-        return BigInt(input);
-      } catch {
-        return invalid;
-      }
-    },
+  return makeStruct({
+    decode: decodeBigIntValue,
     expected: "bigint",
-    is: (value): value is bigint | string =>
-      typeof value === "bigint" || typeof value === "string",
+    flags: DEFAULT_FLAGS,
+    is: isBigIntRuntime,
     kind: "bigint",
-    runtimeIs: (value): value is bigint => typeof value === "bigint",
+    runtimeIs: isBigIntRuntime,
   });
 }
 
@@ -556,19 +620,13 @@ export function createBigIntStruct(): Struct<bigint | string, bigint> {
  * @group struct
  */
 export function createDateStruct(): Struct<Date | number | string, Date> {
-  return createPrimitiveStruct({
-    decode: (input, invalid) => {
-      const date = input instanceof Date ? input : new Date(input);
-      return Number.isNaN(date.getTime()) ? invalid : date;
-    },
+  return makeStruct({
+    decode: decodeDateValue,
     expected: "Date",
-    is: (value): value is Date | number | string =>
-      value instanceof Date ||
-      typeof value === "string" ||
-      typeof value === "number",
+    flags: DEFAULT_FLAGS,
+    is: isDateRuntime,
     kind: "date",
-    runtimeIs: (value): value is Date =>
-      value instanceof Date && !Number.isNaN(value.getTime()),
+    runtimeIs: isDateRuntime,
   });
 }
 
@@ -674,10 +732,9 @@ function objectIntersectionSides(
 export function createFileStruct(): Struct<File, File> {
   return createPrimitiveStruct({
     expected: "File",
-    is: (value): value is File => value instanceof File,
+    is: isFileValue,
     kind: "file",
-    runtimeIs: (value): value is File =>
-      typeof File !== "undefined" && value instanceof File,
+    runtimeIs: isFileRuntime,
   });
 }
 
@@ -695,7 +752,7 @@ export function createFileStruct(): Struct<File, File> {
 export function createArrayBufferStruct(): Struct<ArrayBuffer, ArrayBuffer> {
   return createPrimitiveStruct({
     expected: "ArrayBuffer",
-    is: (value): value is ArrayBuffer => value instanceof ArrayBuffer,
+    is: isArrayBufferValue,
     kind: "arrayBuffer",
   });
 }

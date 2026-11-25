@@ -18,7 +18,7 @@ import type { HttpRequest, HttpResponseType } from "./http_request";
 import type { HttpResponse } from "./http_response";
 import { failed } from "./http_response";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
-import { preflight } from "../internal/preflight";
+import { preflight, preflightDirect } from "../internal/preflight";
 import type { RetryPolicy } from "../internal/retry";
 import {
   isRetryMethod,
@@ -29,24 +29,29 @@ import {
   computeRetryAfterDelay,
   parseRetryAfter,
 } from "../internal/retry_after";
-import { RequestUrlError } from "../internal/url";
+import { statusOutcome } from "../internal/attempt_outcome";
+import { RequestUrlError, type CompiledPathTemplate } from "../internal/url";
 import type { AnyStruct } from "../struct";
-import { decodeResponse } from "./decode";
+import { decodeDirectResponse, decodeResponse } from "./decode";
 import type {
   HttpExecuteAwaitResult,
   HttpExecuteOptions,
   RequestDefinition,
 } from "./http";
-import { createHttpRequest } from "./request";
+import { buildDirectHttpRequest, prepareHttpRequest } from "./request";
 import type { Attempt } from "./send";
 import {
   abortSends,
   attemptReport,
   foreignFault,
+  hasSettleableSends,
   isSending,
   NOT_ATTEMPTED,
+  resolveFailureInfo,
   send,
+  transportFault,
 } from "./send";
+import { fetchHandlerWithLifecycle } from "./transport/fetch";
 import { isReadableStreamBody } from "./transport/fetch_init";
 
 type HttpExecutionDefinition<
@@ -56,6 +61,7 @@ type HttpExecutionDefinition<
 > = Omit<RequestDefinition<TInput>, "output" | "error"> & {
   output?: TOutput;
   error?: TError;
+  readonly pathTemplate?: CompiledPathTemplate;
 };
 
 /** What the retry policy is shown of a failed attempt that it may retry. */
@@ -83,8 +89,24 @@ interface AttemptResult<
   readonly retry: RetryFacts | undefined;
 }
 
+interface DirectRetryState {
+  readonly policy: RetryPolicy;
+  readonly attempt: number;
+  unselected: boolean;
+  facts: RetryFacts | undefined;
+}
+
+function unwrapAttemptResult<
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  attempt: AttemptResult<TOutput, TError>,
+): HttpExecuteAwaitResult<TOutput, TError> {
+  return attempt.result;
+}
+
 /** Runs the operation once, or as often as the retry policy asks. */
-export async function executeHttp<
+export function executeHttp<
   TInput extends AnyStruct | undefined,
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined,
@@ -96,35 +118,85 @@ export async function executeHttp<
   const clientConfig = client[CLIENT].config;
   const options = client[CLIENT].options;
   const policy = resolveRetryPolicy(options?.retry ?? clientConfig.retry);
-  const correlationId = generateCorrelationId();
+  const direct =
+    clientConfig.interceptors.length === 0 &&
+    options?.signal === undefined &&
+    clientConfig.finalizeHeaders === undefined;
   // PERF: no policy means one attempt: no loop, no budget, no signal for the waits.
   if (policy === undefined) {
-    const { result } = await attemptHttp(
+    if (direct) {
+      return runDirectHttp(clientConfig, definition, input, options);
+    }
+    return attemptHttpGuarded(
       clientConfig,
       definition,
       input,
       options,
       undefined,
-      correlationId,
+      generateCorrelationId(),
       0,
-    );
-    return result;
+    ).then(unwrapAttemptResult);
   }
 
+  return executeHttpWithRetry(
+    clientConfig,
+    definition,
+    input,
+    options,
+    policy,
+    direct,
+  );
+}
+
+async function executeHttpWithRetry<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  definition: HttpExecutionDefinition<TInput, TOutput, TError>,
+  input: EndpointInput<TInput> | undefined,
+  options: HttpExecuteOptions | undefined,
+  policy: RetryPolicy,
+  direct: boolean,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
+  const correlationId = direct ? undefined : generateCorrelationId();
   const budget = retryBudgetFor(clientConfig);
   budget.deposit();
   const signal = options?.signal ?? new AbortController().signal;
   let previous: HttpExecuteAwaitResult<TOutput, TError> | undefined;
   for (let retried = 0; ; retried++) {
-    const attempt = await attemptHttp(
-      clientConfig,
-      definition,
-      input,
-      options,
-      policy,
-      correlationId,
-      retried,
-    );
+    let attempt: AttemptResult<TOutput, TError>;
+    if (direct && policy.attemptTimeoutMs === undefined) {
+      const retryState: DirectRetryState = {
+        policy,
+        attempt: retried,
+        unselected: false,
+        facts: undefined,
+      };
+      const result = await runDirectHttp(
+        clientConfig,
+        definition,
+        input,
+        options,
+        retryState,
+      );
+      attempt = {
+        result,
+        unselected: retryState.unselected,
+        retry: retryState.facts,
+      };
+    } else {
+      attempt = await attemptHttpGuarded(
+        clientConfig,
+        definition,
+        input,
+        options,
+        policy,
+        correlationId,
+        retried,
+      );
+    }
     // A retry that could not use any endpoint has nothing new to report; the attempt that failed is the outcome.
     if (previous !== undefined && attempt.unselected) return previous;
     previous = attempt.result;
@@ -174,10 +246,10 @@ export async function executeHttp<
 }
 
 /**
- * One attempt: the endpoint pick, the request, the interceptor chain, the decoded response, and the report to the
- * balancer. The balancer's `done` and the release of the caller's signal each happen exactly once, in a `finally`.
+ * One guarded attempt: the endpoint pick, the request, the interceptor chain, the decoded response, and the report to
+ * the balancer. The balancer's `done` and the release of the caller's signal each happen exactly once, in a `finally`.
  */
-async function attemptHttp<
+async function attemptHttpGuarded<
   TInput extends AnyStruct | undefined,
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined,
@@ -187,7 +259,7 @@ async function attemptHttp<
   input: EndpointInput<TInput> | undefined,
   options: HttpExecuteOptions | undefined,
   policy: RetryPolicy | undefined,
-  correlationId: string,
+  correlationId: string | undefined,
   retryAttempt: number,
 ): Promise<AttemptResult<TOutput, TError>> {
   const scope = preflight(definition.input, input, options?.signal);
@@ -264,6 +336,157 @@ async function attemptHttp<
   }
 }
 
+/** Direct single-send HTTP execution bypassing chain allocation, abort listeners, duplicate URL parsing, and extra microtasks. */
+async function runDirectHttp<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  definition: HttpExecutionDefinition<TInput, TOutput, TError>,
+  input: EndpointInput<TInput> | undefined,
+  options: HttpExecuteOptions | undefined,
+  retryState?: DirectRetryState,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
+  const scope = preflightDirect(definition.input, input);
+  if (scope instanceof Error) {
+    return failed(scope);
+  }
+  const responseType = definition.output
+    ? resolveInboundRepresentation(definition.output)
+    : undefined;
+  const errorResponseType = definition.error
+    ? resolveInboundRepresentation(definition.error)
+    : undefined;
+
+  const picked = pickEndpoint(clientConfig.balancer, {
+    endpoints: clientConfig.endpoints,
+    meta: definition.meta,
+  });
+  if (picked[0] !== null) {
+    if (retryState !== undefined) {
+      retryState.unselected = true;
+    }
+    return failed(picked[0]);
+  }
+  const endpoint = picked[1];
+  let started = false;
+  let streamed = false;
+  let replayable = true;
+  let bodyFailed = false;
+  let info = NOT_ATTEMPTED;
+  let method = definition.method;
+  const methods: string[] = [];
+
+  try {
+    let request: HttpRequest;
+    let url: URL;
+    try {
+      ({ request, url } = buildDirectHttpRequest(
+        definition.method,
+        definition.path,
+        definition.pathTemplate,
+        scope.input,
+        definition.builder,
+        {
+          baseEndpoint: endpoint.endpoint,
+          defaultHeaders: clientConfig.headers,
+          downloadProgress: options?.onDownloadProgress,
+          inputGuides: scope.guides,
+          errorResponseType,
+          meta: definition.meta,
+          querySerializer: clientConfig.querySerializer,
+          responseType,
+          retryAttempt: retryState?.attempt ?? 0,
+          uploadProgress: options?.onUploadProgress,
+          withCredentials: clientConfig.withCredentials,
+        },
+      ));
+    } catch (error) {
+      if (retryState !== undefined) {
+        retryState.unselected = error instanceof RequestUrlError;
+      }
+      return failed(createPreflightFault("REQ_BUILD_FAILED", error));
+    }
+
+    let uploadController: AbortController | undefined;
+    if (isReadableStreamBody(request.body)) {
+      replayable = false;
+      uploadController = new AbortController();
+      request.signal = uploadController.signal;
+    }
+
+    let result: HttpExecuteAwaitResult<TOutput, TError>;
+    try {
+      let response: HttpResponse<unknown>;
+      try {
+        response = await fetchHandlerWithLifecycle(
+          request,
+          clientConfig.http.handle,
+          {
+            url,
+            ownedHeaders: true,
+            start(isStreamed) {
+              started = true;
+              streamed = isStreamed;
+              methods.push(request.method);
+              method = request.method;
+              endpoint.start();
+            },
+            response(raw) {
+              endpoint.end({
+                attempted: true,
+                status: raw.status,
+                code: statusOutcome(raw.status),
+              });
+            },
+            bodyFailed() {
+              bodyFailed = true;
+            },
+          },
+        );
+      } finally {
+        if (uploadController !== undefined && !bodyFailed) {
+          uploadController.abort(new Error("HTTP interceptor chain settled"));
+        }
+      }
+      info = {
+        attempted: true,
+        status: response.status,
+        code: statusOutcome(response.status),
+      };
+      result = decodeDirectResponse(
+        definition,
+        response,
+        responseType,
+        errorResponseType,
+      );
+    } catch (error) {
+      info = resolveFailureInfo(error, started, streamed);
+      endpoint.end(info);
+      result = failed(transportFault(error));
+    }
+
+    if (retryState !== undefined) {
+      retryState.facts = retryFacts(
+        {
+          endpoint,
+          info,
+          method,
+          methods,
+          replayable,
+          timedOut: false,
+        },
+        result[0],
+        retryState.policy,
+      );
+    }
+    return result;
+  } finally {
+    endpoint.done(info);
+  }
+}
+
 /** The request, or the fault that ends the attempt: a builder or URL failure, or a cancellation. */
 function buildRequest(
   attempt: Attempt,
@@ -276,13 +499,13 @@ function buildRequest(
   options: HttpExecuteOptions | undefined,
   responseType: HttpResponseType | undefined,
   errorResponseType: HttpResponseType | undefined,
-  correlationId: string,
+  correlationId: string | undefined,
   retryAttempt: number,
 ): HttpRequest | PreflightFault {
   const { scope } = attempt;
   let request: HttpRequest;
   try {
-    request = createHttpRequest(
+    const prepared = prepareHttpRequest(
       definition.method,
       definition.path,
       scope.input,
@@ -293,6 +516,7 @@ function buildRequest(
         defaultHeaders: clientConfig.headers,
         downloadProgress: options?.onDownloadProgress,
         inputGuides: scope.guides,
+        pathTemplate: definition.pathTemplate,
         errorResponseType,
         meta: definition.meta,
         querySerializer: clientConfig.querySerializer,
@@ -304,6 +528,10 @@ function buildRequest(
         finalizeHeaders: clientConfig.finalizeHeaders,
       },
     );
+    request = prepared.request;
+    attempt.validatedUrl = prepared.url;
+    attempt.validatedBase = request.baseEndpoint;
+    attempt.validatedEndpoint = request.endpoint;
   } catch (error) {
     if (error instanceof RequestUrlError) attempt.unselected = true;
     return (
@@ -356,7 +584,9 @@ async function runChain<
   } finally {
     signal.removeEventListener("abort", onAbort);
     attempt.settled = true;
-    abortSends(attempt.sends, new Error("HTTP interceptor chain settled"));
+    if (hasSettleableSends(attempt.sends)) {
+      abortSends(attempt.sends, new Error("HTTP interceptor chain settled"));
+    }
   }
 
   // A caller abort during interceptor work is reported before this point.
@@ -384,7 +614,10 @@ function isResponseFault(
  * whose body stream is spent) is never retried, and `undefined` here.
  */
 function retryFacts(
-  attempt: Attempt,
+  attempt: Pick<
+    Attempt,
+    "endpoint" | "info" | "method" | "methods" | "replayable" | "timedOut"
+  >,
   fault: AnyFault | null,
   policy: RetryPolicy,
 ): RetryFacts | undefined {

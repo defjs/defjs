@@ -12,7 +12,10 @@ export type IntersectionMerge = { ok: true; value: unknown } | MergeConflict;
 export type PlainObjectMerge =
   { ok: true; value: { [key: string]: unknown } } | MergeConflict;
 
-type MergeContext = { owned: WeakSet<object>; guides: WeakMap<object, Guide> };
+type MergeContext = {
+  owned: WeakSet<object> | undefined;
+  guides: WeakMap<object, Guide> | undefined;
+};
 
 /**
  * Deep-merge two intersection outputs.
@@ -106,7 +109,7 @@ export function mergePlainObjects(
     output[key] = merged.value;
   }
   if (context !== undefined) {
-    context.owned.add(output);
+    context.owned?.add(output);
     const tag = combineGuides(
       readOwnGuide(left, context.guides),
       readOwnGuide(right, context.guides),

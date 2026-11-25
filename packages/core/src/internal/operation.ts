@@ -28,8 +28,13 @@ export function executeOperation<TResult extends OperationResult>(
   execute: () => Promise<TResult>,
   discard?: (result: TResult, reason: unknown) => void,
 ): Promise<TResult | FailedOperation> {
+  const all = client[CLIENT].config.interceptors;
+  // PERF: skip scanning and allocating when no interceptors are registered at all.
+  if (all.length === 0) {
+    return execute();
+  }
   let interceptors: OperationInterceptorFn[] | undefined;
-  for (const interceptor of client[CLIENT].config.interceptors) {
+  for (const interceptor of all) {
     if (interceptor.kind === "operation") {
       (interceptors ??= []).push(interceptor.fn);
     }

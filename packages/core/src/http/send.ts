@@ -87,6 +87,10 @@ export interface Attempt {
   abortedWhileSending: boolean;
   /** No endpoint could be used: the pick failed or the selected URL did not resolve. */
   unselected: boolean;
+  /** Initial resolved endpoint URL reused by send when an interceptor leaves baseEndpoint and endpoint unchanged. */
+  validatedUrl?: URL;
+  validatedBase?: string;
+  validatedEndpoint?: string;
   /** The balancer report, set when the attempt has its result. A throw before that reports `NOT_ATTEMPTED`. */
   info: DoneInfo;
 }
@@ -126,15 +130,28 @@ export function send(
   }
 
   let url: URL;
-  try {
-    url = resolveRequestUrl(request);
-  } catch (error) {
-    record.outcome = NOT_LANDED;
-    return rejectAs(
-      (attempt.faults ??= new Map()),
-      error,
-      createPreflightFault("REQ_BUILD_FAILED", error),
-    );
+  if (
+    attempt.validatedUrl !== undefined &&
+    request.baseEndpoint === attempt.validatedBase &&
+    request.endpoint === attempt.validatedEndpoint
+  ) {
+    url = attempt.validatedUrl;
+    attempt.validatedUrl = undefined;
+    const search = request.query?.toString();
+    if (search) {
+      url.search = search;
+    }
+  } else {
+    try {
+      url = resolveRequestUrl(request);
+    } catch (error) {
+      record.outcome = NOT_LANDED;
+      return rejectAs(
+        (attempt.faults ??= new Map()),
+        error,
+        createPreflightFault("REQ_BUILD_FAILED", error),
+      );
+    }
   }
   // The controller already follows the attempt's signal through abortSends. Only an interceptor that swapped
   // the signal needs one more listener.
@@ -238,6 +255,13 @@ function lifecycle(
   };
 }
 
+export function hasSettleableSends(sends: readonly Send[]): boolean {
+  return sends.some(
+    (record) =>
+      record.outcome === undefined || (record.streamed && !record.bodyFailed),
+  );
+}
+
 /**
  * Aborts every send. A send whose body already failed and that has settled leaves nothing to stop, and Chromium
  * reports an abort after that as an unhandled rejection. Every other send needs the abort to release its body.
@@ -271,7 +295,10 @@ function lastOutcome(sends: readonly Send[]): SendOutcome | undefined {
 /** Map a fetchHandler rejection onto the attempt that reached the selected endpoint. */
 function classifySend(
   error: unknown,
-  { started, streamed }: Send,
+  {
+    started,
+    streamed,
+  }: { readonly started: boolean; readonly streamed: boolean },
 ): SendOutcome {
   if (
     !started ||
@@ -316,6 +343,18 @@ function classifySend(
     };
   }
   return LANDED;
+}
+
+export function resolveFailureInfo(
+  error: unknown,
+  started: boolean,
+  streamed: boolean,
+): DoneInfo {
+  return reportOf(
+    classifySend(error, { started, streamed }),
+    networkCauseCode(error),
+    false,
+  );
 }
 
 /**
@@ -369,7 +408,7 @@ function taggedFault(error: unknown): ChainFault | undefined {
 }
 
 /** The fault a rejected send stands for: `surfaced` is what the transport rejected with, or the abort cause that outranks it. */
-function transportFault(surfaced: unknown): ChainFault {
+export function transportFault(surfaced: unknown): ChainFault {
   return (
     taggedFault(surfaced) ??
     (surfaced === ERR_STREAMING_REQUEST_UNSUPPORTED ||

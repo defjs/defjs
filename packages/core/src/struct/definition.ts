@@ -1,5 +1,12 @@
+import type { ParseState } from "./parse_state";
 import type { DEFINITION, FAILED } from "./symbols";
 import type { LiteralValue, ObjectShape, StructTypes } from "./types";
+
+export type CompiledParser = (
+  state: ParseState,
+  input: unknown,
+  depth: number,
+) => unknown;
 
 // Bound data-driven recursion independently of the engine's stack size. Opaque any/unknown values are not traversed.
 export const MAX_DEPTH = 256;
@@ -35,7 +42,7 @@ export type PrimitiveDefinition<
    * sentinel of the parser that is running, not of the module that defined the hook, so a struct built by another copy
    * of this package fails on the copy that is parsing. That copy builds the issue and applies its error map.
    */
-  decode?: (value: TInput, invalid: typeof FAILED) => TOutput | typeof FAILED;
+  decode?: (value: unknown, invalid: typeof FAILED) => TOutput | typeof FAILED;
   expected: string;
   is: (value: unknown) => value is TInput;
   kind: K;
@@ -64,6 +71,8 @@ export type EnumDefinition<T extends number | string> = BaseDefinition & {
 };
 
 export type ArrayDefinition = BaseDefinition & {
+  compiledLogical?: CompiledParser | null;
+  compiledWire?: CompiledParser | null;
   kind: "array";
   item: RuntimeStruct;
 };
@@ -75,6 +84,8 @@ export interface ResolvedStructField {
 }
 
 export type ObjectDefinitionCache = {
+  compiledLogical?: CompiledParser | null;
+  compiledWire?: CompiledParser | null;
   declaredDescriptors: PropertyDescriptorMap;
   entries?: readonly (readonly [key: string, struct: RuntimeStruct])[];
   fields?: readonly ResolvedStructField[];

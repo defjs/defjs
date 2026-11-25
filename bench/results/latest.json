@@ -1,7 +1,7 @@
 {
   "environment": {
-    "timestamp": "2026-11-24T07:55:39.331Z",
-    "gitSha": "f54ebbe0",
+    "timestamp": "2026-11-25T10:12:51.228Z",
+    "gitSha": "f54ebbe0-dirty",
     "os": "darwin 27.2.0",
     "arch": "arm64",
     "cpuModel": "Apple M1 Max",
@@ -11,7 +11,7 @@
     "nodeVersion": "v26.13.1",
     "seed": 20261124,
     "versions": {
-      "@defjs/core": "1.0.0",
+      "@defjs/core": "0.9.0",
       "arktype": "2.2.10",
       "axios": "1.21.1",
       "esbuild": "0.28.2",
@@ -30,202 +30,202 @@
     {
       "scenario": "flat-6-fields",
       "library": "@defjs/core",
-      "avgNs": 247.81,
-      "medianNs": 235.6,
-      "p75Ns": 242.09,
-      "p99Ns": 525.55,
-      "opsPerSec": 4035354
+      "avgNs": 52.68,
+      "medianNs": 49.31,
+      "p75Ns": 52.41,
+      "p99Ns": 82.34,
+      "opsPerSec": 18982753
     },
     {
       "scenario": "flat-6-fields",
       "library": "zod",
-      "avgNs": 60.55,
-      "medianNs": 53.68,
-      "p75Ns": 55.82,
-      "p99Ns": 215.35,
-      "opsPerSec": 16516163
+      "avgNs": 57.57,
+      "medianNs": 51.44,
+      "p75Ns": 53.81,
+      "p99Ns": 209.07,
+      "opsPerSec": 17371425
     },
     {
       "scenario": "flat-6-fields",
       "library": "valibot",
-      "avgNs": 89.98,
-      "medianNs": 85.72,
-      "p75Ns": 88.84,
-      "p99Ns": 214.03,
-      "opsPerSec": 11113184
+      "avgNs": 85.82,
+      "medianNs": 81.34,
+      "p75Ns": 84.5,
+      "p99Ns": 213.87,
+      "opsPerSec": 11652247
     },
     {
       "scenario": "flat-6-fields",
       "library": "arktype",
-      "avgNs": 29.05,
-      "medianNs": 27.98,
-      "p75Ns": 30.34,
-      "p99Ns": 42.07,
-      "opsPerSec": 34425347
+      "avgNs": 28.05,
+      "medianNs": 26.98,
+      "p75Ns": 29.23,
+      "p99Ns": 36.52,
+      "opsPerSec": 35650038
     },
     {
       "scenario": "nested-3-level-alias-date",
       "library": "@defjs/core",
-      "avgNs": 368.82,
-      "medianNs": 359.18,
-      "p75Ns": 372.56,
-      "p99Ns": 589.88,
-      "opsPerSec": 2711369
+      "avgNs": 117.52,
+      "medianNs": 111.77,
+      "p75Ns": 116.99,
+      "p99Ns": 250.59,
+      "opsPerSec": 8509117
     },
     {
       "scenario": "nested-3-level-alias-date",
       "library": "zod",
-      "avgNs": 213.53,
-      "medianNs": 192.84,
-      "p75Ns": 206.34,
-      "p99Ns": 448.59,
-      "opsPerSec": 4683220
+      "avgNs": 201.02,
+      "medianNs": 185.06,
+      "p75Ns": 198.36,
+      "p99Ns": 373.45,
+      "opsPerSec": 4974629
     },
     {
       "scenario": "nested-3-level-alias-date",
       "library": "valibot",
-      "avgNs": 214.73,
-      "medianNs": 195.55,
-      "p75Ns": 207.26,
-      "p99Ns": 500.11,
-      "opsPerSec": 4657094
+      "avgNs": 186.5,
+      "medianNs": 178.67,
+      "p75Ns": 186.58,
+      "p99Ns": 327.5,
+      "opsPerSec": 5361853
     },
     {
       "scenario": "nested-3-level-alias-date",
       "library": "arktype",
-      "avgNs": 1822.97,
-      "medianNs": 1704.67,
-      "p75Ns": 1913.76,
-      "p99Ns": 3076.87,
-      "opsPerSec": 548554
+      "avgNs": 1436,
+      "medianNs": 1419.1,
+      "p75Ns": 1458.86,
+      "p99Ns": 1595.93,
+      "opsPerSec": 696381
     },
     {
       "scenario": "array-1000-items",
       "library": "@defjs/core",
-      "avgNs": 205943.28,
-      "medianNs": 186500,
-      "p75Ns": 191459,
-      "p99Ns": 538041,
-      "opsPerSec": 4856
+      "avgNs": 34730.79,
+      "medianNs": 32625,
+      "p75Ns": 34042,
+      "p99Ns": 57333,
+      "opsPerSec": 28793
     },
     {
       "scenario": "array-1000-items",
       "library": "zod",
-      "avgNs": 62996.78,
-      "medianNs": 46792,
-      "p75Ns": 49042,
-      "p99Ns": 323917,
-      "opsPerSec": 15874
+      "avgNs": 47888.13,
+      "medianNs": 42083,
+      "p75Ns": 44000,
+      "p99Ns": 102750,
+      "opsPerSec": 20882
     },
     {
       "scenario": "array-1000-items",
       "library": "valibot",
-      "avgNs": 73754.18,
-      "medianNs": 68875,
-      "p75Ns": 69833,
-      "p99Ns": 124583,
-      "opsPerSec": 13559
+      "avgNs": 66188.49,
+      "medianNs": 62541,
+      "p75Ns": 65791,
+      "p99Ns": 94875,
+      "opsPerSec": 15108
     },
     {
       "scenario": "array-1000-items",
       "library": "arktype",
-      "avgNs": 18980.51,
-      "medianNs": 18541,
-      "p75Ns": 18625,
-      "p99Ns": 31208,
-      "opsPerSec": 52686
+      "avgNs": 17763.92,
+      "medianNs": 17500,
+      "p75Ns": 17625,
+      "p99Ns": 22958,
+      "opsPerSec": 56294
     },
     {
       "scenario": "invalid-array-first",
       "library": "@defjs/core",
-      "avgNs": 508.98,
-      "medianNs": 491.93,
-      "p75Ns": 523.39,
-      "p99Ns": 684.46,
-      "opsPerSec": 1964724
+      "avgNs": 971.39,
+      "medianNs": 950.68,
+      "p75Ns": 1042.67,
+      "p99Ns": 1149.35,
+      "opsPerSec": 1029456
     },
     {
       "scenario": "invalid-array-first",
       "library": "zod",
-      "avgNs": 50623.21,
-      "medianNs": 50420.13,
-      "p75Ns": 50692.46,
-      "p99Ns": 50904.6,
-      "opsPerSec": 19754
+      "avgNs": 50195.79,
+      "medianNs": 49989.28,
+      "p75Ns": 50135.79,
+      "p99Ns": 50451.17,
+      "opsPerSec": 19922
     },
     {
       "scenario": "invalid-array-first",
       "library": "valibot",
-      "avgNs": 69543.89,
-      "medianNs": 65959,
-      "p75Ns": 67500,
-      "p99Ns": 99667,
-      "opsPerSec": 14379
+      "avgNs": 66429.74,
+      "medianNs": 63250,
+      "p75Ns": 65375,
+      "p99Ns": 91250,
+      "opsPerSec": 15053
     },
     {
       "scenario": "invalid-array-first",
       "library": "arktype",
-      "avgNs": 355091.66,
-      "medianNs": 327417,
-      "p75Ns": 342292,
-      "p99Ns": 1055000,
-      "opsPerSec": 2816
+      "avgNs": 324193.2,
+      "medianNs": 313750,
+      "p75Ns": 322834,
+      "p99Ns": 439042,
+      "opsPerSec": 3085
     },
     {
       "scenario": "invalid-nested-deep",
       "library": "@defjs/core",
-      "avgNs": 1209.51,
-      "medianNs": 847.29,
-      "p75Ns": 1388.03,
-      "p99Ns": 3808.33,
-      "opsPerSec": 826781
+      "avgNs": 493.06,
+      "medianNs": 483.92,
+      "p75Ns": 500.91,
+      "p99Ns": 650.24,
+      "opsPerSec": 2028132
     },
     {
       "scenario": "invalid-nested-deep",
       "library": "zod",
-      "avgNs": 312.11,
-      "medianNs": 229.59,
-      "p75Ns": 260.69,
-      "p99Ns": 1414.88,
-      "opsPerSec": 3203953
+      "avgNs": 236,
+      "medianNs": 215.03,
+      "p75Ns": 228.7,
+      "p99Ns": 432.31,
+      "opsPerSec": 4237294
     },
     {
       "scenario": "invalid-nested-deep",
       "library": "valibot",
-      "avgNs": 271.42,
-      "medianNs": 259.35,
-      "p75Ns": 271.94,
-      "p99Ns": 449.14,
-      "opsPerSec": 3684317
+      "avgNs": 259.25,
+      "medianNs": 247.82,
+      "p75Ns": 256.06,
+      "p99Ns": 427.23,
+      "opsPerSec": 3857338
     },
     {
       "scenario": "invalid-nested-deep",
       "library": "arktype",
-      "avgNs": 2882.32,
-      "medianNs": 2865.4,
-      "p75Ns": 2964.67,
-      "p99Ns": 3116.38,
-      "opsPerSec": 346943
+      "avgNs": 2762.92,
+      "medianNs": 2727.4,
+      "p75Ns": 2867.86,
+      "p99Ns": 2966.36,
+      "opsPerSec": 361936
     }
   ],
   "bundleSize": [
     {
       "label": "@defjs/core (minimal: defineRequest + struct)",
-      "rawBytes": 56101,
-      "gzipBytes": 19205,
-      "brotliBytes": 17095
+      "rawBytes": 65013,
+      "gzipBytes": 21426,
+      "brotliBytes": 18982
     },
     {
       "label": "@defjs/core (resilient: p2c + outlierDetection + retry + middleware)",
-      "rawBytes": 59379,
-      "gzipBytes": 20477,
-      "brotliBytes": 18206
+      "rawBytes": 70843,
+      "gzipBytes": 23744,
+      "brotliBytes": 21064
     },
     {
       "label": "@defjs/core (full root entry)",
-      "rawBytes": 94435,
-      "gzipBytes": 31773,
-      "brotliBytes": 28052
+      "rawBytes": 106339,
+      "gzipBytes": 35154,
+      "brotliBytes": 30950
     },
     {
       "label": "ky (minimal)",
@@ -264,154 +264,154 @@
       "library": "native fetch",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 310.79,
-      "reqPerSec": 16088,
-      "p50Ms": 0.059,
-      "p95Ms": 0.094,
-      "p99Ms": 0.119
+      "durationMs": 299.66,
+      "reqPerSec": 16685.7,
+      "p50Ms": 0.058,
+      "p95Ms": 0.076,
+      "p99Ms": 0.1
     },
     {
       "mode": "sequential",
       "library": "@defjs/core (fetch + struct)",
       "schemaValidated": true,
       "requests": 5000,
-      "durationMs": 462.59,
-      "reqPerSec": 10808.7,
-      "p50Ms": 0.08,
-      "p95Ms": 0.153,
-      "p99Ms": 0.275
+      "durationMs": 362.08,
+      "reqPerSec": 13809,
+      "p50Ms": 0.068,
+      "p95Ms": 0.094,
+      "p99Ms": 0.12
     },
     {
       "mode": "sequential",
       "library": "@defjs/core (undici.Pool + struct)",
       "schemaValidated": true,
       "requests": 5000,
-      "durationMs": 485.84,
-      "reqPerSec": 10291.5,
-      "p50Ms": 0.085,
-      "p95Ms": 0.15,
-      "p99Ms": 0.209
+      "durationMs": 391.54,
+      "reqPerSec": 12770.1,
+      "p50Ms": 0.072,
+      "p95Ms": 0.111,
+      "p99Ms": 0.158
     },
     {
       "mode": "sequential",
       "library": "ky",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 476.63,
-      "reqPerSec": 10490.3,
-      "p50Ms": 0.078,
-      "p95Ms": 0.135,
-      "p99Ms": 0.23
+      "durationMs": 453.14,
+      "reqPerSec": 11034.1,
+      "p50Ms": 0.081,
+      "p95Ms": 0.137,
+      "p99Ms": 0.188
     },
     {
       "mode": "sequential",
       "library": "ofetch",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 335.8,
-      "reqPerSec": 14890,
-      "p50Ms": 0.062,
-      "p95Ms": 0.099,
-      "p99Ms": 0.126
+      "durationMs": 341.73,
+      "reqPerSec": 14631.4,
+      "p50Ms": 0.063,
+      "p95Ms": 0.096,
+      "p99Ms": 0.122
     },
     {
       "mode": "sequential",
       "library": "axios",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 516,
-      "reqPerSec": 9690,
-      "p50Ms": 0.092,
-      "p95Ms": 0.151,
-      "p99Ms": 0.225
+      "durationMs": 542.1,
+      "reqPerSec": 9223.5,
+      "p50Ms": 0.098,
+      "p95Ms": 0.158,
+      "p99Ms": 0.223
     },
     {
       "mode": "sequential",
       "library": "openapi-fetch",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 347.12,
-      "reqPerSec": 14404.1,
-      "p50Ms": 0.064,
-      "p95Ms": 0.097,
-      "p99Ms": 0.121
+      "durationMs": 350.11,
+      "reqPerSec": 14281,
+      "p50Ms": 0.065,
+      "p95Ms": 0.099,
+      "p99Ms": 0.127
     },
     {
       "mode": "concurrent-16",
       "library": "native fetch",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 122.73,
-      "reqPerSec": 40740.8,
-      "p50Ms": 0.384,
-      "p95Ms": 0.55,
-      "p99Ms": 0.709
+      "durationMs": 124.17,
+      "reqPerSec": 40266.5,
+      "p50Ms": 0.377,
+      "p95Ms": 0.586,
+      "p99Ms": 0.727
     },
     {
       "mode": "concurrent-16",
       "library": "@defjs/core (fetch + struct)",
       "schemaValidated": true,
       "requests": 5000,
-      "durationMs": 202.98,
-      "reqPerSec": 24632.6,
-      "p50Ms": 0.567,
-      "p95Ms": 1.138,
-      "p99Ms": 1.938
+      "durationMs": 159.11,
+      "reqPerSec": 31425.4,
+      "p50Ms": 0.437,
+      "p95Ms": 0.873,
+      "p99Ms": 1.221
     },
     {
       "mode": "concurrent-16",
       "library": "@defjs/core (undici.Pool + struct)",
       "schemaValidated": true,
       "requests": 5000,
-      "durationMs": 338.1,
-      "reqPerSec": 14788.6,
-      "p50Ms": 1.002,
-      "p95Ms": 1.485,
-      "p99Ms": 3.218
+      "durationMs": 292.04,
+      "reqPerSec": 17120.7,
+      "p50Ms": 0.855,
+      "p95Ms": 1.214,
+      "p99Ms": 2.769
     },
     {
       "mode": "concurrent-16",
       "library": "ky",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 206.97,
-      "reqPerSec": 24157.6,
-      "p50Ms": 0.57,
-      "p95Ms": 1.163,
-      "p99Ms": 1.961
+      "durationMs": 200.72,
+      "reqPerSec": 24910.6,
+      "p50Ms": 0.546,
+      "p95Ms": 1.129,
+      "p99Ms": 1.765
     },
     {
       "mode": "concurrent-16",
       "library": "ofetch",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 138.97,
-      "reqPerSec": 35980.2,
-      "p50Ms": 0.409,
-      "p95Ms": 0.729,
-      "p99Ms": 1.016
+      "durationMs": 131.35,
+      "reqPerSec": 38066.9,
+      "p50Ms": 0.388,
+      "p95Ms": 0.677,
+      "p99Ms": 0.88
     },
     {
       "mode": "concurrent-16",
       "library": "axios",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 391.91,
-      "reqPerSec": 12758.2,
-      "p50Ms": 1.142,
-      "p95Ms": 1.763,
-      "p99Ms": 3.128
+      "durationMs": 386.31,
+      "reqPerSec": 12943.1,
+      "p50Ms": 1.099,
+      "p95Ms": 1.643,
+      "p99Ms": 3.227
     },
     {
       "mode": "concurrent-16",
       "library": "openapi-fetch",
       "schemaValidated": false,
       "requests": 5000,
-      "durationMs": 141.4,
-      "reqPerSec": 35359.8,
-      "p50Ms": 0.402,
-      "p95Ms": 0.763,
-      "p99Ms": 1.034
+      "durationMs": 139,
+      "reqPerSec": 35970,
+      "p50Ms": 0.392,
+      "p95Ms": 0.727,
+      "p99Ms": 0.988
     }
   ],
   "resilience": [
@@ -423,10 +423,10 @@
       "errorCount": 58,
       "successRatePct": 71,
       "retryAmplification": 1,
-      "p50Ms": 6.13,
-      "p95Ms": 301.85,
-      "p99Ms": 305.73,
-      "meanMs": 54.2,
+      "p50Ms": 6.03,
+      "p95Ms": 301.52,
+      "p99Ms": 301.64,
+      "meanMs": 53.77,
       "upstreamCounts": {
         "A": 67,
         "B": 67,
@@ -436,19 +436,19 @@
     {
       "library": "ky (round-robin, retry: 2)",
       "logicalCalls": 200,
-      "wireRequests": 293,
-      "successCount": 162,
-      "errorCount": 38,
-      "successRatePct": 81,
-      "retryAmplification": 1.47,
-      "p50Ms": 9.64,
-      "p95Ms": 1628.01,
-      "p99Ms": 2026.03,
-      "meanMs": 356.27,
+      "wireRequests": 295,
+      "successCount": 163,
+      "errorCount": 37,
+      "successRatePct": 81.5,
+      "retryAmplification": 1.48,
+      "p50Ms": 11.02,
+      "p95Ms": 1629.83,
+      "p99Ms": 2030.96,
+      "meanMs": 381.2,
       "upstreamCounts": {
         "A": 67,
         "B": 67,
-        "C": 159
+        "C": 161
       }
     },
     {
@@ -459,10 +459,10 @@
       "errorCount": 0,
       "successRatePct": 100,
       "retryAmplification": 1.03,
-      "p50Ms": 7.17,
-      "p95Ms": 12.87,
-      "p99Ms": 1017.74,
-      "meanMs": 28.45,
+      "p50Ms": 6.3,
+      "p95Ms": 19.3,
+      "p99Ms": 1040.07,
+      "meanMs": 27.89,
       "upstreamCounts": {
         "A": 195,
         "B": 3,

@@ -1,5 +1,5 @@
 import type { Balancer } from "../balancer/balancer";
-import { pickFirstBalancer } from "../balancer/balancer";
+import { defaultPickFirstBalancer } from "../balancer/pick_first_default";
 import type { Interceptor } from "../interceptor/interceptor";
 import type { HttpRequest } from "../http/http_request";
 import type { WebSocketHeartbeatConfig } from "../web_socket/web_socket";
@@ -385,7 +385,7 @@ export function resolveGlobalFetch(): FetchHandle {
 export function createClientConfig(): ClientConfig {
   return {
     endpoints: [],
-    balancer: pickFirstBalancer(),
+    balancer: defaultPickFirstBalancer(),
     retry: undefined,
     headers: undefined,
     http: { handle: DEFAULT_FETCH },

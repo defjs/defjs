@@ -19,6 +19,30 @@ export interface CallScope {
   readonly guides: WeakMap<object, Guide>;
 }
 
+export interface DirectCallScope {
+  readonly input: unknown;
+  readonly guides: WeakMap<object, Guide> | undefined;
+}
+
+/** Direct HTTP preflight when there is no caller signal, timeout, interceptor, or finalizeHeaders. */
+export function preflightDirect(
+  inputStruct: AnyStruct | undefined,
+  input: unknown,
+): PreflightFault | DirectCallScope {
+  if (inputStruct === undefined) {
+    return { input, guides: undefined };
+  }
+  const guides = new WeakMap<object, Guide>();
+  try {
+    return {
+      input: parseEndpointInput(inputStruct, input, guides),
+      guides,
+    };
+  } catch (error) {
+    return createPreflightFault("REQ_INPUT_INVALID", error);
+  }
+}
+
 /**
  * The first steps of every operation call, shared by HTTP, SSE and WebSocket.
  *

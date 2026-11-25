@@ -30,12 +30,27 @@ const KNOWN_KINDS: ReadonlySet<unknown> = new Set(
   } satisfies Record<StructDefinition["kind"], true>),
 );
 
+const OWN_STRUCTS = new WeakMap<object, StructDefinition>();
+
+/** Records a struct built by this module copy so `isStruct` validates it in O(1) unless mutated. */
+export function registerOwnStruct(
+  struct: RuntimeStruct,
+  definition: StructDefinition,
+): void {
+  OWN_STRUCTS.set(struct, definition);
+}
+
 export function isStruct(value: unknown): value is RuntimeStruct {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !Object.hasOwn(value, DEFINITION)
-  ) {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const own = OWN_STRUCTS.get(value);
+  if (own !== undefined && Reflect.get(value, DEFINITION) === own) {
+    return true;
+  }
+
+  if (!Object.hasOwn(value, DEFINITION)) {
     return false;
   }
 

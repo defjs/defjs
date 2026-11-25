@@ -14,7 +14,7 @@ import {
   type TupleDefinition,
   type UnionDefinition,
 } from "./definition";
-import { expectedType, issue, StructError, type ErrorMap } from "./errors";
+import { expectedType, type ErrorMap } from "./errors";
 import {
   guideMembers,
   guideTag,
@@ -26,7 +26,16 @@ import {
   isIntersectionIdentity,
   mergeIntersectionValues,
 } from "./intersection";
+import { getCompiledArrayParser, getCompiledObjectParser } from "./jit";
 import { matchesEnum } from "./match";
+import {
+  parseState,
+  pushReversedSegments,
+  reject,
+  toStructError,
+  type ParseContext,
+  type ParseState,
+} from "./parse_state";
 import { isPlainObject, nullObject } from "./plain_object";
 import { assertStruct, resolveStructFields } from "./shape";
 import { DEFINITION, FAILED, OMIT } from "./symbols";
@@ -35,61 +44,21 @@ import type {
   ParsedStructOutput,
   ParseMode,
   ParseResult,
-  Path,
-  StructIssue,
   StructLike,
 } from "./types";
 
-// Every parser below returns the parsed value itself, or FAILED after `reject()` put the issue in the parse state. A
-// value that parses costs no result object, and FAILED cannot be mistaken for one: it is private, so any other symbol
-// is just a value.
+// Every parser below returns the parsed value itself, or FAILED after `reject()` recorded the failure in the parse
+// state. A value that parses costs no result object, and FAILED cannot be mistaken for one: it is private, so any
+// other symbol is just a value.
 //
 // One ParseState serves one parse call, so a parse started from an errorMap, a decode hook or a getter has its own.
-// `path` is one array for the whole parse. A container pushes the segment of a child around that child's parse, and
-// `reject()` copies the array when it reports an issue. A failure returns without popping, which leaves the array
-// deeper than the failing node; the one place that goes on after a failure, a union trying its next candidate, cuts it
-// back first.
-// `report` is the only argument that changes on the way down. Failed union candidates are discarded, so they are
-// parsed without reporting unless an errorMap wants to see them.
-// Only traversed containers consume depth. Unions and intersections stay at the same path; scalar and passthrough
+// Without `errorMap`, no path array is pushed during traversal; only an unwinding failure appends segments in reverse.
+// With `errorMap`, `state.path` maintains the forward path so `errorMap` sees every candidate failure immediately.
+// Only traversed containers consume depth. Unions and intersections stay at the same depth; scalar and passthrough
 // leaves need no guard. Reject before descending into the next container, including an empty one.
 const MAX_DEPTH_EXPECTED = `value nested at most ${MAX_DEPTH} levels deep`;
 
-type ParseContext = {
-  owned: WeakSet<object>;
-  guides: WeakMap<object, Guide>;
-  changes: [object, Guide | undefined][];
-};
-
-type ParseState = {
-  readonly aliases: boolean;
-  /** Present only for a tagging parse, which is the only one that pays for the sets. */
-  readonly context: ParseContext | undefined;
-  readonly errorMap: ErrorMap | undefined;
-  /** The issue behind a reported FAILED. Only `reject()` writes it. */
-  issue: StructIssue;
-  readonly path: Path;
-};
-
 type Provenance = { passthrough?: RuntimeStruct };
-
-// Every reporting FAILED goes through `reject()`, which fills the slot first. Should a future path miss it, the
-// caller still gets a readable failure instead of an empty one.
-const NO_ISSUE: StructIssue = {
-  code: "custom",
-  expected: "a decodable value",
-  message: "The value could not be decoded",
-  path: [],
-  received: undefined,
-};
-
-function parseState(
-  aliases: boolean,
-  errorMap: ErrorMap | undefined,
-  context: ParseContext | undefined,
-): ParseState {
-  return { aliases, context, errorMap, issue: NO_ISSUE, path: [] };
-}
 
 /**
  * Parses an unknown value with a struct and returns an error-first tuple.
@@ -141,10 +110,8 @@ export function parseStructTuple<S extends StructLike>(
     options?.errorMap,
     undefined,
   );
-  const output = parseNode(state, struct, value, "value", true);
-  return output === FAILED
-    ? [new StructError([state.issue]), undefined]
-    : [null, output];
+  const output = parseNode(state, struct, value, "value", true, 0);
+  return output === FAILED ? [toStructError(state), undefined] : [null, output];
 }
 
 /** Parses and returns the output typed from the struct. A value that does not parse throws its StructError. */
@@ -179,67 +146,53 @@ export function parseRuntimeValue(
   const context: ParseContext | undefined =
     options?.tagObjects === true
       ? {
-          owned: new WeakSet(),
-          guides: options.guides ?? new WeakMap(),
-          changes: [],
+          owned: undefined,
+          guides: options.guides,
+          changes: undefined,
         }
       : undefined;
   const state = parseState(options?.aliases === true, undefined, context);
   let output: unknown = FAILED;
   try {
-    output = parseNode(state, struct, value, "value", true);
+    output = parseNode(state, struct, value, "value", true, 0);
   } finally {
     // A getter can throw in the middle of a parse. The caller's guide map is left as it was found either way.
-    if (output === FAILED && context) {
-      restoreGuides(context, 0);
+    if (output === FAILED && context?.changes && context.guides) {
+      restoreGuides(context.changes, context.guides, 0);
     }
   }
   if (output === FAILED) {
-    throw new StructError([state.issue]);
+    throw toStructError(state);
   }
   return output;
 }
 
-/** The only place a parse fails. Reports the issue at the current path when asked to, and returns FAILED. */
-function reject(
-  state: ParseState,
-  report: boolean,
-  code: StructIssue["code"],
-  expected: string,
-  received: unknown,
-): typeof FAILED {
-  if (report) {
-    const rejected = issue([...state.path], code, expected, received);
-    const message = state.errorMap?.(rejected);
-    if (message !== undefined) {
-      rejected.message = message;
-    }
-    state.issue = rejected;
-  }
-  return FAILED;
-}
-
-function restoreGuides(context: ParseContext, checkpoint: number): void {
-  let change: ParseContext["changes"][number] | undefined;
+function restoreGuides(
+  changes: [object, Guide | undefined][],
+  guides: WeakMap<object, Guide>,
+  checkpoint: number,
+): void {
+  let change: [object, Guide | undefined] | undefined;
   while (
-    context.changes.length > checkpoint &&
-    (change = context.changes.pop()) !== undefined
+    changes.length > checkpoint &&
+    (change = changes.pop()) !== undefined
   ) {
     const [value, previous] = change;
     if (previous) {
-      context.guides.set(value, previous);
+      guides.set(value, previous);
     } else {
-      context.guides.delete(value);
+      guides.delete(value);
     }
   }
 }
 
-function parseNode(
+export function parseNode(
   state: ParseState,
   struct: RuntimeStruct,
   input: unknown,
   mode: ParseMode,
   report: boolean,
+  depth: number,
   provenance?: Provenance,
 ): unknown {
   const definition = struct[DEFINITION];
@@ -281,7 +234,17 @@ function parseNode(
       return input;
 
     case "array": {
-      const value = parseArrayValue(state, definition, input, report);
+      if (report && state.path === undefined && state.context === undefined) {
+        const compiled = getCompiledArrayParser(
+          definition,
+          state.aliases,
+          parseNode,
+        );
+        if (compiled !== undefined) {
+          return compiled(state, input, depth);
+        }
+      }
+      const value = parseArrayValue(state, definition, input, report, depth);
       if (provenance && value !== FAILED) {
         const item = definition.item;
         const kind = item[DEFINITION].kind;
@@ -292,41 +255,101 @@ function parseNode(
       return value;
     }
 
+    case "string":
+      if (definition.decode === undefined) {
+        return typeof input === "string"
+          ? input
+          : reject(state, report, "invalid_type", definition.expected, input);
+      }
+      return parsePrimitiveDecode(state, definition, input, report);
+
+    case "number":
+      if (definition.decode === undefined) {
+        return typeof input === "number" && !Number.isNaN(input)
+          ? input
+          : reject(state, report, "invalid_type", definition.expected, input);
+      }
+      return parsePrimitiveDecode(state, definition, input, report);
+
+    case "boolean":
+      if (definition.decode === undefined) {
+        return typeof input === "boolean"
+          ? input
+          : reject(state, report, "invalid_type", definition.expected, input);
+      }
+      return parsePrimitiveDecode(state, definition, input, report);
+
+    case "null":
+      return reject(state, report, "invalid_type", definition.expected, input);
+
     case "arrayBuffer":
     case "bigint":
     case "blob":
-    case "boolean":
     case "date":
     case "file":
-    case "null":
-    case "number":
-    case "string":
       return parsePrimitiveValue(state, definition, input, report);
 
     case "enum":
       return parseEnumValue(state, definition, input, report);
 
     case "intersection":
-      return parseIntersectionValue(state, definition, input, report);
+      return parseIntersectionValue(state, definition, input, report, depth);
 
     case "literal":
       return parseLiteralValue(state, definition, input, report);
 
     case "object":
-      return parseObjectValue(state, struct, definition, input, report);
+      if (report && state.path === undefined && state.context === undefined) {
+        const compiled = getCompiledObjectParser(
+          definition,
+          state.aliases,
+          parseNode,
+        );
+        if (compiled !== undefined) {
+          return compiled(state, input, depth);
+        }
+      }
+      return parseObjectValue(state, struct, definition, input, report, depth);
 
     case "or":
-      return parseUnionValue(state, definition, input, report, provenance);
+      return parseUnionValue(
+        state,
+        definition,
+        input,
+        report,
+        depth,
+        provenance,
+      );
 
     case "discriminatedUnion":
-      return parseDiscriminatedUnionValue(state, definition, input, report);
+      return parseDiscriminatedUnionValue(
+        state,
+        definition,
+        input,
+        report,
+        depth,
+      );
 
     case "record":
-      return parseRecordValue(state, struct, definition, input, report);
+      return parseRecordValue(state, struct, definition, input, report, depth);
 
     case "tuple":
-      return parseTupleValue(state, definition, input, report);
+      return parseTupleValue(state, definition, input, report, depth);
   }
+}
+
+function parsePrimitiveDecode(
+  state: ParseState,
+  definition: PrimitiveDefinition<PrimitiveKind, unknown, unknown>,
+  input: unknown,
+  report: boolean,
+): unknown {
+  // The hook checks the value itself and hands back this parser's own sentinel, so a struct built by another copy of
+  // the package cannot return a failure this copy does not recognize. The issue is always built here.
+  const value = definition.decode?.(input, FAILED);
+  return value === FAILED
+    ? reject(state, report, "invalid_type", definition.expected, input)
+    : value;
 }
 
 function parsePrimitiveValue(
@@ -341,8 +364,6 @@ function parsePrimitiveValue(
       ? input
       : reject(state, report, "invalid_type", definition.expected, input);
   }
-  // The hook checks the value itself and hands back this parser's own sentinel, so a struct built by another copy of
-  // the package cannot return a failure this copy does not recognize. The issue is always built here.
   const value = decode(input, FAILED);
   return value === FAILED
     ? reject(state, report, "invalid_type", definition.expected, input)
@@ -376,25 +397,38 @@ function parseArrayValue(
   definition: ArrayDefinition,
   input: unknown,
   report: boolean,
+  depth: number,
 ): unknown {
   if (!Array.isArray(input)) {
     return reject(state, report, "invalid_type", "array", input);
   }
-  const path = state.path;
-  if (path.length >= MAX_DEPTH) {
+  if (depth >= MAX_DEPTH) {
     return reject(state, report, "invalid_type", MAX_DEPTH_EXPECTED, input);
   }
 
+  const path = state.path;
   const item = definition.item;
-  const output: unknown[] = [];
-  for (let index = 0; index < input.length; index += 1) {
-    path.push(index);
-    const value = parseNode(state, item, input[index], "value", report);
+  const length = input.length;
+  const output = new Array<unknown>(length);
+  const childDepth = depth + 1;
+  for (let index = 0; index < length; index += 1) {
+    path?.push(index);
+    const value = parseNode(
+      state,
+      item,
+      input[index],
+      "value",
+      report,
+      childDepth,
+    );
     if (value === FAILED) {
+      if (report && path === undefined) {
+        state.issue.path.push(index);
+      }
       return FAILED;
     }
-    path.pop();
-    output.push(value);
+    path?.pop();
+    output[index] = value;
   }
   return output;
 }
@@ -405,6 +439,7 @@ function parseObjectValue(
   definition: ObjectDefinition,
   input: unknown,
   report: boolean,
+  depth: number,
   cachedKey?: string,
   cachedValue?: unknown,
   target?: { [key: string]: unknown },
@@ -412,15 +447,16 @@ function parseObjectValue(
   if (!isPlainObject(input)) {
     return reject(state, report, "invalid_type", "object", input);
   }
-  const path = state.path;
-  if (path.length >= MAX_DEPTH) {
+  if (depth >= MAX_DEPTH) {
     return reject(state, report, "invalid_type", MAX_DEPTH_EXPECTED, input);
   }
 
+  const path = state.path;
   const aliases = state.aliases;
   const context = state.context;
   const output: { [key: string]: unknown } = target ?? nullObject();
   const fields = resolveStructFields(definition);
+  const childDepth = depth + 1;
   for (let index = 0; index < fields.length; index += 1) {
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: `index < fields.length` bounds this read. `for (const field of fields)` over the frozen cached field list made struct.parse 2.066-2.096x slower for an 8-field object and 2.123-2.225x for 6 nested objects (Bun 1.4.4, two copies of each variant, 3 runs x 15 interleaved rounds x 2e5/1.5e5 parses, medians; the two indexed copies differed by at most 1.057x)
     const field = fields[index] as ResolvedStructField;
@@ -431,30 +467,47 @@ function parseObjectValue(
         : Object.hasOwn(input, inputKey)
           ? input[inputKey]
           : undefined;
-    path.push(field.key);
-    const value = parseNode(state, field.struct, inputValue, "field", report);
+    path?.push(field.key);
+    const value = parseNode(
+      state,
+      field.struct,
+      inputValue,
+      "field",
+      report,
+      childDepth,
+    );
     if (value === FAILED) {
+      if (report && path === undefined) {
+        state.issue.path.push(field.key);
+      }
       return FAILED;
     }
-    path.pop();
+    path?.pop();
     if (value !== OMIT) {
       // A shared intersection target already has this logical key. Merge it; do not let the later side win.
       if (target !== undefined && Object.hasOwn(output, field.key)) {
         const merged = mergeIntersectionValues(
           output[field.key],
           value,
-          path.length + 1,
+          childDepth,
           context,
         );
         if (!merged.ok) {
-          path.push(field.key, ...merged.path);
-          return reject(
+          if (path !== undefined) {
+            path.push(field.key, ...merged.path);
+          }
+          reject(
             state,
             report,
             "invalid_intersection",
             "compatible intersection value",
             merged.received,
           );
+          if (report && path === undefined) {
+            pushReversedSegments(state, merged.path);
+            state.issue.path.push(field.key);
+          }
+          return FAILED;
         }
         output[field.key] = merged.value;
       } else {
@@ -463,7 +516,7 @@ function parseObjectValue(
     }
   }
   if (context && !target) {
-    context.owned.add(output);
+    context.owned?.add(output);
     tagOwnNode(output, struct);
   }
   return output;
@@ -475,32 +528,44 @@ function parseRecordValue(
   definition: RecordDefinition,
   input: unknown,
   report: boolean,
+  depth: number,
 ): unknown {
   if (!isPlainObject(input)) {
     return reject(state, report, "invalid_type", "record", input);
   }
-  const path = state.path;
-  if (path.length >= MAX_DEPTH) {
+  if (depth >= MAX_DEPTH) {
     return reject(state, report, "invalid_type", MAX_DEPTH_EXPECTED, input);
   }
 
+  const path = state.path;
   const item = definition.value;
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made struct.parse 1.207-1.295x slower for a 1-key record and 1.212-1.225x for 8 nested 2-key records (Bun 1.4.4, two copies of each variant, 3 runs x 15 interleaved rounds x 3e5/6e4 parses, medians; the two Object.create copies differed by at most 1.025x); `{}` plus setPrototypeOf allocates slower still
   const output: { [key: string]: unknown } = Object.create(null);
+  const childDepth = depth + 1;
   for (const key of Object.keys(input)) {
-    path.push(key);
-    const value = parseNode(state, item, input[key], "field", report);
+    path?.push(key);
+    const value = parseNode(
+      state,
+      item,
+      input[key],
+      "field",
+      report,
+      childDepth,
+    );
     if (value === FAILED) {
+      if (report && path === undefined) {
+        state.issue.path.push(key);
+      }
       return FAILED;
     }
-    path.pop();
+    path?.pop();
     if (value !== OMIT) {
       output[key] = value;
     }
   }
   // Nullable null never reaches a record parse. The object itself carries the struct that parsed it.
   if (state.context) {
-    state.context.owned.add(output);
+    state.context.owned?.add(output);
     tagOwnNode(output, struct);
   }
   return output;
@@ -511,33 +576,46 @@ function parseTupleValue(
   definition: TupleDefinition,
   input: unknown,
   report: boolean,
+  depth: number,
 ): unknown {
-  if (!Array.isArray(input) || input.length !== definition.items.length) {
+  const items = definition.items;
+  if (!Array.isArray(input) || input.length !== items.length) {
     return report
       ? reject(
           state,
           true,
           "invalid_type",
-          `tuple of length ${definition.items.length}`,
+          `tuple of length ${items.length}`,
           input,
         )
       : FAILED;
   }
-  const path = state.path;
-  if (path.length >= MAX_DEPTH) {
+  if (depth >= MAX_DEPTH) {
     return reject(state, report, "invalid_type", MAX_DEPTH_EXPECTED, input);
   }
 
-  const output: unknown[] = [];
+  const path = state.path;
+  const output = new Array<unknown>(items.length);
+  const childDepth = depth + 1;
   let index = 0;
-  for (const item of definition.items) {
-    path.push(index);
-    const value = parseNode(state, item, input[index], "value", report);
+  for (const item of items) {
+    path?.push(index);
+    const value = parseNode(
+      state,
+      item,
+      input[index],
+      "value",
+      report,
+      childDepth,
+    );
     if (value === FAILED) {
+      if (report && path === undefined) {
+        state.issue.path.push(index);
+      }
       return FAILED;
     }
-    path.pop();
-    output.push(value);
+    path?.pop();
+    output[index] = value;
     index += 1;
   }
   return output;
@@ -548,30 +626,34 @@ function parseUnionValue(
   definition: UnionDefinition,
   input: unknown,
   report: boolean,
+  depth: number,
   provenance: Provenance | undefined,
 ): unknown {
   const context = state.context;
   const path = state.path;
   const reportCandidates = report && state.errorMap !== undefined;
-  const depth = path.length;
+  const savedLength = path?.length ?? 0;
   for (const option of definition.options) {
-    const checkpoint = context?.changes.length ?? 0;
+    const checkpoint = context?.changes?.length ?? 0;
     const value = parseNode(
       state,
       option,
       input,
       "value",
       reportCandidates,
+      depth,
       provenance,
     );
     if (value !== FAILED) {
       return value;
     }
-    if (context) {
-      restoreGuides(context, checkpoint);
+    if (context?.changes && context.guides) {
+      restoreGuides(context.changes, context.guides, checkpoint);
     }
     // The failed candidate stopped wherever it failed. The next one starts at the union.
-    path.length = depth;
+    if (path !== undefined) {
+      path.length = savedLength;
+    }
   }
   return reject(state, report, "invalid_union", definition.expected, input);
 }
@@ -581,6 +663,7 @@ function parseDiscriminatedUnionValue(
   definition: DiscriminatedUnionDefinition,
   input: unknown,
   report: boolean,
+  depth: number,
 ): unknown {
   if (!isPlainObject(input)) {
     return reject(state, report, "invalid_type", "object", input);
@@ -600,14 +683,18 @@ function parseDiscriminatedUnionValue(
     target === undefined ||
     (aliases && definition.wireKeyByValue.get(tag) !== key)
   ) {
-    state.path.push(definition.discriminator);
-    return reject(
+    state.path?.push(definition.discriminator);
+    reject(
       state,
       report,
       tag === undefined ? "missing_key" : "invalid_union",
       definition.expected,
       tag,
     );
+    if (report && state.path === undefined) {
+      state.issue.path.push(definition.discriminator);
+    }
+    return FAILED;
   }
   return parseObjectValue(
     state,
@@ -615,6 +702,7 @@ function parseDiscriminatedUnionValue(
     target[DEFINITION],
     input,
     report,
+    depth,
     key,
     tag,
   );
@@ -637,8 +725,12 @@ function parseIntersectionValue(
   definition: IntersectionDefinition,
   input: unknown,
   report: boolean,
+  depth: number,
 ): unknown {
   const context = state.context;
+  if (context) {
+    context.owned ??= new WeakSet();
+  }
   if (definition.objectSides && isPlainObject(input)) {
     const merged = nullObject();
     for (const side of definition.options) {
@@ -648,6 +740,7 @@ function parseIntersectionValue(
         side[DEFINITION],
         input,
         report,
+        depth,
         undefined,
         undefined,
         merged,
@@ -657,7 +750,7 @@ function parseIntersectionValue(
       }
     }
     if (context) {
-      context.owned.add(merged);
+      context.owned?.add(merged);
       // An object intersection always has at least one member struct, so the guide exists.
       tagOwnNode(merged, guideTag(definition.options));
     }
@@ -669,7 +762,15 @@ function parseIntersectionValue(
   let passthroughs: [RuntimeStruct, ...RuntimeStruct[]] | undefined;
   for (const option of definition.options) {
     const provenance: Provenance | undefined = context ? {} : undefined;
-    const value = parseNode(state, option, input, "value", report, provenance);
+    const value = parseNode(
+      state,
+      option,
+      input,
+      "value",
+      report,
+      depth,
+      provenance,
+    );
     if (value === FAILED) {
       return FAILED;
     }
@@ -693,18 +794,24 @@ function parseIntersectionValue(
     const mergedValue = mergeIntersectionValues(
       merged,
       contributed[index],
-      state.path.length,
+      depth,
       context,
     );
     if (!mergedValue.ok) {
-      state.path.push(...mergedValue.path);
-      return reject(
+      if (state.path !== undefined) {
+        state.path.push(...mergedValue.path);
+      }
+      reject(
         state,
         report,
         "invalid_intersection",
         "compatible intersection value",
         mergedValue.received,
       );
+      if (report && state.path === undefined) {
+        pushReversedSegments(state, mergedValue.path);
+      }
+      return FAILED;
     }
     merged = mergedValue.value;
   }
@@ -732,11 +839,13 @@ function attachPassthroughGuides(
   const next = guideTag(
     current ? [...guideMembers(current), ...guides] : guides,
   );
-  if (context.owned.has(value)) {
+  if (context.owned?.has(value)) {
     tagOwnNode(value, next);
   } else {
     // any/unknown borrowed this reference. Keep its provenance in this parse, never on the caller's object.
-    context.changes.push([value, context.guides.get(value)]);
-    context.guides.set(value, next);
+    const guideMap = (context.guides ??= new WeakMap());
+    const changes = (context.changes ??= []);
+    changes.push([value, guideMap.get(value)]);
+    guideMap.set(value, next);
   }
 }
