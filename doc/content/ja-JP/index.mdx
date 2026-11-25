@@ -1,16 +1,16 @@
 ---
 title: Defjs
-description: 再利用可能な API 定義と、アプリケーションが所有するクライアントを使って TypeScript SDK を設計・公開します。
+description: TypeScript SDK & 高レジリエンスクライアントキット — 再利用可能な HTTP、SSE、WebSocket の通信契約を、アプリケーションが所有する堅牢なクライアントから分離して定義します。
 ---
 
 # Defjs
 
-**API 契約は一度だけ定義。実行制御はアプリケーションごとに構成。**
+**TypeScript SDK & 高レジリエンスクライアントキット — API 契約は一度だけ定義。実行制御はアプリケーションごとに構成。**
 
-Defjs は、TypeScript SDK における 2 つの責務を明確に分離します。
+Defjs は、TypeScript SDK における 2 つの側面を明確に分離します。
 
-- **SDK の定義 (`@defjs/core`)** — 公開 SDK を作る場合でも、アプリ内部の API レイヤーを整える場合でも、`struct` スキーマとともに型付けされた HTTP・SSE・WebSocket の操作を宣言できます。定義自体は純粋なデータであり、import してもネットワーク通信は始まらず、グローバルクライアントにも結び付きません。
-- **アプリケーションでの実行** — アプリケーション側は独自の `Client` を作成し（`createClient(withEndpoint(...))`）、認証情報・インターセプター・ロードバランサーを構成して操作呼び出し時に渡します。
+- **SDK の定義 (`@defjs/core`, `@defjs/cli`)** — 型付けされた HTTP、SSE、WebSocket の操作を、`struct` スキーマとともに宣言します（手書き、または OpenAPI 2.0/3.0/3.1/3.2 仕様からステートレス ESM として自動生成）。定義自体は純粋なデータであり、import してもネットワーク通信は始まらず、グローバルクライアントにも結び付きません。
+- **堅牢なアプリケーションでの実行 (`@defjs/core`)** — アプリケーション側は独自の `Client` を作成し（`createClient(withEndpoint(...))`）、認証情報やインターセプター（`basicAuth*`、`idempotencyKeyHttpInterceptor`、`concurrencyLimitHttpInterceptor`）を付与して、P2C ロードバランシングや `outlierDetection`（`halfOpen`、`maxEjectionPercent`）の構成、`429`/`Retry-After` リトライの有効化、`@defjs/core/concurrent` による並列ファンアウト、`@defjs/core/port` を使ったワーカー／ブラウザ拡張機能とのブリッジを行います。
 
 ## クイックビュー: SDK の定義 vs アプリケーションでの実行
 
@@ -31,7 +31,7 @@ Defjs は、TypeScript SDK における 2 つの責務を明確に分離しま�
 </Tab>
 </Tabs>
 
-`getHealth(client)` を呼び出すと実際の I/O が実行され、エラーファーストのタプルが返されます。デコードされた成功結果を読み出す前に、必ず `if (err)` をチェックして処理を抜ける（return する）設計になっています。
+`getHealth(client)` を呼び出すと実際の I/O が実行され、エラーファーストタプルが返されます。デコードされた成功結果を読み出す前に、必ず `if (err)` を確認して `return` する設計になっています。
 
 ## なぜ定義とクライアントを分離するのか？
 
@@ -44,16 +44,17 @@ Defjs は、TypeScript SDK における 2 つの責務を明確に分離しま�
 ## 次のステップを選ぶ
 
 1. **[クイックスタート](/ja-JP/docs/start)** — 操作を定義し、ローカル Fetch ハンドルを使ってオフラインでテストした上で、実際のライブサービスに接続してみましょう。
-2. **[コアアーキテクチャ](/ja-JP/docs/design-decisions)** — 6 つのレスポンスデコード規則、エラーファーストのタプル、リソース所有権の考え方を理解します。
-3. **[SDK の定義](/ja-JP/docs/struct)** — [Struct](/ja-JP/docs/struct) で通信契約を宣言し、[HTTP](/ja-JP/docs/http)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) の各操作を export します。
-4. **[クライアントと実行](/ja-JP/docs/client)** — [Client](/ja-JP/docs/client) の構成、型付けされた [エラーハンドリング](/ja-JP/docs/errors)、[インターセプター](/ja-JP/docs/interceptors) の追加、[ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) の設定を学びます。
-5. **[ベストプラクティスとテスト](/ja-JP/docs/best-practices)** — [エンジニアリング規約](/ja-JP/docs/best-practices)に沿って [アプリケーション API レイヤー](/ja-JP/docs/application-api) や [公開 SDK](/ja-JP/docs/public-sdk) を設計し、再現性の高い [テスト](/ja-JP/docs/testing) を書きます。
+2. **[コアアーキテクチャ](/ja-JP/docs/design-decisions)** — 6 つのレスポンスデコード規則、エラーファーストタプル、リソース所有権の考え方を理解します。
+3. **[比較とハイブリッド BFF アーキテクチャ](/ja-JP/docs/comparison-and-architecture)** — Defjs を `fetch`、`ky`、`ofetch`、`openapi-fetch`、`oRPC` と比較し、Defjs + oRPC/Hono による BFF ブループリントとベンチマークを確認します。
+4. **[SDK の定義](/ja-JP/docs/struct)** — [Struct](/ja-JP/docs/struct) で通信契約を宣言し、[HTTP](/ja-JP/docs/http)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) の各操作を export します。
+5. **[クライアントと実行](/ja-JP/docs/client)** — [Client](/ja-JP/docs/client) の構成、型付けされた [エラーハンドリング](/ja-JP/docs/errors)、[インターセプター](/ja-JP/docs/interceptors) の追加、[ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) の設定を学びます。
+6. **[ベストプラクティスとテスト](/ja-JP/docs/best-practices)** — [エンジニアリング規約](/ja-JP/docs/best-practices)に沿って [アプリケーション API レイヤー](/ja-JP/docs/application-api) や [公開 SDK](/ja-JP/docs/public-sdk) を設計し、再現性の高い [テスト](/ja-JP/docs/testing) を書きます。
 
 ## サポートされているトランスポートと結果タプル
 
 すべての操作は、各トランスポートのライフサイクルに合わせた 3 要素のエラーファーストタプルを返します。
 
-| トランスポート                          | エントリポイント    | タプルの形状                 | ライフサイクルの管理責任                                               |
+| トランスポート                          | エントリポイント    | タプルの形状                 | ライフサイクルの所有権                                                 |
 | --------------------------------------- | ------------------- | ---------------------------- | ---------------------------------------------------------------------- |
 | **[HTTP](/ja-JP/docs/http)**            | `defineRequest`     | `[err, data, response]`      | 実行中のリクエストは `client({ signal })` 経由でキャンセル             |
 | **[SSE](/ja-JP/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | `await using` または `stream.close()` + `await stream.closed` で解放   |
@@ -63,12 +64,13 @@ HTTP の失敗時、タプルは `[err, undefined, undefined]` になります�
 
 ## 公式パッケージ
 
-| パッケージ                    | 役割                                                                       | ガイド                                                                  |
-| ----------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `@defjs/core`                 | 依存関係ゼロの SDK 定義、`struct` スキーマ、クライアント、インターセプター | [クイックスタート](/ja-JP/docs/start)                                   |
-| `@defjs/react`                | React 18+ 向けの `ClientProvider` および `useClient()` コンテキスト注入    | [React 連携](/ja-JP/docs/integrations/react)                            |
-| `@defjs/vue`                  | Vue 3 以降向けの `createClientPlugin`、`HTTP_CLIENT`、`injectClient()`     | [Vue 連携](/ja-JP/docs/integrations/vue)                                |
-| `@defjs/opentelemetry-server` | サーバーサイドのアウトバウンドスパン、メトリクス、診断ログ                 | [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server) |
+| パッケージ                    | 役割                                                                                              | ガイド                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `@defjs/core`                 | 依存関係ゼロの SDK 定義、`struct`、クライアント、レジリエンス、ミドルウェア、`concurrent`、`port` | [クイックスタート](/ja-JP/docs/start)                                   |
+| `@defjs/cli`                  | OpenAPI 2.0–3.2 仕様からステートレス ESM 定義を生成する開発用 CLI                                 | [CLI 連携](/ja-JP/docs/integrations/cli)                                |
+| `@defjs/react`                | React 18+ 向けの `ClientProvider` および `useClient()` コンテキスト注入                           | [React 連携](/ja-JP/docs/integrations/react)                            |
+| `@defjs/vue`                  | Vue 3 以降向けの `createClientPlugin`、`HTTP_CLIENT`、`injectClient()`                            | [Vue 連携](/ja-JP/docs/integrations/vue)                                |
+| `@defjs/opentelemetry-server` | サーバーサイドのアウトバウンドスパン、メトリクス、診断ログ                                        | [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server) |
 
 ## 人気の実践レシピ
 
@@ -76,6 +78,10 @@ HTTP の失敗時、タプルは `[err, undefined, undefined]` になります�
 - [JSON の送信とバリデーション](/ja-JP/recipes/post-json)
 - [宣言済み 404 の処理](/ja-JP/recipes/get-declared-404)
 - [HTTP 呼び出しのキャンセル](/ja-JP/recipes/cancel-http)
+- [カーソルページネーションストリーム](/ja-JP/recipes/cursor-pagination)
+- [リトライ時の冪等性キー](/ja-JP/recipes/idempotency-key)
+- [バルクヘッド同時実行数制限](/ja-JP/recipes/concurrency-limit)
+- [Undici Pool によるコネクション再利用](/ja-JP/recipes/undici-pool)
 - [401 発生時の Bearer トークン自動更新](/ja-JP/recipes/refresh-bearer-once)
 - [SSE イベントストリームの受信](/ja-JP/recipes/consume-sse)
 - [WebSocket セッションの管理](/ja-JP/recipes/websocket-session)

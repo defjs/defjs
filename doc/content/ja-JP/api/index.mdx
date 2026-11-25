@@ -13,24 +13,26 @@ Defjs SDK を作るとき、または使うときにこのリファレンスを�
 
 ## パッケージ
 
-| パッケージ                                                       | ここで探すもの                                                    |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`@defjs/core`](/ja-JP/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
-| [`@defjs/vue`](/ja-JP/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
-| [`@defjs/react`](/ja-JP/api/react)                               | `ClientProvider`, `useClient`                                     |
-| [`@defjs/opentelemetry-server`](/ja-JP/api/opentelemetry-server) | `withOpenTelemetryServer`, トランスポートごとのオプション         |
+| パッケージ                                                       | ここで探すもの                                                                                                  |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](/ja-JP/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket, `@defjs/core/concurrent`, `@defjs/core/port` |
+| [`@defjs/cli`](/ja-JP/api/cli)                                   | `defineConfig`, `generateOpenApi`, `runCli`, OpenAPI ターゲットオプション                                       |
+| [`@defjs/vue`](/ja-JP/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`                                                             |
+| [`@defjs/react`](/ja-JP/api/react)                               | `ClientProvider`, `useClient`                                                                                   |
+| [`@defjs/opentelemetry-server`](/ja-JP/api/opentelemetry-server) | `withOpenTelemetryServer`, トランスポートごとのオプション                                                       |
 
 ## @defjs/core
 
-| ページ                                  | ここで探すもの                                                        |
-| --------------------------------------- | --------------------------------------------------------------------- |
-| [Client](/ja-JP/api/client)             | `createClient`, `with*` オプション, `Client`                          |
-| [HTTP](/ja-JP/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
-| [Struct](/ja-JP/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
-| [Errors](/ja-JP/api/errors)             | `Fault` の種類とファクトリ                                            |
-| [Interceptors](/ja-JP/api/interceptors) | HTTP / SSE / WebSocket のインターセプターヘルパー                     |
-| [SSE](/ja-JP/api/sse)                   | `defineEventStream`, ストリームハンドル                               |
-| [WebSocket](/ja-JP/api/web-socket)      | `defineWebSocket`, セッション                                         |
+| ページ                                  | ここで探すもの                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Client](/ja-JP/api/client)             | `createClient`, `with*` オプション, `Client`, `@defjs/core/concurrent`                |
+| [HTTP](/ja-JP/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse`                 |
+| [Struct](/ja-JP/api/struct)             | `struct.*`, `Infer`, `StructError`                                                    |
+| [Errors](/ja-JP/api/errors)             | `Fault` の種類とファクトリ                                                            |
+| [Interceptors](/ja-JP/api/interceptors) | HTTP / SSE / WebSocket / 組み込みインターセプターヘルパー                             |
+| [SSE](/ja-JP/api/sse)                   | `defineEventStream`, ストリームハンドル                                               |
+| [WebSocket](/ja-JP/api/web-socket)      | `defineWebSocket`, セッション                                                         |
+| [Port](/ja-JP/api/port)                 | `withPortTransport`, `attachPortHost`, `createPort*Handle`, `@defjs/core/port/webext` |
 
 ## 関連
 

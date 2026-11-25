@@ -14,6 +14,10 @@ description: 再利用可能な SDK の構築・公開から、利用側アプ�
 - [キャンセルとタイムアウト](/ja-JP/recipes/cancel-http) — 呼び出し元の `AbortController` と `AbortSignal.timeout(...)` を組み合わせ、`NET_ABORTED` と `NET_TIMEOUT` を区別して扱います。
 - [ETag 条件付きリクエスト](/ja-JP/recipes/etag-revalidate) — `If-None-Match` を送信し、`304 Not Modified` を `HTTP_STATUS` Fault として捉え、キャッシュ `Map` をアプリケーション側で管理します。
 - [GraphQL リクエスト](/ja-JP/recipes/graphql-http-envelope) — HTTP `POST` 経由で GraphQL クエリを送信し、ヘルパー関数内で `errors[]` と `.nullish()` な `data` をアンラップします。
+- [カーソルページネーション](/ja-JP/recipes/cursor-pagination) — 非同期ジェネレーターでページ分割された API 結果をストリーミングし、ページ単位の `AbortSignal` によるキャンセルを伝播します。
+- [冪等性キー](/ja-JP/recipes/idempotency-key) — `idempotencyKeyHttpInterceptor` を使用して、`POST`/`PATCH` のリトライ間で自動的に `Idempotency-Key` ヘッダーを付与します。
+- [同時実行数制限とプールされた呼び出し](/ja-JP/recipes/concurrency-limit) — `concurrencyLimitHttpInterceptor` と `@defjs/core/concurrent` プリミティブでインフライトリクエスト数を制限します。
+- [Undici Pool HTTP ハンドル](/ja-JP/recipes/undici-pool) — `undici.Pool` を `withHTTPHandle` に接続し、Node.js で keep-alive コネクションプーリングを利用します。
 
 ## 認証
 

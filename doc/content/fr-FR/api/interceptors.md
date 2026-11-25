@@ -63,4 +63,26 @@ Un wrapper ou une session de court-circuit doit transmettre la même libération
 
 Définit `Authorization: Basic <encoded>` sur chaque requête. `fn` renvoie `{ username, password }` et est appelée par requête. Le second argument facultatif `{ encode }` reçoit ces identifiants et renvoie la partie après `Basic ` ; l’encodage par défaut est ``btoa(`${username}:${password}`)``. Sans `encode`, créer l’intercepteur lève une erreur quand `btoa` n’est pas disponible.
 
+## Limite de concurrence
+
+### concurrencyLimitHttpInterceptor()
+
+### BulkheadOverflowError
+
+### ConcurrencyLimitInterceptorOptions
+
+<ApiSignature name="concurrencyLimitHttpInterceptor, BulkheadOverflowError, ConcurrencyLimitInterceptorOptions" />
+
+Limite les tentatives HTTP en cours simultanément par compartiment (`key`, avec un compartiment partagé par défaut). Les requêtes au-delà de `maxConcurrency` attendent en ordre FIFO jusqu’à `maxQueue` (`Infinity` par défaut), ou échouent avec `BulkheadOverflowError` (remontée comme `EXT_INTERCEPTOR_FAILED` avec `{ attempted: false }`). Les permis sont relâchés pendant les attentes de backoff de `withRetry`, et les requêtes déjà annulées ou annulées en file d’attente se résolvent avec `NET_ABORTED` ou `NET_TIMEOUT`. Voir [Limites de concurrence et appels groupés](/fr-FR/recipes/concurrency-limit).
+
+## Clé d’idempotence
+
+### idempotencyKeyHttpInterceptor()
+
+### IdempotencyKeyInterceptorOptions
+
+<ApiSignature name="idempotencyKeyHttpInterceptor, IdempotencyKeyInterceptorOptions" />
+
+Clone `req.headers` et définit `headerName` (`'Idempotency-Key'` par défaut) sur les requêtes dont la méthode correspond à `methods` (`['POST', 'PATCH']` par défaut), en ignorant celles qui portent déjà l’en-tête lorsque `respectExisting` vaut `true` (par défaut). Sans `generate`, réutilise `req.correlationId` (ou se rabat sur un UUID v4) afin que chaque tentative `withRetry` d’un même appel envoie la même clé ; avec `generate`, mémoïse par `req.correlationId` dans un cache borné à 4 096 entrées. Voir [Clés d’idempotence](/fr-FR/recipes/idempotency-key).
+
 Voir le [guide Intercepteurs](/fr-FR/docs/interceptors).

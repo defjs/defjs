@@ -1,0 +1,44 @@
+---
+title: Port
+description: Transportes proxy MessagePort y WebExtension MV3 multiplexados para clientes Defjs.
+---
+
+# Transporte Port (`@defjs/core/port` y `@defjs/core/port/webext`)
+
+Handles de transporte multiplexados `MessagePort` y WebExtension `runtime.Port` junto con un puente de host con denegación por defecto. Consulta la [guía de transporte Port](/es-ES/docs/port).
+
+## Ejemplo rápido
+
+<include cwd>examples/api/port.ts#example</include>
+
+## Handles de cliente (`@defjs/core/port`)
+
+### withPortTransport
+
+<ApiSignature name="withPortTransport" />
+
+### createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle
+
+<ApiSignature name="createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle" />
+
+<ApiSignature name="PortClientOptions, PortWebSocketHandle, PortWebSocketHandleConstructor" />
+
+## Adjunción del host (`@defjs/core/port`)
+
+### attachPortHost
+
+<ApiSignature name="attachPortHost" />
+
+<ApiSignature name="PortHostOptions, PortHostHandle, PortRequestCheckContext, PortWebSocketConstructor" />
+
+## Abstracciones de puerto
+
+<ApiSignature name="PortLike, PortEndpoint, PortWireMode, PortMessageListener, PortDisconnectListener" />
+
+## Adaptador WebExtension (`@defjs/core/port/webext`)
+
+### fromWebExtPort
+
+<ApiSignature name="fromWebExtPort" />
+
+<ApiSignature name="WebExtPort, WebExtEvent, WebExtPortOptions" />

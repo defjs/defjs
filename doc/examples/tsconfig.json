@@ -3,7 +3,8 @@
   "include": ["./**/*.ts", "./**/*.tsx"],
   "exclude": ["./**/*.spec.ts"],
   "compilerOptions": {
-    "types": ["react"],
+    "types": ["react", "node"],
+    "resolveJsonModule": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false
   }

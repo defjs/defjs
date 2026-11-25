@@ -1,0 +1,31 @@
+---
+title: "Cursor pagination"
+description: Stream paginated endpoints cleanly with an async generator and per-page AbortSignal cancellation.
+---
+
+# Cursor pagination
+
+Keep the paginated operation in the SDK module (`listOrders`) and wrap cursor continuation inside a pure application helper (`listAllOrders`) that yields Go-style `[err, item]` tuples and stops immediately on failure or caller abort.
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+See [Client](/docs/client) and [HTTP operations](/docs/http) for per-call `signal` derivation rules.

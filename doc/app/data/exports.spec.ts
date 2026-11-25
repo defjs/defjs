@@ -5,7 +5,7 @@ import { extractApiData } from "../../scripts/extract-api";
 import { serializeCatalog, serializeReference } from "../../scripts/api-model";
 import { assertDescribed } from "../../scripts/api-validate";
 
-const packages = ["core", "react", "vue", "opentelemetry-server"];
+const packages = ["core", "react", "vue", "opentelemetry-server", "cli"];
 const entryOf = (pkg: string) =>
   `${import.meta.dirname}/../../../packages/${pkg}/src/index.ts`;
 
@@ -52,9 +52,11 @@ async function sourceExports(
     if (match[1]) names.add(match[1]);
   for (const match of text.matchAll(/export\s+\*\s+from\s+['"]([^'"]+)['"]/g)) {
     const base = joinPath(file.replace(/\/[^/]*$/, ""), match[1] ?? "");
-    const target = (await Bun.file(base + ".ts").exists())
-      ? base + ".ts"
-      : joinPath(base, "index.ts");
+    const target = base.endsWith(".ts")
+      ? base
+      : (await Bun.file(base + ".ts").exists())
+        ? base + ".ts"
+        : joinPath(base, "index.ts");
     for (const name of await sourceExports(target, visited)) names.add(name);
   }
   return names;
@@ -101,6 +103,26 @@ test.each(packages)(
   },
 );
 
+test("@defjs/core/concurrent catalog matches its public exports, in both directions, with the right kind", async () => {
+  const file = `${import.meta.dirname}/../../../packages/core/src/concurrent/index.ts`;
+  const loaded: unknown = await import(file);
+  if (!isRecord(loaded))
+    throw new Error("missing exports for @defjs/core/concurrent");
+  const names = await sourceExports(file);
+  const catalog = new Map(
+    apiEntries
+      .filter((entry) => entry.package === "@defjs/core/concurrent")
+      .map((entry) => [entry.name, entry.kind]),
+  );
+  expect([...names].filter((name) => !catalog.has(name))).toEqual([]);
+  expect([...catalog.keys()].filter((name) => !names.has(name))).toEqual([]);
+  const wrongKinds = [...catalog].filter(
+    ([name, kind]) =>
+      kind !== (name in loaded ? runtimeKind(loaded[name]) : "type"),
+  );
+  expect(wrongKinds).toEqual([]);
+});
+
 test("@defjs/core/xsrf catalog matches its public exports, in both directions, with the right kind", async () => {
   const file = `${import.meta.dirname}/../../../packages/core/src/xsrf/index.ts`;
   const loaded: unknown = await import(file);
@@ -110,6 +132,46 @@ test("@defjs/core/xsrf catalog matches its public exports, in both directions, w
   const catalog = new Map(
     apiEntries
       .filter((entry) => entry.package === "@defjs/core/xsrf")
+      .map((entry) => [entry.name, entry.kind]),
+  );
+  expect([...names].filter((name) => !catalog.has(name))).toEqual([]);
+  expect([...catalog.keys()].filter((name) => !names.has(name))).toEqual([]);
+  const wrongKinds = [...catalog].filter(
+    ([name, kind]) =>
+      kind !== (name in loaded ? runtimeKind(loaded[name]) : "type"),
+  );
+  expect(wrongKinds).toEqual([]);
+});
+
+test("@defjs/core/port catalog matches its public exports, in both directions, with the right kind", async () => {
+  const file = `${import.meta.dirname}/../../../packages/core/src/port/index.ts`;
+  const loaded: unknown = await import(file);
+  if (!isRecord(loaded))
+    throw new Error("missing exports for @defjs/core/port");
+  const names = await sourceExports(file);
+  const catalog = new Map(
+    apiEntries
+      .filter((entry) => entry.package === "@defjs/core/port")
+      .map((entry) => [entry.name, entry.kind]),
+  );
+  expect([...names].filter((name) => !catalog.has(name))).toEqual([]);
+  expect([...catalog.keys()].filter((name) => !names.has(name))).toEqual([]);
+  const wrongKinds = [...catalog].filter(
+    ([name, kind]) =>
+      kind !== (name in loaded ? runtimeKind(loaded[name]) : "type"),
+  );
+  expect(wrongKinds).toEqual([]);
+});
+
+test("@defjs/core/port/webext catalog matches its public exports, in both directions, with the right kind", async () => {
+  const file = `${import.meta.dirname}/../../../packages/core/src/port/webext/index.ts`;
+  const loaded: unknown = await import(file);
+  if (!isRecord(loaded))
+    throw new Error("missing exports for @defjs/core/port/webext");
+  const names = await sourceExports(file);
+  const catalog = new Map(
+    apiEntries
+      .filter((entry) => entry.package === "@defjs/core/port/webext")
       .map((entry) => [entry.name, entry.kind]),
   );
   expect([...names].filter((name) => !catalog.has(name))).toEqual([]);

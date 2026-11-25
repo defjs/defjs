@@ -1,0 +1,25 @@
+---
+title: "同時実行数制限とプールされた呼び出し"
+description: concurrencyLimitHttpInterceptor で下流オリジンを保護し、@defjs/core/concurrent でクリーンに並列ファンアウトを実行します。
+---
+
+# 同時実行数制限とプールされた呼び出し
+
+`Client` に対してクライアント全体のバルクヘッドとして `concurrencyLimitHttpInterceptor`（任意の `maxQueue` オーバーフロー保護付きの FIFO キューイング）を使用し、その `Client` に直接紐付けたフェイルファストまたは全件完了型の並列呼び出しには `@defjs/core/concurrent`（`concurrentMap`、`concurrentMapSettled`、`concurrentAll`、`concurrentAllSettled`）を使用します。
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+詳細は [Client API](/ja-JP/api/client) および [Interceptors API](/ja-JP/api/interceptors) を参照してください。

@@ -72,13 +72,23 @@ import {
 
 const packages = [
   { name: "@defjs/core", entry: "packages/core/src/index.ts" },
+  {
+    name: "@defjs/core/concurrent",
+    entry: "packages/core/src/concurrent/index.ts",
+  },
   { name: "@defjs/core/xsrf", entry: "packages/core/src/xsrf/index.ts" },
+  { name: "@defjs/core/port", entry: "packages/core/src/port/index.ts" },
+  {
+    name: "@defjs/core/port/webext",
+    entry: "packages/core/src/port/webext/index.ts",
+  },
   { name: "@defjs/react", entry: "packages/react/src/index.ts" },
   { name: "@defjs/vue", entry: "packages/vue/src/index.ts" },
   {
     name: "@defjs/opentelemetry-server",
     entry: "packages/opentelemetry-server/src/index.ts",
   },
+  { name: "@defjs/cli", entry: "packages/cli/src/index.ts" },
 ] as const;
 
 const compilerOptions = {
@@ -95,11 +105,20 @@ const compilerOptions = {
   baseUrl: repoRoot,
   paths: {
     "@defjs/core": [joinPath(repoRoot, "packages/core/src/index.ts")],
+    "@defjs/core/concurrent": [
+      joinPath(repoRoot, "packages/core/src/concurrent/index.ts"),
+    ],
+    "@defjs/core/port": [joinPath(repoRoot, "packages/core/src/port/index.ts")],
+    "@defjs/core/port/webext": [
+      joinPath(repoRoot, "packages/core/src/port/webext/index.ts"),
+    ],
+    "@defjs/core/xsrf": [joinPath(repoRoot, "packages/core/src/xsrf/index.ts")],
     "@defjs/react": [joinPath(repoRoot, "packages/react/src/index.ts")],
     "@defjs/vue": [joinPath(repoRoot, "packages/vue/src/index.ts")],
     "@defjs/opentelemetry-server": [
       joinPath(repoRoot, "packages/opentelemetry-server/src/index.ts"),
     ],
+    "@defjs/cli": [joinPath(repoRoot, "packages/cli/src/index.ts")],
   },
 } satisfies RawCompilerOptions;
 

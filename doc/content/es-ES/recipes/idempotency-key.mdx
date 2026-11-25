@@ -1,0 +1,25 @@
+---
+title: "Claves de idempotencia"
+description: Reintenta de forma segura peticiones mutantes POST o PATCH usando idempotencyKeyHttpInterceptor y el backoff nativo de 429 Retry-After.
+---
+
+# Claves de idempotencia
+
+Por defecto, `withRetry` solo reintenta métodos HTTP idempotentes (`GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`). Cuando habilites reintentos en endpoints `POST` o `PATCH`, combina `withRetry` con `idempotencyKeyHttpInterceptor()` para que cada intento de reintento de la misma llamada lógica reutilice `req.correlationId` como cabecera `Idempotency-Key`, mientras que las llamadas posteriores reciban claves nuevas.
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Consulta [Interceptores](/es-ES/docs/interceptors) y [Balanceo de carga](/es-ES/docs/load-balancing) para ver los presupuestos de reintentos y el tratamiento de `Retry-After`.

@@ -1,0 +1,31 @@
+---
+title: "Handle HTTP Undici Pool"
+description: Reliez un pool de connexions Node.js undici.Pool à un client Defjs via withHTTPHandle sans modifier vos définitions de SDK.
+---
+
+# Handle HTTP Undici Pool
+
+Dans les BFF et services backend Node.js à fort débit, injectez un `undici.Pool` partagé via [`withHTTPHandle`](/fr-FR/api/core/withhttphandle) pour garder plusieurs connexions upstream actives et bornées tout en laissant vos définitions de SDK (`sdk/orders.ts`) totalement indépendantes de la plateforme. Pensez à appeler `await pool.close()` lors de l'arrêt.
+
+<Tabs items={["sdk/orders.ts", "app/pool-handle.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/pool-handle.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Consultez [Comparaison & architecture hybride](/fr-FR/docs/comparison-and-architecture) pour combiner `undici.Pool` avec `p2cBalancer` et `outlierDetection`.

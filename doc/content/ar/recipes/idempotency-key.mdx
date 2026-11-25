@@ -1,0 +1,25 @@
+---
+title: "مفاتيح تساوي الأثر (Idempotency keys)"
+description: أعد محاولة طلبات التعديل POST أو PATCH بأمان باستخدام idempotencyKeyHttpInterceptor والتراجع الزمني الأصلي لترويسة 429 Retry-After.
+---
+
+# مفاتيح تساوي الأثر (Idempotency keys)
+
+افتراضياً، لا تعيد `withRetry` محاولة سوى طرق HTTP متساوية الأثر (`GET` و`HEAD` و`PUT` و`DELETE` و`OPTIONS` و`TRACE`). عند تفعيل إعادة المحاولة على نقاط نهاية `POST` أو `PATCH`، اقرن `withRetry` مع `idempotencyKeyHttpInterceptor()` بحيث تعيد كل محاولة إعادة إرسال لنفس الاستدعاء المنطقي استخدام `req.correlationId` في ترويسة `Idempotency-Key` بينما تحصل الاستدعاءات اللاحقة على مفاتيح جديدة.
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+راجع دليلي [المعترضات](/ar/docs/interceptors) و[توزيع الحمل](/ar/docs/load-balancing) للاطلاع على ميزانيات إعادة المحاولة ومعالجة `Retry-After`.

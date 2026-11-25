@@ -10,14 +10,19 @@
   ],
   "compilerOptions": {
     "jsx": "react-jsx",
-    "types": ["bun", "vite/client"],
+    "types": ["bun", "node", "vite/client"],
     "rootDirs": [".", "./.react-router/types"],
     "paths": {
       "@/*": ["./app/*"],
+      "@defjs/cli": ["../packages/cli/src"],
       "@defjs/core": ["../packages/core/src"],
+      "@defjs/core/concurrent": ["../packages/core/src/concurrent"],
+      "@defjs/core/xsrf": ["../packages/core/src/xsrf"],
+      "@defjs/core/port": ["../packages/core/src/port"],
+      "@defjs/core/port/webext": ["../packages/core/src/port/webext"],
+      "@defjs/opentelemetry-server": ["../packages/opentelemetry-server/src"],
       "@defjs/react": ["../packages/react/src"],
-      "@defjs/vue": ["../packages/vue/src"],
-      "@defjs/opentelemetry-server": ["../packages/opentelemetry-server/src"]
+      "@defjs/vue": ["../packages/vue/src"]
     },
     "resolveJsonModule": true,
     "esModuleInterop": true

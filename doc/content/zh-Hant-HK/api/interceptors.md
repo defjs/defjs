@@ -63,4 +63,26 @@ Wrapper 或者短路會話必須轉發同 `close` / `closed` 生命週期一致�
 
 每個 request 都會設定 `Authorization: Basic <encoded>`。`fn` 回傳 `{ username, password }`，每個 request 呼叫一次。可選嘅第二個參數 `{ encode }` 會收到呢份 credential，並回傳 `Basic ` 之後嗰部分；預設編碼係 ``btoa(`${username}:${password}`)``。冇提供 `encode` 時，如果 `btoa` 唔可用，建立攔截器會 throw。
 
+## 並發限制
+
+### concurrencyLimitHttpInterceptor()
+
+### BulkheadOverflowError
+
+### ConcurrencyLimitInterceptorOptions
+
+<ApiSignature name="concurrencyLimitHttpInterceptor, BulkheadOverflowError, ConcurrencyLimitInterceptorOptions" />
+
+按 bucket（`key`，預設為單一共用 bucket）限制並發進行中嘅 HTTP 嘗試次數。超出 `maxConcurrency` 嘅請求會按 FIFO 順序排隊，上限為 `maxQueue`（預設 `Infinity`），或者以 `BulkheadOverflowError` reject（以 `EXT_INTERCEPTOR_FAILED` 連同 `{ attempted: false }` 浮現）。許可（permit）會喺 `withRetry` 退避等待期間釋放，而預先中止或者排隊期間中止嘅請求會以 `NET_ABORTED` 或 `NET_TIMEOUT` 結算。睇[並發限制與池化呼叫](/zh-Hant-HK/recipes/concurrency-limit)。
+
+## 冪等鍵
+
+### idempotencyKeyHttpInterceptor()
+
+### IdempotencyKeyInterceptorOptions
+
+<ApiSignature name="idempotencyKeyHttpInterceptor, IdempotencyKeyInterceptorOptions" />
+
+複製 `req.headers`，並對符合 `methods`（預設 `['POST', 'PATCH']`）嘅請求設定 `headerName`（預設 `'Idempotency-Key'`）；當 `respectExisting` 為 `true`（預設）時，會跳過已經帶有該 header 嘅請求。冇提供 `generate` 時，會重用 `req.correlationId`（或退回 v4 UUID），令單次呼叫每次 `withRetry` 嘗試都送出相同嘅 key；提供 `generate` 時，會按 `req.correlationId` 記憶於上限 4,096 項嘅有界快取中。睇[冪等鍵](/zh-Hant-HK/recipes/idempotency-key)。
+
 睇[攔截器指南](/zh-Hant-HK/docs/interceptors)。

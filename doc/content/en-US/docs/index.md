@@ -12,6 +12,7 @@ Defjs separates the API contract an SDK team publishes from the client configura
 - [Overview](/)
 - [Quick start](/docs/start)
 - [Core architecture](/docs/design-decisions)
+- [Comparison & hybrid architecture](/docs/comparison-and-architecture)
 
 ## Defining SDKs [#defining-sdks]
 
@@ -26,6 +27,7 @@ Defjs separates the API contract an SDK team publishes from the client configura
 - [Error handling](/docs/errors)
 - [Interceptors](/docs/interceptors)
 - [Load balancing & failover](/docs/load-balancing)
+- [Port transport](/docs/port)
 
 ## Best practices [#best-practices]
 
@@ -40,5 +42,6 @@ Defjs separates the API contract an SDK team publishes from the client configura
 - [React](/docs/integrations/react)
 - [Vue](/docs/integrations/vue)
 - [OpenTelemetry server](/docs/integrations/opentelemetry-server)
+- [CLI & OpenAPI generator](/docs/integrations/cli)
 - [Skill](/docs/ai)
 - [llms.txt](/docs/ai-api)

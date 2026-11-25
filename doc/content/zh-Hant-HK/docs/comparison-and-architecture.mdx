@@ -1,0 +1,78 @@
+---
+title: 比較與混合架構
+description: 客觀比較 Defjs 同 fetch、ky、ofetch、openapi-fetch 以及 oRPC，並介紹 Defjs + oRPC/Hono 混合 BFF 架構與可重現嘅基準測試數據。
+---
+
+# 比較與混合架構
+
+Defjs 處於兩個生態系統嘅交匯點：**瀏覽器／Node HTTP client**（`fetch`、`ky`、`ofetch`、`axios`、`openapi-fetch`）同**契約優先 RPC 框架**（`oRPC`、tRPC）。呢份指南釐清邊種工具適合邊類場景、幾時用 Defjs 反為係多餘開銷，以及團隊喺生產環境點樣將兩者結合使用。
+
+## 生態系統比較
+
+| 能力                                   | 原生 `fetch`                    | `ky` / `ofetch`                       | `openapi-fetch`                            | `oRPC`                                  | Defjs (`@defjs/core`)                                                       |
+| -------------------------------------- | ------------------------------- | ------------------------------------- | ------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------- |
+| 主要定位                               | 平台原語                        | 應用程式 HTTP 包裝器                  | 帶型別嘅 OpenAPI Fetch client              | 全棧 TS RPC 框架                        | SDK 定義 + 高韌性 client 工具組                                             |
+| 定義與 client 分離                     | 手動維護                        | 按每個 base URL 綁定實例              | 共用路徑型別；client 擁有呼叫              | Router 與 client 透過 RPC 契約耦合      | 一等公民（`define*` 純資料 vs. `Client`）                                   |
+| 統一支援嘅傳輸層                       | 只有 HTTP                       | 只有 HTTP                             | 只有 HTTP                                  | HTTP + SSE/event iterator（伺服器擁有） | 單一 client 統一 HTTP、SSE 同 WebSocket                                     |
+| 執行期網絡契約與別名                   | 無                              | 無                                    | 可選中介層                                 | 外部驗證器（Zod/Valibot/ArkType）       | 零依賴 `struct`，支援雙向可逆 `.alias()`                                    |
+| 失敗語義                               | 網絡錯誤 reject；檢查 `!res.ok` | 拋出 `HTTPError`                      | `{ data, error }`（拋出例外或網絡 reject） | 安全／可拋出 RPC 錯誤                   | 永唔拋出例外嘅 `[err, value, meta]` Go 風格 tuple                           |
+| 多上游負載平衡                         | 無                              | 無                                    | 無                                         | Link 外掛（無內建 P2C EWMA）            | 內建 `p2cBalancer` + `outlierDetection`（`halfOpen`、`maxEjectionPercent`） |
+| `429` + `Retry-After` + correlation ID | 手動處理                        | `ky` 處理 `Retry-After`；只限單一 URL | 無內建                                     | Client 重試外掛                         | 原生 `429`/RFC `Retry-After`、重試預算與 `correlationId`                    |
+| 結構化並發                             | 原生 `Promise.all`              | 原生 `Promise.all`                    | 原生 `Promise.all`                         | 批次外掛 / `Promise.all`                | `@defjs/core/concurrent` 直接綁定 client 與取消訊號                         |
+| OpenAPI 程式碼生成                     | 無                              | 無                                    | 僅 `openapi-typescript` 型別               | 由 oRPC router 匯出 OpenAPI 規格        | `@defjs/cli` 生成無狀態 ESM + `struct`                                      |
+| 跨邊界代理                             | 手動 `postMessage`              | 手動處理                              | 手動處理                                   | MessagePort / worker 適配器             | `@defjs/core/port` + `/webext`（支援 HTTP、SSE、WS + 預設拒絕來源政策）     |
+
+### 幾時應該揀選其他方案
+
+- **揀選原生 `fetch`、`ofetch` 或 `ky`**：當應用程式只係呼叫少數同源端點、唔需要發佈 SDK、唔需要多上游故障轉移，亦唔需要執行期 schema 驗證（~4–10 KB brotli）。
+- **揀選 `openapi-fetch`**：當你已經維護緊 `openapi-typescript` 型別，而且淨係需要編譯期型別配搭極簡 Fetch 包裝，唔需要執行期網絡解碼。
+- **揀選 `oRPC`（或 Hono RPC）**：適用於**第一方前端對 BFF／全棧 RPC** 場景，即係團隊同時擁有 TypeScript 伺服器同瀏覽器 client，希望直接獲得端到端過程推斷而唔想額外維護獨立嘅 HTTP 契約。
+
+---
+
+## 混合 BFF 藍圖：邊緣用 oRPC / Hono，下游用 Defjs
+
+大規模生產環境入面最常見嘅架構並唔係將 Defjs 同 `oRPC` 或 `Hono` 對立起嚟，而係跨過信任邊界將兩者配對使用：
+
+```txt
+┌──────────────┐   First-party RPC (oRPC / Hono)   ┌─────────────────────────────────┐
+│ Browser /    │ ────────────────────────────────▶ │ BFF (Hono / oRPC Server)        │
+│ Mobile App   │ ◀──────────────────────────────── │                                 │
+└──────────────┘                                   │  @defjs/core Client:            │
+                                                   │  • undici.Pool handle           │
+                                                   │  • p2cBalancer({                │
+                                                   │      outlierDetection: {        │
+                                                   │        halfOpen: true           │
+                                                   │      }                          │
+                                                   │    })                           │
+                                                   │  • withRetry (429 / 503)        │
+                                                   │  • bulkhead + idempotency       │
+                                                   │  • @defjs/opentelemetry-server  │
+                                                   └────────────────┬────────────────┘
+                                                                    │
+                                        Downstream REST / SSE / WS  │
+                               ┌────────────────────────────────────┴────────┐
+                               ▼                                             ▼
+                    Third-party SaaS APIs                        Internal Microservices
+                    (generated via @defjs/cli)                   (Nodes A, B, C failover)
+```
+
+喺呢種分工入面：
+
+1. **Browser ↔ BFF** 使用 `oRPC` 或 `Hono`，追求快捷嘅第一方 RPC 開發體驗。
+2. **BFF ↔ 下游 API** 使用 `@defjs/core`（通常配合 `@defjs/cli` 由供應商 OpenAPI 規格生成操作定義，並透過 [`undici.Pool`](/zh-Hant-HK/recipes/undici-pool) 共用連線池），等單一慢速下游實例（`B`）或者被限流（`429` / `503`）嘅實例（`C`）喺耗盡 BFF worker 容量之前，就已經俾 `p2cBalancer` + `outlierDetection` 隔離。
+
+---
+
+## 可重現嘅基準測試重點
+
+以下所有數字全部嚟自 [`bench/`](https://github.com/defjs/defjs/blob/main/bench/REPORT.md) 入面獨立而且鎖定 lockfile 嘅基準測試套件（`bun run build && cd bench && bun install --frozen-lockfile && bun run all`，Apple M1 Max、Bun `1.4.5`、Node `v26.13.1`、確定性種子 `SEED=20261124`）。
+
+| 測試維度             | 測試場景                                                                                                                                 | 重點結果                                                                                                                                                                                                                                                              | 方法學 / 公平性說明                                                                                                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 多上游韌性           | 200 次呼叫 @ 並發度 8，分佈於健康節點 `A`（5 ms）、長尾節點 `B`（40% 300 ms）、不穩定節點 `C`（40% `503`、40% `429` + `Retry-After: 1`） | `@defjs/core`（`p2c` + `outlierDetection` + `withRetry`）：**100.0% 成功率**、**1.03x** 網絡請求放大、**11.01 ms p95**（`A:195 / B:3 / C:9`）對比 `ky`：**81.5%**、**1.49x**、**1626.30 ms p95**（`A:67 / B:67 / C:163`）與原生 `fetch`：**71.0%**、**302.18 ms p95** | 每次測試執行前都會以相同方式重設 PRNG 狀態同上游計數器；`@defjs/core` 同時透過 `struct` 驗證所有回應。                                                                                                       |
+| ESM 瀏覽器打包體積   | `esbuild` 壓縮 + tree-shake（brotli-11 / gzip-9）                                                                                        | 精簡版 `@defjs/core`（`defineRequest` + `struct`）：**16.69 KB br / 18.75 KB gzip**；完整高韌性方案（`p2c` + `outlierDetection` + `withRetry` + 中介層）：**17.78 KB br / 20.00 KB gzip**                                                                             | `ofetch`（**3.62 KB br**）同 `ky`（**9.66 KB br**）冇包含 schema 解碼；`openapi-fetch + zod`（**76.79 KB br**）同 `@orpc/client + zod`（**81.51 KB br**）會打包埋 Zod。                                      |
+| HTTP keep-alive 開銷 | 本機 loopback Hono 伺服器，5,000 次請求（並發度 16 / 循序）                                                                              | `@defjs/core`（`fetch` + `struct`）：並發度 16 為 **23,481 req/s**（`0.57 ms` p50）；循序為 **9,926 req/s**（`0.09 ms` p50）                                                                                                                                          | 兩個 `@defjs/core` 變體都會對每個回應執行完整 `struct` 輸出驗證；喺並發度 16 下，`ky`（**21,310 req/s**）、`ofetch`（**28,921 req/s**）同 `openapi-fetch`（**34,393 req/s**）則直接回傳未經結構驗證嘅 JSON。 |
+| Schema 快速失敗解碼  | 1,000 筆資料陣列中第 `0` 項無效（`mitata`）                                                                                              | `@defjs/core`：**506.5 ns**（`1,974,438 ops/s`）對比 `zod`：**51.25 us**、`valibot`：**70.82 us**、`arktype`：**334.86 us**                                                                                                                                           | `@defjs/core` 會喺遇到第一個結構違規時即刻中止；而喺全部有效嘅輸入上（`flat-6-fields`、`array-1000-items`），ArkType JIT、Zod v4 同 Valibot 會執行得更快。                                                   |
+
+你可以喺[完整基準測試報告](https://github.com/defjs/defjs/blob/main/bench/REPORT.md)入面查看原始 JSON 指標同所有環境版本設定。

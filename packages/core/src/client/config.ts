@@ -1,5 +1,5 @@
 import type { Balancer } from "../balancer/balancer";
-import { pickFirstBalancer } from "../balancer/balancer";
+import { defaultPickFirstBalancer } from "../balancer/pick_first_default";
 import type { Interceptor } from "../interceptor/interceptor";
 import type { HttpRequest } from "../http/http_request";
 import type { WebSocketHeartbeatConfig } from "../web_socket/web_socket";
@@ -143,7 +143,7 @@ interface RetryContextBase {
 /**
  * What `shouldRetry` receives after a failed HTTP attempt.
  *
- * `cause` is the fault the attempt returned. `status` is the response status when the attempt got a response. `retryable` is `true` for a method in `methods` and a failure without a response, a 502, 503, or 504 response, or an attempt timeout.
+ * `cause` is the fault the attempt returned. `status` is the response status when the attempt got a response, and `headers` holds its response headers. `retryAfterMs` is present for a `429` or `503` response carrying a valid RFC 9110 `Retry-After` header when `retryAfter` is enabled. `retryable` is `true` for a method in `methods` and a failure without a response, a status in `statusCodes` (429, 502, 503, or 504 by default), or an attempt timeout.
  *
  * @group client
  * @see {@link RetryOptions}
@@ -156,12 +156,16 @@ export interface HttpRetryContext extends RetryContextBase {
   readonly endpoint: string;
   /** Status of the response, when the attempt got one. */
   readonly status?: number;
+  /** Response headers, when the attempt got a response. */
+  readonly headers?: Headers;
+  /** Parsed RFC 9110 `Retry-After` delay in milliseconds for a `429` or `503` response when `retryAfter` is enabled. */
+  readonly retryAfterMs?: number;
 }
 
 /**
  * What `shouldRetry` receives after an SSE handshake or stream failed.
  *
- * `cause` is the failure: an `HTTP_STATUS` fault for a non-2xx handshake, otherwise the error that ended the attempt. `retryable` is `true` for a method in `methods` and a handshake network failure, a 502, 503, or 504 handshake, an attempt timeout, or a network error after the stream opened. A normal end of the stream never retries.
+ * `cause` is the failure: an `HTTP_STATUS` fault for a non-2xx handshake, otherwise the error that ended the attempt. `retryable` is `true` for a method in `methods` and a handshake network failure, a handshake status in `statusCodes` (429, 502, 503, or 504 by default), an attempt timeout, or a network error after the stream opened. A normal end of the stream never retries.
  *
  * @group client
  * @see {@link RetryOptions}
@@ -178,11 +182,16 @@ export interface SSERetryContext extends RetryContextBase {
       readonly status: number;
       readonly statusText: string;
       readonly url: string;
+      readonly headers: Headers;
     };
     readonly url: string;
   };
   /** Status of the handshake response, when one arrived. */
   readonly status?: number;
+  /** Handshake response headers, when a handshake response arrived. */
+  readonly headers?: Headers;
+  /** Parsed RFC 9110 `Retry-After` delay in milliseconds for a `429` or `503` handshake when `retryAfter` is enabled. */
+  readonly retryAfterMs?: number;
 }
 
 /**
@@ -220,10 +229,11 @@ export type RetryContext =
  * After each failed attempt the policy decides in this order:
  *
  * 1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, a WebSocket whose constructor throws, and a `ReadableStream` request body end the call. `shouldRetry` is not called.
- * 2. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.
- * 3. `shouldRetry(context)` decides. Without it, `context.retryable` does.
- * 4. HTTP only: a retry that the `budget` cannot pay for ends the call.
- * 5. The call waits for the backoff delay, then the balancer picks an endpoint again. Every endpoint is a candidate, including the one that just failed, so a single endpoint is tried again after the delay.
+ * 2. When `retryAfter` is enabled and a `429` or `503` response carries a valid `Retry-After` delay exceeding `maxRetryAfterMs`, the call ends immediately without calling `shouldRetry` or spending `budget`.
+ * 3. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.
+ * 4. `shouldRetry(context)` decides. Without it, `context.retryable` does.
+ * 5. HTTP only: a retry that the `budget` cannot pay for ends the call.
+ * 6. The call waits for the `Retry-After` delay (when present on a `429` or `503` response and enabled, with positive jitter up to `maxRetryAfterMs`) or the exponential backoff delay, then the balancer picks an endpoint again. Every endpoint is a candidate, including the one that just failed, so a single endpoint is tried again after the delay.
  *
  * @exampleFile examples/client/http-retry.ts#example
  * @group client
@@ -238,7 +248,7 @@ export interface RetryOptions {
   readonly factor?: number;
   /** Cap on the final delay in milliseconds, jitter included. Defaults to 30000; `Infinity` removes the cap. The platform timer limit of `2_147_483_647` still applies. */
   readonly maxDelayMs?: number;
-  /** Multiplicative jitter in [0, 1]. Defaults to 0.2, plus or minus twenty percent. */
+  /** Multiplicative jitter in [0, 1]. Defaults to 0.2, plus or minus twenty percent for exponential backoff, or positive-only `[1, 1 + jitter]` for `Retry-After`. */
   readonly jitter?: number;
   /**
    * Time limit for one attempt in milliseconds. Unset by default. HTTP counts from the call to the end of the response body, SSE to the response headers, WebSocket to `open`. An attempt that runs out is a failure that the policy handles like a connection failure.
@@ -247,6 +257,12 @@ export interface RetryOptions {
   readonly attemptTimeoutMs?: number;
   /** Methods the default policy retries, case-insensitive. Defaults to GET, HEAD, OPTIONS, TRACE, PUT, and DELETE. HTTP checks every method an attempt sent, after interceptor rewrites. WebSocket ignores it. */
   readonly methods?: readonly string[];
+  /** HTTP and SSE non-2xx status codes retried by default. Defaults to `[429, 502, 503, 504]`. WebSocket ignores it. */
+  readonly statusCodes?: readonly number[];
+  /** Whether to honor the RFC 9110 `Retry-After` header on `429` and `503` HTTP and SSE handshake responses. Defaults to `true`. */
+  readonly retryAfter?: boolean;
+  /** Maximum `Retry-After` delay in milliseconds that the policy will wait. Defaults to `60000`; `Infinity` removes the cap (platform timer cap still applies). A longer server-requested delay ends the call immediately without waiting or drawing from `budget`. */
+  readonly maxRetryAfterMs?: number;
   /**
    * Decides whether a failed attempt is retried. It is called after the `maxRetries` check and replaces `context.retryable`; return it to keep the default. It may return a promise, which the caller's signal can cancel. A throw ends the call with `EXT_HOOK_FAILED` and the thrown value as `cause`; an open SSE stream reports that code in `closed.code`, and an open WebSocket session ends with `closed.kind: "error"` and the thrown value as `closed.cause`.
    */
@@ -369,7 +385,7 @@ export function resolveGlobalFetch(): FetchHandle {
 export function createClientConfig(): ClientConfig {
   return {
     endpoints: [],
-    balancer: pickFirstBalancer(),
+    balancer: defaultPickFirstBalancer(),
     retry: undefined,
     headers: undefined,
     http: { handle: DEFAULT_FETCH },

@@ -5,24 +5,121 @@ import { isURLSearchParams } from "./type_guards";
 
 export class RequestUrlError extends TypeError {}
 
-export function fillUrl(
+export interface PathTemplatePart {
+  readonly literal: string;
+  readonly param: string;
+}
+
+export type CompiledPathTemplate =
+  | {
+      readonly kind: "single";
+      readonly prefix: string;
+      readonly param: string;
+      readonly suffix: string;
+    }
+  | {
+      readonly kind: "multi";
+      readonly parts: readonly PathTemplatePart[];
+      readonly tail: string;
+    };
+
+const PATH_PARAM_RE = /:[^/]+/g;
+
+export function compilePathTemplate(
   path: string,
+): CompiledPathTemplate | undefined {
+  if (!path.includes(":")) {
+    return undefined;
+  }
+  let first: PathTemplatePart | undefined;
+  let parts: PathTemplatePart[] | undefined;
+  let lastIndex = 0;
+  PATH_PARAM_RE.lastIndex = 0;
+  let match = PATH_PARAM_RE.exec(path);
+  while (match !== null) {
+    const part: PathTemplatePart = {
+      literal: path.slice(lastIndex, match.index),
+      param: path.slice(match.index + 1, match.index + match[0].length),
+    };
+    if (first === undefined) {
+      first = part;
+    } else {
+      parts ??= [first];
+      parts.push(part);
+    }
+    lastIndex = match.index + match[0].length;
+    match = PATH_PARAM_RE.exec(path);
+  }
+  if (first === undefined) {
+    return undefined;
+  }
+  const tail = path.slice(lastIndex);
+  return parts === undefined
+    ? {
+        kind: "single",
+        prefix: first.literal,
+        param: first.param,
+        suffix: tail,
+      }
+    : {
+        kind: "multi",
+        parts,
+        tail,
+      };
+}
+
+export function fillCompiledPath(
+  path: string,
+  template: CompiledPathTemplate | undefined,
   params?: { [key: string]: string },
 ): string {
+  if (template === undefined) {
+    if (params !== undefined) {
+      for (const [key, value] of Object.entries(params)) {
+        encodePathSegment(key, value);
+      }
+    }
+    return path;
+  }
+
+  if (template.kind === "single") {
+    let encoded: string | undefined;
+    if (params !== undefined) {
+      for (const [key, value] of Object.entries(params)) {
+        const segment = encodePathSegment(key, value);
+        if (key === template.param) {
+          encoded = segment;
+        }
+      }
+    }
+    if (encoded === undefined) {
+      throw new TypeError(`Missing path param: ${template.param}`);
+    }
+    return `${template.prefix}${encoded}${template.suffix}`;
+  }
+
   const paramMap = new Map<string, string>();
-  if (params) {
+  if (params !== undefined) {
     for (const [key, value] of Object.entries(params)) {
       paramMap.set(key, encodePathSegment(key, value));
     }
   }
-
-  return path.replace(/:([^/]+)/g, (_, part: string) => {
-    const value = paramMap.get(part);
+  let result = "";
+  for (const part of template.parts) {
+    const value = paramMap.get(part.param);
     if (value === undefined) {
-      throw new TypeError(`Missing path param: ${part}`);
+      throw new TypeError(`Missing path param: ${part.param}`);
     }
-    return value;
-  });
+    result += part.literal + value;
+  }
+  return result + template.tail;
+}
+
+export function fillUrl(
+  path: string,
+  params?: { [key: string]: string },
+): string {
+  return fillCompiledPath(path, compilePathTemplate(path), params);
 }
 
 function encodePathSegment(key: string, value: string): string {
@@ -71,6 +168,20 @@ export function resolveTransportQuery(
     : createSearchParams(query);
 }
 
+/** Encodes a query directly to its wire search string without allocating an empty URLSearchParams when absent. */
+export function resolveDirectQueryString(
+  query: URLSearchParams | { [key: string]: unknown } | undefined,
+  serializer?: QuerySerializer,
+): string {
+  if (query === undefined) {
+    return "";
+  }
+  if (isURLSearchParams(query)) {
+    return query.toString();
+  }
+  return resolveTransportQuery(query, serializer).toString();
+}
+
 /**
  * Copies `source` into `target`. The first value of a name replaces the target's value of that name, so a builder
  * header overrides a default; later values of the same name, such as each Set-Cookie, are appended.
@@ -111,8 +222,12 @@ export function createResolvedRequestUrl(
 ): URL {
   const base = createEndpointDirectoryBase(baseEndpoint);
   let url: URL;
+  const relativePath =
+    path.charCodeAt(0) === 0x2f && path.charCodeAt(1) !== 0x2f
+      ? path.slice(1)
+      : path;
   try {
-    url = new URL(path.replace(/^\/(?!\/)/, ""), base);
+    url = new URL(relativePath, base);
   } catch {
     throw new RequestUrlError("Endpoint path must resolve to a valid URL");
   }

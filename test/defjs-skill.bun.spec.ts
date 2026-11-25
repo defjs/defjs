@@ -1,9 +1,13 @@
 import { expect, test } from "vitest";
 
 const skillFile = new URL("../skills/defjs/SKILL.md", import.meta.url);
-const coreExports = new Set([
+const knownExports = new Set([
   ...Object.keys(await import("../packages/core/src/index.ts")),
+  ...Object.keys(await import("../packages/core/src/concurrent/index.ts")),
   ...Object.keys(await import("../packages/core/src/xsrf/index.ts")),
+  ...Object.keys(await import("../packages/core/src/port/index.ts")),
+  ...Object.keys(await import("../packages/core/src/port/webext/index.ts")),
+  ...Object.keys(await import("../packages/cli/src/index.ts")),
 ]);
 // Names that start like a Core export but belong to the documented integrations or Vue itself.
 const otherNames = new Set([
@@ -103,8 +107,8 @@ test("Defjs skill and reference files have clean Markdown, no locale slugs, and 
       const name = match[0];
       if (otherNames.has(name)) continue;
       expect(
-        coreExports.has(name),
-        `${file.pathname}: ${name} is not a public Core export`,
+        knownExports.has(name),
+        `${file.pathname}: ${name} is not a public Defjs export`,
       ).toBe(true);
     }
   }

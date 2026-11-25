@@ -1,16 +1,16 @@
 ---
 title: Defjs
-description: Design and publish TypeScript SDKs with reusable API definitions and application-owned clients.
+description: TypeScript SDK & Resilient Client Kit — define reusable HTTP, SSE, and WebSocket contracts separately from application-owned resilient clients.
 ---
 
 # Defjs
 
-**Define the API contract once. Configure execution per application.**
+**TypeScript SDK & Resilient Client Kit — Define the API contract once. Configure execution per application.**
 
 Defjs separates the two sides of a TypeScript SDK:
 
-- **SDK Definition (`@defjs/core`)** — Declare typed HTTP, SSE, and WebSocket operations alongside their `struct` schemas, whether you are publishing a public SDK or structuring an app's internal API layer. A definition is pure data: importing it starts no network call and binds no global client.
-- **Application Execution** — Applications create their own `Client` (`createClient(withEndpoint(...))`), attach credentials and interceptors, configure load balancing, and pass that client when calling an operation.
+- **SDK Definition (`@defjs/core`, `@defjs/cli`)** — Declare typed HTTP, SSE, and WebSocket operations alongside their `struct` schemas (hand-written or generated as stateless ESM from OpenAPI 2.0/3.0/3.1/3.2 specs). A definition is pure data: importing it starts no network call and binds no global client.
+- **Resilient Application Execution (`@defjs/core`)** — Applications create their own `Client` (`createClient(withEndpoint(...))`), attach credentials and interceptors (`basicAuth*`, `idempotencyKeyHttpInterceptor`, `concurrencyLimitHttpInterceptor`), configure P2C load balancing and `outlierDetection` (`halfOpen`, `maxEjectionPercent`), enable `429`/`Retry-After` retries, fan out via `@defjs/core/concurrent`, or bridge workers/extensions with `@defjs/core/port`.
 
 ## Quick look: SDK definition vs. application execution
 
@@ -45,9 +45,10 @@ Calling `getHealth(client)` performs I/O and resolves an error-first tuple. Chec
 
 1. **[Quick start](/docs/start)** — Define an operation, test it offline with a local Fetch handle, and point a client at a live service.
 2. **[Core architecture](/docs/design-decisions)** — Understand the six response-decoding rules, error-first tuples, and resource ownership.
-3. **[Defining SDKs](/docs/struct)** — Declare wire contracts with [Struct](/docs/struct) and export [HTTP](/docs/http), [SSE](/docs/sse), and [WebSocket](/docs/web-socket) operations.
-4. **[Client & execution](/docs/client)** — Configure [Clients](/docs/client), handle typed [Errors](/docs/errors), attach [Interceptors](/docs/interceptors), and set up [Load balancing & failover](/docs/load-balancing).
-5. **[Best practices & testing](/docs/best-practices)** — Follow [Engineering conventions](/docs/best-practices), organize an [Application API layer](/docs/application-api) or [Public SDK](/docs/public-sdk), and write deterministic [Tests](/docs/testing).
+3. **[Comparison & hybrid BFF architecture](/docs/comparison-and-architecture)** — Compare Defjs with `fetch`, `ky`, `ofetch`, `openapi-fetch`, and `oRPC`, and see the Defjs + oRPC/Hono BFF blueprint and benchmarks.
+4. **[Defining SDKs](/docs/struct)** — Declare wire contracts with [Struct](/docs/struct) and export [HTTP](/docs/http), [SSE](/docs/sse), and [WebSocket](/docs/web-socket) operations.
+5. **[Client & execution](/docs/client)** — Configure [Clients](/docs/client), handle typed [Errors](/docs/errors), attach [Interceptors](/docs/interceptors), and set up [Load balancing & failover](/docs/load-balancing).
+6. **[Best practices & testing](/docs/best-practices)** — Follow [Engineering conventions](/docs/best-practices), organize an [Application API layer](/docs/application-api) or [Public SDK](/docs/public-sdk), and write deterministic [Tests](/docs/testing).
 
 ## Supported transports and result tuples
 
@@ -63,12 +64,13 @@ On an HTTP failure, the tuple is `[err, undefined, undefined]` because `err` alr
 
 ## Official packages
 
-| Package                       | Role                                                                         | Guide                                                           |
-| ----------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `@defjs/core`                 | Zero-dependency SDK definitions, `struct`, client, and interceptors          | [Quick start](/docs/start)                                      |
-| `@defjs/react`                | `ClientProvider` and `useClient()` context injection for React 18+           | [React integration](/docs/integrations/react)                   |
-| `@defjs/vue`                  | `createClientPlugin`, `HTTP_CLIENT`, and `injectClient()` for Vue 3 or later | [Vue integration](/docs/integrations/vue)                       |
-| `@defjs/opentelemetry-server` | Server-side outbound spans, metrics, and diagnostic logs                     | [OpenTelemetry Server](/docs/integrations/opentelemetry-server) |
+| Package                       | Role                                                                                            | Guide                                                           |
+| ----------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `@defjs/core`                 | Zero-dependency SDK definitions, `struct`, client, resilience, middleware, `concurrent`, `port` | [Quick start](/docs/start)                                      |
+| `@defjs/cli`                  | Development CLI generating stateless ESM definitions from OpenAPI 2.0–3.2 specs                 | [CLI integration](/docs/integrations/cli)                       |
+| `@defjs/react`                | `ClientProvider` and `useClient()` context injection for React 18+                              | [React integration](/docs/integrations/react)                   |
+| `@defjs/vue`                  | `createClientPlugin`, `HTTP_CLIENT`, and `injectClient()` for Vue 3 or later                    | [Vue integration](/docs/integrations/vue)                       |
+| `@defjs/opentelemetry-server` | Server-side outbound spans, metrics, and diagnostic logs                                        | [OpenTelemetry Server](/docs/integrations/opentelemetry-server) |
 
 ## Popular cookbook recipes
 
@@ -76,6 +78,10 @@ On an HTTP failure, the tuple is `[err, undefined, undefined]` because `err` alr
 - [Send and validate JSON](/recipes/post-json)
 - [Handle a declared 404](/recipes/get-declared-404)
 - [Cancel an HTTP call](/recipes/cancel-http)
+- [Cursor pagination stream](/recipes/cursor-pagination)
+- [Idempotency keys on retries](/recipes/idempotency-key)
+- [Bulkhead concurrency limits](/recipes/concurrency-limit)
+- [Reuse connections with Undici Pool](/recipes/undici-pool)
 - [Refresh a Bearer token once on 401](/recipes/refresh-bearer-once)
 - [Consume an SSE stream](/recipes/consume-sse)
 - [Open a WebSocket session](/recipes/websocket-session)

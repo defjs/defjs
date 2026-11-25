@@ -12,6 +12,7 @@ Defjs separa el contrato de API que publica el equipo de autoría del SDK de la 
 - [Visión general](/es-ES)
 - [Inicio rápido](/es-ES/docs/start)
 - [Arquitectura central](/es-ES/docs/design-decisions)
+- [Comparación y arquitectura híbrida](/es-ES/docs/comparison-and-architecture)
 
 ## Definir SDKs [#defining-sdks]
 
@@ -26,6 +27,7 @@ Defjs separa el contrato de API que publica el equipo de autoría del SDK de la 
 - [Tratamiento de errores](/es-ES/docs/errors)
 - [Interceptores](/es-ES/docs/interceptors)
 - [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing)
+- [Transporte Port](/es-ES/docs/port)
 
 ## Buenas prácticas [#best-practices]
 
@@ -40,5 +42,6 @@ Defjs separa el contrato de API que publica el equipo de autoría del SDK de la 
 - [React](/es-ES/docs/integrations/react)
 - [Vue](/es-ES/docs/integrations/vue)
 - [OpenTelemetry en el servidor](/es-ES/docs/integrations/opentelemetry-server)
+- [CLI y generador OpenAPI](/es-ES/docs/integrations/cli)
 - [Skill](/es-ES/docs/ai)
 - [llms.txt](/es-ES/docs/ai-api)

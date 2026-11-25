@@ -1,7 +1,9 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { pickFirstBalancer, roundRobinBalancer } from "../balancer";
 import type { RetryContext, RetryOptions } from "../client/config";
 import { createClient } from "../client/client";
 import {
+  withBalancer,
   withEndpoint,
   withHTTPHandle,
   withInterceptors,
@@ -9,6 +11,7 @@ import {
 } from "../client/option";
 import { createHttpInterceptor } from "../interceptor";
 import { ERR_TIMEOUT } from "../error";
+import { struct } from "../struct";
 import { defineRequest } from "./http";
 
 afterEach(() => {
@@ -42,7 +45,7 @@ function setup(
   );
 }
 
-test.each([502, 503, 504])(
+test.each([429, 502, 503, 504])(
   "a %i response is retried by default",
   async (status) => {
     const handle = respond(status, 200);
@@ -51,7 +54,7 @@ test.each([502, 503, 504])(
   },
 );
 
-test.each([400, 404, 429, 500])(
+test.each([400, 404, 500])(
   "a %i response is not retried by default, but the policy function is asked",
   async (status) => {
     const contexts: RetryContext[] = [];
@@ -71,10 +74,10 @@ test.each([400, 404, 429, 500])(
 );
 
 test("the policy function can retry a status the default does not", async () => {
-  const handle = respond(429, 200);
+  const handle = respond(500, 200);
   const client = setup(handle, {
     shouldRetry: (context) =>
-      context.transport === "http" && context.status === 429,
+      context.transport === "http" && context.status === 500,
   });
   expect((await get(client))[0]).toBeNull();
   expect(handle).toHaveBeenCalledTimes(2);
@@ -336,4 +339,292 @@ test("request options keep the budget of the client", async () => {
     (await get(client({ retry: { delayMs: 0, maxRetries: 3 } })))[0]?.code,
   ).toBe("NET_UNREACHABLE");
   expect(handle).toHaveBeenCalledTimes(1);
+});
+
+test("statusCodes configures default retryable statuses and POST 429 stays opt-in", async () => {
+  const optOut = respond(429, 200);
+  const [optOutFault] = await get(
+    setup(optOut, { statusCodes: [502, 503, 504] }),
+  );
+  expect(optOutFault?.code).toBe("HTTP_STATUS");
+  expect(optOut).toHaveBeenCalledTimes(1);
+
+  const optIn = respond(408, 200);
+  const [optInFault] = await get(setup(optIn, { statusCodes: [408] }));
+  expect(optInFault).toBeNull();
+  expect(optIn).toHaveBeenCalledTimes(2);
+
+  const post = defineRequest({ method: "POST", path: "/" });
+  const postBlocked = respond(429, 200);
+  expect((await post(setup(postBlocked)))[0]?.code).toBe("HTTP_STATUS");
+  expect(postBlocked).toHaveBeenCalledTimes(1);
+
+  const postAllowed = respond(429, 200);
+  expect((await post(setup(postAllowed, { methods: ["POST"] })))[0]).toBeNull();
+  expect(postAllowed).toHaveBeenCalledTimes(2);
+});
+
+test.each([429, 503])(
+  "honors RFC 9110 Retry-After delay-seconds on %i with positive-only jitter and exposes context headers",
+  async (status) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.spyOn(Math, "random").mockReturnValue(1);
+    const contexts: RetryContext[] = [];
+    const first = Promise.withResolvers<void>();
+    let calls = 0;
+    const handle = vi.fn(() => {
+      first.resolve();
+      return Promise.resolve(
+        calls++ === 0
+          ? new Response(null, {
+              status,
+              headers: { "retry-after": "2", "x-rate-limit-scope": "burst" },
+            })
+          : new Response(null, { status: 200 }),
+      );
+    });
+    const client = createClient(
+      withEndpoint(...endpoints),
+      withRetry({
+        delayMs: 100,
+        jitter: 0.2,
+        shouldRetry(context) {
+          contexts.push(context);
+          return context.retryable;
+        },
+      }),
+      withHTTPHandle(handle),
+    );
+    const pending = get(client);
+    await first.promise;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(2399);
+    expect(handle).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await pending)[0]).toBeNull();
+    expect(handle).toHaveBeenCalledTimes(2);
+    expect(contexts[0]?.transport).toBe("http");
+    if (contexts[0]?.transport === "http") {
+      expect(contexts[0].retryAfterMs).toBe(2000);
+      expect(contexts[0].headers?.get("x-rate-limit-scope")).toBe("burst");
+    }
+  },
+);
+
+test("honors Retry-After HTTP-date, ignores it when retryAfter is false, and fast-fails over maxRetryAfterMs", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  vi.setSystemTime(Date.UTC(2026, 10, 24, 12, 0, 0));
+  const firstDate = Promise.withResolvers<void>();
+  let dateCalls = 0;
+  const dateHandle = vi.fn(() => {
+    firstDate.resolve();
+    return Promise.resolve(
+      dateCalls++ === 0
+        ? new Response(null, {
+            status: 429,
+            headers: { "retry-after": "Tue, 24 Nov 2026 12:00:05 GMT" },
+          })
+        : new Response(null, { status: 200 }),
+    );
+  });
+  const dateClient = createClient(
+    withEndpoint(...endpoints),
+    withRetry({ delayMs: 100, jitter: 0 }),
+    withHTTPHandle(dateHandle),
+  );
+  const pendingDate = get(dateClient);
+  await firstDate.promise;
+  await vi.advanceTimersByTimeAsync(0);
+  expect(dateHandle).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(1);
+  await vi.advanceTimersByTimeAsync(4999);
+  expect(dateHandle).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect((await pendingDate)[0]).toBeNull();
+  expect(dateHandle).toHaveBeenCalledTimes(2);
+
+  const disabledContexts: RetryContext[] = [];
+  const firstDisabled = Promise.withResolvers<void>();
+  let disabledCalls = 0;
+  const disabledHandle = vi.fn(() => {
+    firstDisabled.resolve();
+    return Promise.resolve(
+      disabledCalls++ === 0
+        ? new Response(null, { status: 429, headers: { "retry-after": "30" } })
+        : new Response(null, { status: 200 }),
+    );
+  });
+  const disabledClient = createClient(
+    withEndpoint(...endpoints),
+    withRetry({
+      delayMs: 50,
+      jitter: 0,
+      retryAfter: false,
+      shouldRetry(context) {
+        disabledContexts.push(context);
+        return context.retryable;
+      },
+    }),
+    withHTTPHandle(disabledHandle),
+  );
+  const pendingDisabled = get(disabledClient);
+  await firstDisabled.promise;
+  await vi.advanceTimersByTimeAsync(0);
+  expect(disabledHandle).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(50);
+  expect((await pendingDisabled)[0]).toBeNull();
+  expect(disabledHandle).toHaveBeenCalledTimes(2);
+  if (disabledContexts[0]?.transport === "http") {
+    expect(disabledContexts[0].retryAfterMs).toBeUndefined();
+  }
+
+  const shouldRetry = vi.fn(() => true);
+  const oversizedHandle = vi.fn(() =>
+    Promise.resolve(
+      new Response(null, { status: 429, headers: { "retry-after": "120" } }),
+    ),
+  );
+  const oversizedClient = createClient(
+    withEndpoint(...endpoints),
+    withRetry({ maxRetryAfterMs: 60_000, shouldRetry }),
+    withHTTPHandle(oversizedHandle),
+  );
+  const [oversizedFault] = await get(oversizedClient);
+  expect(oversizedFault?.code).toBe("HTTP_STATUS");
+  expect(oversizedHandle).toHaveBeenCalledTimes(1);
+  expect(shouldRetry).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("retries non-JSON and malformed 429 error bodies, ignores 500 truncated bodies, and leaves balancer stickiness intact", async () => {
+  const errOp = defineRequest({
+    method: "GET",
+    path: "/",
+    error: struct.object({ code: struct.string() }),
+  });
+
+  for (const responseFactory of [
+    () =>
+      new Response("<html>rate limited</html>", {
+        status: 429,
+        headers: { "content-type": "text/html", "retry-after": "0" },
+      }),
+    () =>
+      new Response("{broken-json", {
+        status: 429,
+        headers: { "content-type": "application/json", "retry-after": "0" },
+      }),
+    () =>
+      Response.json(
+        { wrong: 123 },
+        { status: 429, headers: { "retry-after": "0" } },
+      ),
+  ]) {
+    let calls = 0;
+    const handle = vi.fn(() =>
+      Promise.resolve(
+        calls++ === 0 ? responseFactory() : new Response(null, { status: 200 }),
+      ),
+    );
+    const [fault] = await errOp(setup(handle));
+    expect(fault).toBeNull();
+    expect(handle).toHaveBeenCalledTimes(2);
+  }
+
+  // Non-2xx stream error yields NET_BODY_INCOMPLETE (exercises non-response-fault narrowing path).
+  const truncatedHandle = vi.fn(() =>
+    Promise.resolve(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("{"));
+            controller.error(new TypeError("truncated"));
+          },
+        }),
+        { status: 500, headers: { "content-type": "application/json" } },
+      ),
+    ),
+  );
+  const shouldRetry = vi.fn(() => true);
+  const [truncatedFault] = await errOp(setup(truncatedHandle, { shouldRetry }));
+  expect(truncatedFault?.code).toBe("NET_BODY_INCOMPLETE");
+  expect(shouldRetry).not.toHaveBeenCalled();
+
+  // statusOutcome(429) === undefined keeps pickFirstBalancer sticky and prevents outlierDetection ejection.
+  const pickedEndpoints: string[] = [];
+  let stickyCalls = 0;
+  const stickyHandle = vi.fn(() =>
+    Promise.resolve(
+      stickyCalls++ < 6
+        ? new Response(null, { status: 429, headers: { "retry-after": "0" } })
+        : new Response(null, { status: 200 }),
+    ),
+  );
+  const stickyClient = createClient(
+    withEndpoint(...endpoints),
+    withBalancer(
+      pickFirstBalancer({ outlierDetection: { consecutiveFailures: 2 } }),
+    ),
+    withRetry({ delayMs: 0, maxRetries: 2 }),
+    withInterceptors(
+      createHttpInterceptor((request, next) => {
+        pickedEndpoints.push(request.baseEndpoint ?? "");
+        return next(request);
+      }),
+    ),
+    withHTTPHandle(stickyHandle),
+  );
+  await get(stickyClient);
+  await get(stickyClient);
+  expect(pickedEndpoints.every((ep) => ep === endpoints[0])).toBe(true);
+
+  const rrClient = createClient(
+    withEndpoint(...endpoints),
+    withBalancer(roundRobinBalancer({ outlierDetection: {} })),
+    withRetry({ delayMs: 0, maxRetries: 1 }),
+    withHTTPHandle(() => Promise.resolve(new Response(null, { status: 429 }))),
+  );
+  expect((await get(rrClient))[0]?.code).toBe("HTTP_STATUS");
+});
+
+test("sets stable correlationId across retries and increments retryAttempt", async () => {
+  const seen: Array<{ correlationId?: string; retryAttempt?: number }> = [];
+  const handle = respond(429, 503, 200);
+  const captureInterceptor = createHttpInterceptor((request, next) => {
+    seen.push({
+      correlationId: request.correlationId,
+      retryAttempt: request.retryAttempt,
+    });
+    return next(request);
+  });
+
+  const noRetry = createClient(
+    withEndpoint(...endpoints),
+    withInterceptors(captureInterceptor),
+    withHTTPHandle(() => Promise.resolve(new Response(null, { status: 200 }))),
+  );
+  expect((await get(noRetry))[0]).toBeNull();
+  expect(seen).toHaveLength(1);
+  expect(seen[0]?.correlationId).toBeTruthy();
+  expect(seen[0]?.retryAttempt).toBe(0);
+
+  seen.length = 0;
+  const retried = setup(
+    handle,
+    { maxRetries: 3 },
+    withInterceptors(captureInterceptor),
+  );
+  expect((await get(retried))[0]).toBeNull();
+  expect(seen.map((entry) => entry.retryAttempt)).toEqual([0, 1, 2]);
+  expect(seen[0]?.correlationId).toBeTruthy();
+  expect(seen[1]?.correlationId).toBe(seen[0]?.correlationId);
+  expect(seen[2]?.correlationId).toBe(seen[0]?.correlationId);
+
+  seen.length = 0;
+  await get(noRetry);
+  const firstId = seen[0]?.correlationId;
+  await get(noRetry);
+  expect(seen[1]?.correlationId).not.toBe(firstId);
 });

@@ -1,16 +1,16 @@
 ---
 title: Defjs
-description: Concevoir et publier des SDK TypeScript avec des définitions d'API réutilisables et des clients configurés par l'application.
+description: Kit SDK TypeScript & Client Résilient — définissez des contrats HTTP, SSE et WebSocket réutilisables indépendamment des clients résilients gérés par l'application.
 ---
 
 # Defjs
 
-**Définissez le contrat d'API une seule fois. Configurez l'exécution par application.**
+**Kit SDK TypeScript & Client Résilient — Définissez le contrat d'API une seule fois. Configurez l'exécution par application.**
 
 Defjs sépare les deux facettes d'un SDK TypeScript :
 
-- **Définition du SDK (`@defjs/core`)** — Déclarez des opérations typées HTTP, SSE et WebSocket ainsi que leurs schémas `struct`, que vous publiiez un SDK public ou structuriez la couche API interne d'une application. Une définition est une donnée pure : son importation ne déclenche aucun appel réseau et ne lie aucun client global.
-- **Exécution applicative** — Les applications créent leur propre `Client` (`createClient(withEndpoint(...))`), y associent identifiants, intercepteurs et répartiteurs, puis transmettent ce client lors de l'appel d'une opération.
+- **Définition du SDK (`@defjs/core`, `@defjs/cli`)** — Déclarez des opérations typées HTTP, SSE et WebSocket ainsi que leurs schémas `struct` (écrits à la main ou générés en ESM sans état depuis des spécifications OpenAPI 2.0/3.0/3.1/3.2). Une définition est une donnée pure : son importation ne déclenche aucun appel réseau et ne lie aucun client global.
+- **Exécution applicative résiliente (`@defjs/core`)** — Les applications créent leur propre `Client` (`createClient(withEndpoint(...))`), y associent identifiants et intercepteurs (`basicAuth*`, `idempotencyKeyHttpInterceptor`, `concurrencyLimitHttpInterceptor`), configurent la répartition de charge P2C et `outlierDetection` (`halfOpen`, `maxEjectionPercent`), activent les retries `429`/`Retry-After`, parallélisent via `@defjs/core/concurrent` ou relient workers et extensions avec `@defjs/core/port`.
 
 ## Aperçu rapide : définition de SDK vs exécution applicative
 
@@ -45,9 +45,10 @@ L'appel `getHealth(client)` effectue les E/S et résout un tuple error-first. V�
 
 1. **[Démarrage rapide](/fr-FR/docs/start)** — Définissez une opération, testez-la hors ligne avec un handle Fetch local et pointez un client vers un service réel.
 2. **[Architecture du cœur](/fr-FR/docs/design-decisions)** — Comprenez les six règles de décodage des réponses, les tuples error-first et la gestion des ressources.
-3. **[Définir des SDK](/fr-FR/docs/struct)** — Déclarez vos contrats de données avec [Struct](/fr-FR/docs/struct) et exportez des opérations [HTTP](/fr-FR/docs/http), [SSE](/fr-FR/docs/sse) et [WebSocket](/fr-FR/docs/web-socket).
-4. **[Client & exécution](/fr-FR/docs/client)** — Configurez vos [Clients](/fr-FR/docs/client), traitez les [Erreurs](/fr-FR/docs/errors) typées, associez des [Intercepteurs](/fr-FR/docs/interceptors) et configurez la [Répartition de charge & basculement](/fr-FR/docs/load-balancing).
-5. **[Bonnes pratiques & tests](/fr-FR/docs/best-practices)** — Appliquez les [Conventions d'ingénierie](/fr-FR/docs/best-practices), organisez une [Couche API applicative](/fr-FR/docs/application-api) ou un [SDK public](/fr-FR/docs/public-sdk), et écrivez des [Tests](/fr-FR/docs/testing) déterministes.
+3. **[Comparaison & architecture BFF hybride](/fr-FR/docs/comparison-and-architecture)** — Comparez Defjs avec `fetch`, `ky`, `ofetch`, `openapi-fetch` et `oRPC`, et découvrez le modèle BFF Defjs + oRPC/Hono ainsi que les benchmarks.
+4. **[Définir des SDK](/fr-FR/docs/struct)** — Déclarez vos contrats de données avec [Struct](/fr-FR/docs/struct) et exportez des opérations [HTTP](/fr-FR/docs/http), [SSE](/fr-FR/docs/sse) et [WebSocket](/fr-FR/docs/web-socket).
+5. **[Client & exécution](/fr-FR/docs/client)** — Configurez vos [Clients](/fr-FR/docs/client), traitez les [Erreurs](/fr-FR/docs/errors) typées, associez des [Intercepteurs](/fr-FR/docs/interceptors) et configurez la [Répartition de charge & basculement](/fr-FR/docs/load-balancing).
+6. **[Bonnes pratiques & tests](/fr-FR/docs/best-practices)** — Appliquez les [Conventions d'ingénierie](/fr-FR/docs/best-practices), organisez une [Couche API applicative](/fr-FR/docs/application-api) ou un [SDK public](/fr-FR/docs/public-sdk), et écrivez des [Tests](/fr-FR/docs/testing) déterministes.
 
 ## Transports pris en charge et formes de tuples
 
@@ -63,12 +64,13 @@ En cas d'échec HTTP, le tuple est `[err, undefined, undefined]`, car l'objet `e
 
 ## Packages officiels
 
-| Package                       | Rôle                                                                              | Guide                                                                  |
-| ----------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `@defjs/core`                 | Définitions de SDK sans dépendance, `struct`, client et intercepteurs             | [Démarrage rapide](/fr-FR/docs/start)                                  |
-| `@defjs/react`                | Injection de contexte `ClientProvider` et `useClient()` pour React 18+            | [Intégration React](/fr-FR/docs/integrations/react)                    |
-| `@defjs/vue`                  | `createClientPlugin`, `HTTP_CLIENT` et `injectClient()` pour Vue 3 ou plus récent | [Intégration Vue](/fr-FR/docs/integrations/vue)                        |
-| `@defjs/opentelemetry-server` | Spans sortants côté serveur, métriques et journaux de diagnostic                  | [Serveur OpenTelemetry](/fr-FR/docs/integrations/opentelemetry-server) |
+| Package                       | Rôle                                                                                               | Guide                                                                  |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `@defjs/core`                 | Définitions de SDK sans dépendance, `struct`, client, résilience, middleware, `concurrent`, `port` | [Démarrage rapide](/fr-FR/docs/start)                                  |
+| `@defjs/cli`                  | CLI de développement générant des définitions ESM sans état depuis des specs OpenAPI 2.0–3.2       | [Intégration CLI](/fr-FR/docs/integrations/cli)                        |
+| `@defjs/react`                | Injection de contexte `ClientProvider` et `useClient()` pour React 18+                             | [Intégration React](/fr-FR/docs/integrations/react)                    |
+| `@defjs/vue`                  | `createClientPlugin`, `HTTP_CLIENT` et `injectClient()` pour Vue 3 ou plus récent                  | [Intégration Vue](/fr-FR/docs/integrations/vue)                        |
+| `@defjs/opentelemetry-server` | Spans sortants côté serveur, métriques et journaux de diagnostic                                   | [Serveur OpenTelemetry](/fr-FR/docs/integrations/opentelemetry-server) |
 
 ## Recettes populaires
 
@@ -76,6 +78,10 @@ En cas d'échec HTTP, le tuple est `[err, undefined, undefined]`, car l'objet `e
 - [Envoyer et valider du JSON](/fr-FR/recipes/post-json)
 - [Traiter une erreur 404 déclarée](/fr-FR/recipes/get-declared-404)
 - [Annuler un appel HTTP](/fr-FR/recipes/cancel-http)
+- [Flux de pagination par curseur](/fr-FR/recipes/cursor-pagination)
+- [Clés d'idempotence lors des retries](/fr-FR/recipes/idempotency-key)
+- [Limites de concurrence en bulkhead](/fr-FR/recipes/concurrency-limit)
+- [Réutiliser les connexions avec Undici Pool](/fr-FR/recipes/undici-pool)
 - [Rafraîchir un jeton Bearer sur 401](/fr-FR/recipes/refresh-bearer-once)
 - [Consommer un flux SSE](/fr-FR/recipes/consume-sse)
 - [Ouvrir une session WebSocket](/fr-FR/recipes/websocket-session)

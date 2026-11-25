@@ -1,0 +1,78 @@
+---
+title: Comparación y arquitectura híbrida
+description: Comparación objetiva frente a fetch, ky, ofetch, openapi-fetch y oRPC, además de la arquitectura BFF híbrida con Defjs + oRPC/Hono y benchmarks reproducibles.
+---
+
+# Comparación y arquitectura híbrida
+
+Defjs se sitúa en la intersección de dos ecosistemas: **clientes HTTP para navegador y Node** (`fetch`, `ky`, `ofetch`, `axios`, `openapi-fetch`) y **frameworks RPC contract-first** (`oRPC`, tRPC). Esta guía aclara dónde encaja cada herramienta, cuándo Defjs supone una sobrecarga innecesaria y cómo los equipos los combinan en producción.
+
+## Comparación del ecosistema
+
+| Capacidad                              | `fetch` puro                      | `ky` / `ofetch`                        | `openapi-fetch`                             | `oRPC`                                     | Defjs (`@defjs/core`)                                                                   |
+| -------------------------------------- | --------------------------------- | -------------------------------------- | ------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Diseño principal                       | Primitiva de la plataforma        | Envoltorio HTTP de aplicación          | Cliente Fetch tipado de OpenAPI             | Framework RPC TS full-stack                | Definición de SDK + kit de cliente resiliente                                           |
+| Separación definición / cliente        | Manual                            | Acopla instancia por URL base          | Tipos de ruta compartidos; el cliente llama | Router y cliente acoplados por contrato    | De primera clase (datos `define*` frente a `Client`)                                    |
+| Transportes unificados                 | Solo HTTP                         | Solo HTTP                              | Solo HTTP                                   | HTTP + SSE/iterador (lado del servidor)    | HTTP, SSE y WebSocket bajo un mismo cliente                                             |
+| Contratos de red y alias en runtime    | Ninguno                           | Ninguno                                | Middleware opcional                         | Validador externo (Zod/Valibot/ArkType)    | `struct` sin dependencias con `.alias()` reversible                                     |
+| Semántica de fallo                     | Rechaza errores de red; `!res.ok` | Lanza `HTTPError`                      | `{ data, error }` (lanza o rechaza en red)  | Errores RPC seguros o lanzables            | Tupla estilo Go `[err, value, meta]` sin lanzar excepciones                             |
+| Balanceo multi-upstream                | Ninguno                           | Ninguno                                | Ninguno                                     | Plugins de enlace (sin P2C EWMA integrado) | `p2cBalancer` + `outlierDetection` integrados (`halfOpen`, `maxEjectionPercent`)        |
+| `429` + `Retry-After` + correlation ID | Manual                            | `ky` gestiona `Retry-After`; URL única | Sin soporte integrado                       | Plugin de reintentos de cliente            | `429`/RFC `Retry-After` nativo, presupuesto de reintentos y `correlationId`             |
+| Concurrencia estructurada              | `Promise.all` puro                | `Promise.all` puro                     | `Promise.all` puro                          | Plugin de lote / `Promise.all`             | `@defjs/core/concurrent` vinculado al cliente + cancelación                             |
+| Generación de código OpenAPI           | Ninguna                           | Ninguna                                | Solo tipos con `openapi-typescript`         | Exportación OpenAPI desde el router oRPC   | `@defjs/cli` genera módulos ESM sin estado + `struct`                                   |
+| Proxy entre fronteras                  | `postMessage` manual              | Manual                                 | Manual                                      | Adaptadores MessagePort / worker           | `@defjs/core/port` + `/webext` (HTTP, SSE, WS + política de origen por defecto denegar) |
+
+### Cuándo elegir una alternativa en su lugar
+
+- **Elige `fetch` puro, `ofetch` o `ky`** cuando la aplicación llama a unos pocos endpoints del mismo origen sin publicar un SDK, sin conmutación por error multi-upstream y sin validación de esquemas en tiempo de ejecución (~4–10 KB brotli).
+- **Elige `openapi-fetch`** cuando ya mantienes tipos de `openapi-typescript` y solo buscas tipado en tiempo de compilación con envoltorios mínimos sobre Fetch y sin decodificación de red en tiempo de ejecución.
+- **Elige `oRPC` (o Hono RPC)** para **RPC propio frontend-a-BFF / full-stack** cuando tu equipo controla tanto el servidor TypeScript como el cliente del navegador y quiere inferencia de procedimientos de extremo a extremo sin mantener contratos HTTP separados.
+
+---
+
+## Arquitectura BFF híbrida: oRPC / Hono en el borde, Defjs aguas abajo
+
+El patrón más habitual en producción a gran escala no enfrenta a Defjs con `oRPC` o `Hono`, sino que los combina a ambos lados de la frontera de confianza:
+
+```txt
+┌──────────────┐   RPC propio (oRPC / Hono)        ┌─────────────────────────────────┐
+│ Navegador /  │ ────────────────────────────────▶ │  BFF (Servidor Hono / oRPC)     │
+│ App móvil    │ ◀──────────────────────────────── │                                 │
+└──────────────┘                                   │  Client @defjs/core:            │
+                                                   │  • handle undici.Pool           │
+                                                   │  • p2cBalancer({                │
+                                                   │      outlierDetection: {        │
+                                                   │        halfOpen: true           │
+                                                   │      }                          │
+                                                   │    })                           │
+                                                   │  • withRetry (429 / 503)        │
+                                                   │  • bulkhead + idempotencia      │
+                                                   │  • @defjs/opentelemetry-server  │
+                                                   └────────────────┬────────────────┘
+                                                                    │
+                                        REST / SSE / WS salientes   │
+                                ┌───────────────────────────────────┴────────┐
+                                ▼                                            ▼
+                   APIs SaaS de terceros                         Microservicios internos
+                   (generadas vía @defjs/cli)                    (failover nodos A, B, C)
+```
+
+En esta división:
+
+1. **Navegador ↔ BFF** usa `oRPC` o `Hono` para agilizar el desarrollo RPC interno.
+2. **BFF ↔ APIs aguas abajo** usa `@defjs/core` (a menudo con operaciones generadas por `@defjs/cli` a partir de especificaciones OpenAPI de proveedores y agrupadas sobre [`undici.Pool`](/es-ES/recipes/undici-pool)) para que una única instancia aguas abajo lenta (`B`) o limitada por tasa (`429` / `503`) (`C`) quede aislada mediante `p2cBalancer` + `outlierDetection` antes de agotar la capacidad de los workers del BFF.
+
+---
+
+## Resultados destacados de benchmarks reproducibles
+
+Todas las cifras siguientes proceden de la suite de benchmarks aislada y fijada mediante lockfile en [`bench/`](https://github.com/defjs/defjs/blob/main/bench/REPORT.md) (`bun run build && cd bench && bun install --frozen-lockfile && bun run all`, Apple M1 Max, Bun `1.4.5`, Node `v26.13.1`, semilla determinista `SEED=20261124`).
+
+| Dimensión                  | Escenario                                                                                                                                 | Resultado destacado                                                                                                                                                                                                                                                                | Nota metodológica / de equidad                                                                                                                                                                                                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Resiliencia multi-upstream | 200 llamadas @ concurrencia 8 entre sano `A` (5 ms), cola larga `B` (40% 300 ms), inestable `C` (40% `503`, 40% `429` + `Retry-After: 1`) | `@defjs/core` (`p2c` + `outlierDetection` + `withRetry`): **100.0% de éxito**, amplificación en red **1.03x**, **11.01 ms p95** (`A:195 / B:3 / C:9`) frente a `ky`: **81.5%**, **1.49x**, **1626.30 ms p95** (`A:67 / B:67 / C:163`) y `fetch` puro: **71.0%**, **302.18 ms p95** | El estado PRNG y los contadores de upstream se reinician de forma idéntica antes de cada ejecución; `@defjs/core` también valida las respuestas con `struct`.                                                                                      |
+| Tamaño de bundle ESM nav.  | Minificación + tree-shaking `esbuild` (brotli-11 / gzip-9)                                                                                | `@defjs/core` mínimo (`defineRequest` + `struct`): **16.69 KB br / 18.75 KB gzip**; pila resiliente completa (`p2c` + `outlierDetection` + `withRetry` + middleware): **17.78 KB br / 20.00 KB gzip**                                                                              | `ofetch` (**3.62 KB br**) y `ky` (**9.66 KB br**) omiten la decodificación de esquemas; `openapi-fetch + zod` (**76.79 KB br**) y `@orpc/client + zod` (**81.51 KB br**) empaquetan Zod.                                                           |
+| Sobrecarga HTTP keep-alive | Servidor local Hono en loopback, 5,000 solicitudes (concurrencia 16 / secuencial)                                                         | `@defjs/core` (`fetch` + `struct`): **23,481 req/s** (`0.57 ms` p50) a concurrencia 16; **9,926 req/s** (`0.09 ms` p50) secuencial                                                                                                                                                 | Ambas variantes de `@defjs/core` ejecutan validación completa de `output` con `struct` en cada respuesta; a concurrencia 16, `ky` (**21,310 req/s**), `ofetch` (**28,921 req/s**) y `openapi-fetch` (**34,393 req/s**) devuelven JSON sin validar. |
+| Decodificación fail-fast   | Array de 1,000 elementos con el índice `0` inválido (`mitata`)                                                                            | `@defjs/core`: **506.5 ns** (`1,974,438 ops/s`) frente a `zod`: **51.25 us**, `valibot`: **70.82 us**, `arktype`: **334.86 us**                                                                                                                                                    | `@defjs/core` aborta de inmediato ante la primera infracción estructural; con entradas válidas (`flat-6-fields`, `array-1000-items`), ArkType JIT, Zod v4 y Valibot se ejecutan más rápido.                                                        |
+
+Consulta las métricas JSON en bruto y cada versión fijada del entorno en el [informe completo de benchmarks](https://github.com/defjs/defjs/blob/main/bench/REPORT.md).

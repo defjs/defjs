@@ -11,8 +11,9 @@ import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
 import type { HttpProgressFn, HttpRequest } from "../http_request";
 import type { HttpMeta, HttpResponse } from "../http_response";
 import { makeResponse } from "../http_response";
+import { isFormData } from "../../internal/type_guards";
 import { resolveRequestUrl } from "../../internal/url";
-import { applyRequestContentType } from "./body";
+import { applyRequestContentType, resolveEffectiveContentType } from "./body";
 import { BodyFailure, isBodyFailure } from "./body_failure";
 import { createFetchInitBase, isReadableStreamBody } from "./fetch_init";
 import {
@@ -21,6 +22,15 @@ import {
   isJsonMediaType,
   jsonMediaTypeError,
 } from "./utils";
+
+const DEFAULT_ACCEPT = "application/json, text/plain, */*";
+const DEFAULT_ACCEPT_HEADERS = Object.freeze<Record<string, string>>({
+  Accept: DEFAULT_ACCEPT,
+});
+const DEFAULT_JSON_HEADERS = Object.freeze<Record<string, string>>({
+  Accept: DEFAULT_ACCEPT,
+  "Content-Type": "application/json",
+});
 
 /**
  * Relays a caller's stream so its bytes can be counted and its failure seen: a stream `fetch` holds
@@ -184,65 +194,59 @@ export function createFetchRequestInit(
   request: HttpRequest,
   url: URL,
   onBodyFailed?: () => void,
+  ownedHeaders?: boolean,
 ): RequestInit & { duplex?: "half" } {
-  const headers = new Headers(request.headers);
   const uploadProgress = request.uploadProgress;
-  applyBodyContentType(request, headers);
-  if (request.finalizeHeaders) {
-    try {
-      request.finalizeHeaders(request, headers, new URL(url));
-    } catch (error) {
-      throw isAbortCause(error) || isTimeoutCause(error)
-        ? error
-        : new BodyFailure("EXT_HOOK_FAILED", error, undefined);
+  let headers: Headers | Readonly<Record<string, string>> | undefined;
+  let wrapReadableStreamBody:
+    | ((body: ReadableStream<Uint8Array>) => ReadableStream<Uint8Array>)
+    | undefined;
+  if (ownedHeaders && request.headers === undefined) {
+    if (request.body === undefined || isFormData(request.body)) {
+      headers = DEFAULT_ACCEPT_HEADERS;
+    } else if (resolveEffectiveContentType(request) === "application/json") {
+      headers = DEFAULT_JSON_HEADERS;
+    }
+  }
+  if (headers === undefined) {
+    const mutableHeaders =
+      ownedHeaders && request.headers !== undefined
+        ? request.headers
+        : new Headers(request.headers);
+    applyBodyContentType(request, mutableHeaders);
+    if (request.finalizeHeaders) {
+      try {
+        request.finalizeHeaders(request, mutableHeaders, new URL(url));
+      } catch (error) {
+        throw isAbortCause(error) || isTimeoutCause(error)
+          ? error
+          : new BodyFailure("EXT_HOOK_FAILED", error, undefined);
+      }
+    }
+    headers = mutableHeaders;
+    if (uploadProgress || onBodyFailed) {
+      wrapReadableStreamBody = (body) =>
+        wrapUploadStream(
+          body,
+          uploadProgress,
+          getContentLength(mutableHeaders),
+          request.signal,
+          onBodyFailed,
+        );
     }
   }
 
   return createFetchInitBase(request, {
-    defaultAccept: "application/json, text/plain, */*",
+    defaultAccept: DEFAULT_ACCEPT,
     headers,
     signal: request.signal,
-    wrapReadableStreamBody:
-      uploadProgress || onBodyFailed
-        ? (body) =>
-            wrapUploadStream(
-              body,
-              uploadProgress,
-              getContentLength(headers),
-              request.signal,
-              onBodyFailed,
-            )
-        : undefined,
+    wrapReadableStreamBody,
   });
 }
 
 /** Release a body we will not read, ignoring a cancellation the provider refuses. */
 function discardBody(body: ReadableStream<Uint8Array>): void {
   void body.cancel().catch(() => undefined);
-}
-
-/**
- * Reads a whole body in one call. Only for a response that the platform fetch returned for `signal`: the fetch spec binds that
- * body to the signal, so an abort errors the stream and frees the connection, and the race only makes this call settle promptly.
- */
-async function readWholeBody(
-  response: Response,
-  signal: AbortSignal | undefined,
-  meta: HttpMeta,
-): Promise<Uint8Array<ArrayBuffer>> {
-  try {
-    return new Uint8Array(
-      await (signal
-        ? awaitWithSignal(() => response.arrayBuffer(), signal)
-        : response.arrayBuffer()),
-    );
-  } catch (error) {
-    // Cancellation outranks body classification, and `fetchHandler` turns it into an abort result.
-    if (signal?.aborted) {
-      throw error;
-    }
-    throw new BodyFailure("NET_BODY_INCOMPLETE", error, meta);
-  }
 }
 
 /**
@@ -254,14 +258,18 @@ async function readChunks(
   stream: ReadableStream<Uint8Array>,
   signal: AbortSignal | undefined,
   declaredLength: number,
-  meta: HttpMeta,
+  toMeta: () => HttpMeta,
   downloadProgress: HttpProgressFn | undefined,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const chunks: Uint8Array[] = [];
   const reader = stream.getReader();
-  const cancelRead = () =>
-    void reader.cancel(signal?.reason).catch(() => undefined);
-  signal?.addEventListener("abort", cancelRead, { once: true });
+  let cleanupAbort: (() => void) | undefined;
+  if (signal) {
+    const cancelRead = () =>
+      void reader.cancel(signal.reason).catch(() => undefined);
+    signal.addEventListener("abort", cancelRead, { once: true });
+    cleanupAbort = () => signal.removeEventListener("abort", cancelRead);
+  }
   let total = declaredLength;
   let receivedLength = 0;
 
@@ -291,7 +299,7 @@ async function readChunks(
             ? awaitWithSignal(() => downloadProgress(event), signal)
             : downloadProgress(event));
         } catch (error) {
-          throw new BodyFailure("EXT_OBSERVER_FAILED", error, meta);
+          throw new BodyFailure("EXT_OBSERVER_FAILED", error, toMeta());
         }
       }
     }
@@ -306,12 +314,19 @@ async function readChunks(
     }
     throw isBodyFailure(error)
       ? error
-      : new BodyFailure("NET_BODY_INCOMPLETE", error, meta);
+      : new BodyFailure("NET_BODY_INCOMPLETE", error, toMeta());
   } finally {
-    signal?.removeEventListener("abort", cancelRead);
+    cleanupAbort?.();
     reader.releaseLock();
   }
   return concatChunks(chunks, receivedLength);
+}
+
+function resolveDeclaredContentLength(headers: Headers): number {
+  const contentEncoding = headers.get("Content-Encoding")?.trim().toLowerCase();
+  return contentEncoding !== undefined && contentEncoding !== "identity"
+    ? 0
+    : getContentLength(headers);
 }
 
 /** @param platform - `response` came straight from the platform fetch called with the request signal. */
@@ -347,51 +362,58 @@ async function parseFetchResponse(
     discardBody(response.body);
   }
 
-  const contentEncoding = headers.get("Content-Encoding")?.trim().toLowerCase();
-  const contentLength =
-    contentEncoding !== undefined && contentEncoding !== "identity"
-      ? 0
-      : getContentLength(headers);
-  const contentType = getContentType(headers);
-  const meta: HttpMeta = {
-    headers,
-    ok: status >= 200 && status < 300,
-    status,
-    statusText,
-    url,
-  };
-  // No stream, or a response the platform defines as having no body, is an absent body.
-  // A parsed JSON null stays null.
   let body: unknown = undefined;
 
-  // Philosophy 3: the declared representation is part of the assertion. Checking it before the
-  // body is read turns "I asked for JSON and got HTML" into one precise fault, and skips the
-  // read, the parse, and the struct entirely.
-  if (stream && responseType === "json" && !isJsonMediaType(contentType)) {
-    discardBody(stream);
-    throw new BodyFailure(
-      "RES_MEDIA_TYPE_INVALID",
-      jsonMediaTypeError(contentType),
-      meta,
-    );
-  }
-
-  // Progress needs the chunks, so only an unobserved read takes the bulk path.
   if (stream) {
-    const bytes =
-      platform && !downloadProgress
-        ? await readWholeBody(response, httpRequest.signal, meta)
-        : await readChunks(
-            stream,
-            httpRequest.signal,
-            contentLength,
-            meta,
-            downloadProgress,
-          );
+    const contentType = getContentType(headers);
+    const toMeta = (): HttpMeta => ({
+      headers,
+      ok: status >= 200 && status < 300,
+      status,
+      statusText,
+      url,
+    });
+    // Philosophy 3: the declared representation is part of the assertion. Checking it before the
+    // body is read turns "I asked for JSON and got HTML" into one precise fault, and skips the
+    // read, the parse, and the struct entirely.
+    if (responseType === "json" && !isJsonMediaType(contentType)) {
+      discardBody(stream);
+      throw new BodyFailure(
+        "RES_MEDIA_TYPE_INVALID",
+        jsonMediaTypeError(contentType),
+        toMeta(),
+      );
+    }
+
+    // Progress needs the chunks, so only an unobserved read takes the bulk path.
+    let bytes: Uint8Array<ArrayBuffer>;
+    if (platform && !downloadProgress) {
+      const signal = httpRequest.signal;
+      try {
+        bytes = new Uint8Array(
+          await (signal
+            ? awaitWithSignal(() => response.arrayBuffer(), signal)
+            : response.arrayBuffer()),
+        );
+      } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
+        throw new BodyFailure("NET_BODY_INCOMPLETE", error, toMeta());
+      }
+    } else {
+      bytes = await readChunks(
+        stream,
+        httpRequest.signal,
+        downloadProgress ? resolveDeclaredContentLength(headers) : 0,
+        toMeta,
+        downloadProgress,
+      );
+    }
     try {
       body = parseBytesBody(responseType, bytes, contentType);
     } catch (error) {
-      throw new BodyFailure("RES_DECODE_FAILED", error, meta);
+      throw new BodyFailure("RES_DECODE_FAILED", error, toMeta());
     }
   }
 
@@ -424,7 +446,7 @@ async function parseFetchResponse(
  *   The `body` of a `HEAD` response, or of a `204`, `205`, or `304` response, is absent whether or not the engine exposes a body stream.
  * @group http
  */
-export async function fetchHandler(
+export function fetchHandler(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle = resolveGlobalFetch(),
 ): Promise<HttpResponse<unknown>> {
@@ -434,6 +456,8 @@ export async function fetchHandler(
 export type FetchLifecycle = {
   /** The request URL, resolved once by the caller. */
   url: URL;
+  /** Whether `request.headers` is a newly created container owned exclusively by this transport call. */
+  ownedHeaders?: boolean;
   /** `streamedBody` is true when `fetch` is handed a caller-supplied `ReadableStream`. */
   start: (streamedBody: boolean) => void;
   response: (response: Response) => void;
@@ -442,7 +466,7 @@ export type FetchLifecycle = {
 };
 
 /** Internal raw Fetch boundary used for per-attempt timing. */
-export async function fetchHandlerWithLifecycle(
+export function fetchHandlerWithLifecycle(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
   lifecycle?: FetchLifecycle,
@@ -454,7 +478,15 @@ export async function fetchHandlerWithLifecycle(
   if (!uploadProgress) {
     return sendFetchRequest(httpRequest, fetchImpl, lifecycle);
   }
+  return sendObservedUpload(httpRequest, fetchImpl, uploadProgress, lifecycle);
+}
 
+async function sendObservedUpload(
+  httpRequest: HttpRequest,
+  fetchImpl: FetchHandle,
+  uploadProgress: HttpProgressFn,
+  lifecycle: FetchLifecycle | undefined,
+): Promise<HttpResponse<unknown>> {
   let observerFailure: BodyFailure<"EXT_OBSERVER_FAILED"> | undefined;
   const observed: HttpRequest = {
     ...httpRequest,
@@ -504,7 +536,12 @@ async function sendFetchRequest(
     const streamedBody = isReadableStreamBody(httpRequest.body);
     url = lifecycle?.url ?? resolveRequestUrl(httpRequest);
     assertRequestShape(httpRequest, url);
-    init = createFetchRequestInit(httpRequest, url, lifecycle?.bodyFailed);
+    init = createFetchRequestInit(
+      httpRequest,
+      url,
+      lifecycle?.bodyFailed,
+      lifecycle?.ownedHeaders,
+    );
     // PERF: fetch(url, init) builds the Request itself, so building one here would only do that work twice.
     // Any other handle is given the Request.
     if (!platform) {

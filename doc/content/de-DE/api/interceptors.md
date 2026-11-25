@@ -63,4 +63,26 @@ Ein Wrapper oder eine Short-Circuit-Session muss denselben `[Symbol.asyncDispose
 
 Setzt bei jedem Request `Authorization: Basic <encoded>`. `fn` gibt `{ username, password }` zurück und wird pro Request aufgerufen. Das optionale zweite Argument `{ encode }` erhält diese Credentials und liefert den Teil nach `Basic `; standardmäßig wird ``btoa(`${username}:${password}`)`` kodiert. Ohne `encode` schlägt das Erzeugen des Interceptors fehl, wenn `btoa` nicht verfügbar ist.
 
+## Concurrency-Limit
+
+### concurrencyLimitHttpInterceptor()
+
+### BulkheadOverflowError
+
+### ConcurrencyLimitInterceptorOptions
+
+<ApiSignature name="concurrencyLimitHttpInterceptor, BulkheadOverflowError, ConcurrencyLimitInterceptorOptions" />
+
+Begrenzt gleichzeitige laufende HTTP-Versuche pro Bucket (`key`, Standard ist ein gemeinsamer Bucket). Requests über `maxConcurrency` warten in FIFO-Reihenfolge bis `maxQueue` (Standard `Infinity`) oder werden mit `BulkheadOverflowError` abgelehnt (als `EXT_INTERCEPTOR_FAILED` mit `{ attempted: false }` weitergereicht). Permits werden während `withRetry`-Backoff-Wartezeiten freigegeben, und bereits vorab oder in der Warteschlange abgebrochene Requests lösen mit `NET_ABORTED` oder `NET_TIMEOUT` auf. Siehe [Concurrency-Limits & gepoolte Aufrufe](/de-DE/recipes/concurrency-limit).
+
+## Idempotenzschlüssel
+
+### idempotencyKeyHttpInterceptor()
+
+### IdempotencyKeyInterceptorOptions
+
+<ApiSignature name="idempotencyKeyHttpInterceptor, IdempotencyKeyInterceptorOptions" />
+
+Klont `req.headers` und setzt `headerName` (Standard `'Idempotency-Key'`) bei Requests, deren Methode zu `methods` (Standard `['POST', 'PATCH']`) passt; Requests, die den Header bereits tragen, werden übersprungen, wenn `respectExisting` `true` (Standard) ist. Ohne `generate` wird `req.correlationId` wiederverwendet (oder auf eine v4-UUID zurückgefallen), sodass jeder `withRetry`-Versuch eines Aufrufs denselben Schlüssel sendet; mit `generate` erfolgt Memoisierung nach `req.correlationId` in einem begrenzten Cache mit 4.096 Einträgen. Siehe [Idempotenzschlüssel](/de-DE/recipes/idempotency-key).
+
 Siehe [Interceptors-Leitfaden](/de-DE/docs/interceptors).

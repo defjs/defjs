@@ -1,0 +1,25 @@
+---
+title: "Concurrency-Limits & gepoolte Aufrufe"
+description: Nachgelagerte Origins mit concurrencyLimitHttpInterceptor schützen und über @defjs/core/concurrent sauber auffächern.
+---
+
+# Concurrency-Limits & gepoolte Aufrufe
+
+Verwende `concurrencyLimitHttpInterceptor` auf dem `Client` als clientweiten Bulkhead (FIFO-Warteschlange mit optionalem `maxQueue`-Überlaufschutz) und `@defjs/core/concurrent` (`concurrentMap`, `concurrentMapSettled`, `concurrentAll`, `concurrentAllSettled`) für Fail-Fast- oder Settled-Parallelaufrufe, die direkt an diesen `Client` gebunden sind.
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Siehe die [Client-API](/de-DE/api/client) und die [Interceptors-API](/de-DE/api/interceptors).

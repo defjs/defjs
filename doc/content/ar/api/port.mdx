@@ -1,0 +1,44 @@
+---
+title: Port
+description: وسائل النقل الوكيلة متعددة القنوات عبر MessagePort وMV3 WebExtension لعملاء Defjs.
+---
+
+# نقل Port (`@defjs/core/port` و`@defjs/core/port/webext`)
+
+مقابض نقل متعددة القنوات عبر `MessagePort` وWebExtension `runtime.Port` بالإضافة إلى جسر مضيف بالرفض الافتراضي. راجع [دليل نقل Port](/ar/docs/port).
+
+## مثال سريع
+
+<include cwd>examples/api/port.ts#example</include>
+
+## مقابض العميل (`@defjs/core/port`)
+
+### withPortTransport
+
+<ApiSignature name="withPortTransport" />
+
+### createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle
+
+<ApiSignature name="createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle" />
+
+<ApiSignature name="PortClientOptions, PortWebSocketHandle, PortWebSocketHandleConstructor" />
+
+## ربط المضيف (`@defjs/core/port`)
+
+### attachPortHost
+
+<ApiSignature name="attachPortHost" />
+
+<ApiSignature name="PortHostOptions, PortHostHandle, PortRequestCheckContext, PortWebSocketConstructor" />
+
+## تجريدات المنفذ
+
+<ApiSignature name="PortLike, PortEndpoint, PortWireMode, PortMessageListener, PortDisconnectListener" />
+
+## محول WebExtension (`@defjs/core/port/webext`)
+
+### fromWebExtPort
+
+<ApiSignature name="fromWebExtPort" />
+
+<ApiSignature name="WebExtPort, WebExtEvent, WebExtPortOptions" />

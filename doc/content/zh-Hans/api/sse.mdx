@@ -54,7 +54,7 @@ description: defineEventStream、请求选项与流句柄。
 
 重试配置在 Client 上（`withRetry`），请求选项 `retry` 会为单次调用替换该策略。同一策略也服务于 HTTP 和 WebSocket。
 
-每次成功握手后都会重置重试次数和退避指数；它们按每次中断计算，因此即使设置 `maxRetries: 1`，长时间会话中仍可建立许多连接。服务器正常 EOF 不会重连，EOF 时未完成的事件也不会提交其 id。返回 502、503 或 504 的握手会像连接被拒绝一样，按相同规则（方法、`shouldRetry`、`maxRetries`、`ReadableStream` body）重试；其他任何非 2xx 握手都会以 `retryable: false` 交给 `shouldRetry`，因此除非你的函数另有表示，否则流会结束。重试耗尽以及被拒绝的非 2xx 握手都以 `HTTP_STATUS` 结束；请查看实时的 `stream.open.response.status` 获取该状态。默认值、决策顺序和 UTF-8 `Last-Event-ID` 的处理方式见 [`withRetry`](/zh-Hans/api/core/withretry)。
+每次成功握手后都会重置重试次数和退避指数；它们按每次中断计算，因此即使设置 `maxRetries: 1`，长时间会话中仍可建立许多连接。服务器正常 EOF 不会重连，EOF 时未完成的事件也不会提交其 id。返回状态码在 `statusCodes` 中（默认 `429`、`502`、`503` 或 `504`）的握手会像连接被拒绝一样，按相同规则（方法、`shouldRetry`、`maxRetries`、`ReadableStream` body）重试，并在启用 `retryAfter` 时对 `429` 和 `503` 遵守 RFC 9110 `Retry-After`；其他任何非 2xx 握手都会以 `retryable: false` 交给 `shouldRetry`，因此除非你的函数另有表示，否则流会结束。重试耗尽以及被拒绝的非 2xx 握手都以 `HTTP_STATUS` 结束；请查看实时的 `stream.open.response.status` 获取该状态。默认值、决策顺序和 UTF-8 `Last-Event-ID` 的处理方式见 [`withRetry`](/zh-Hans/api/core/withretry)。
 
 解析器遵循 WHATWG SSE 的行和字段规则，只移除每条物理流开头的一个 UTF-8 BOM。data 或 ID 值中的 U+FEFF 会被保留；后续带 BOM 前缀的字段名会按未知字段忽略。多行 data 用 `\n` 连接，空行触发携带 data 的事件分发，EOF 时尚未完成的事件会被丢弃。
 

@@ -1,0 +1,31 @@
+---
+title: "游标分页"
+description: 使用异步生成器流式读取分页接口，并透传每一页的 AbortSignal 取消信号。
+---
+
+# 游标分页
+
+将分页操作定义保留在 SDK 模块（`listOrders`）中，把游标翻页逻辑放进纯应用辅助函数（`listAllOrders`）里，按 Go 风格逐项 yield `[err, item]` 元组，并在遇到错误或调用方中止时立即停止。
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+关于单次调用中 `signal` 的派生规则，请参阅 [Client](/zh-Hans/docs/client) 和 [HTTP 请求](/zh-Hans/docs/http)。

@@ -63,4 +63,26 @@ description: HTTP、SSE、WebSocket のインターセプターコンストラ�
 
 リクエストごとに `Authorization: Basic <encoded>` を設定します。`fn` は `{ username, password }` を返し、リクエストごとに呼ばれます。省略可能な第 2 引数 `{ encode }` はその認証情報を受け取り、`Basic ` の後ろの部分を返します。デフォルトの符号化は ``btoa(`${username}:${password}`)`` です。`encode` がなく `btoa` が使えない環境では、インターセプターの作成時に throw します。
 
+## 同時実行数制限
+
+### concurrencyLimitHttpInterceptor()
+
+### BulkheadOverflowError
+
+### ConcurrencyLimitInterceptorOptions
+
+<ApiSignature name="concurrencyLimitHttpInterceptor, BulkheadOverflowError, ConcurrencyLimitInterceptorOptions" />
+
+バケット（`key`、デフォルトは 1 つの共有バケット）ごとに、実行中の HTTP 試行の同時実行数を制限します。`maxConcurrency` を超えたリクエストは、`maxQueue`（デフォルト `Infinity`）まで FIFO 順で待機するか、`BulkheadOverflowError` で reject されます（`{ attempted: false }` 付きの `EXT_INTERCEPTOR_FAILED` として返ります）。パーミットは `withRetry` のバックオフ待機中に解放され、事前または待機中にアボートされたリクエストは `NET_ABORTED` または `NET_TIMEOUT` で解決されます。[同時実行数制限とプールされた呼び出し](/ja-JP/recipes/concurrency-limit) を参照してください。
+
+## 冪等性キー
+
+### idempotencyKeyHttpInterceptor()
+
+### IdempotencyKeyInterceptorOptions
+
+<ApiSignature name="idempotencyKeyHttpInterceptor, IdempotencyKeyInterceptorOptions" />
+
+`req.headers` を複製し、`methods`（デフォルト `['POST', 'PATCH']`）に一致するメソッドのリクエストへ `headerName`（デフォルト `'Idempotency-Key'`）を設定します。`respectExisting` が `true`（デフォルト）の場合、すでにそのヘッダーを持つリクエストはスキップします。`generate` を指定しない場合は `req.correlationId` を再利用（または v4 UUID にフォールバック）するため、1 回の呼び出しにおける `withRetry` の各試行で同じキーが送信されます。`generate` を指定した場合は、`req.correlationId` をキーに最大 4,096 エントリの有界キャッシュへメモ化します。[冪等性キー](/ja-JP/recipes/idempotency-key) を参照してください。
+
 [インターセプターガイド](/ja-JP/docs/interceptors) を見てください。

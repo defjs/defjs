@@ -1,0 +1,35 @@
+{
+  "name": "defjs-bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "bun check --project tsconfig.json",
+    "bench:struct": "bun run src/struct.bench.ts",
+    "bench:bundle": "bun run src/bundle-size.ts",
+    "bench:http": "bun run src/http-overhead.ts",
+    "bench:resilience": "bun run src/resilience.ts",
+    "all": "bun run src/run-all.ts"
+  },
+  "dependencies": {
+    "@defjs/core": "link:../packages/core",
+    "@hono/node-server": "^2.1.11",
+    "@orpc/client": "^1.16.5",
+    "arktype": "^2.2.10",
+    "axios": "^1.21.1",
+    "esbuild": "^0.28.2",
+    "hono": "^4.13.21",
+    "ky": "^2.2.0",
+    "mitata": "^1.0.34",
+    "ofetch": "^1.5.1",
+    "openapi-fetch": "^0.17.0",
+    "undici": "^8.13.1",
+    "valibot": "^1.5.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.5",
+    "@types/node": "^26.6.6",
+    "typescript": "7.1.0-beta"
+  }
+}

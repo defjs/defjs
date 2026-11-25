@@ -1,0 +1,31 @@
+---
+title: "Paginación por cursor"
+description: Transmite endpoints paginados de forma limpia con un generador asíncrono y cancelación de AbortSignal por página.
+---
+
+# Paginación por cursor
+
+Mantén la operación paginada en el módulo del SDK (`listOrders`) y envuelve la continuación por cursor dentro de un helper puro de la aplicación (`listAllOrders`) que emita tuplas estilo Go `[err, item]` y se detenga de inmediato ante un fallo o una cancelación de quien llama.
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Consulta [Cliente](/es-ES/docs/client) y [Operaciones HTTP](/es-ES/docs/http) para ver las reglas de derivación de `signal` por llamada.

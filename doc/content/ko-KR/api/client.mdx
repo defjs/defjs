@@ -217,33 +217,34 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`를 파생 클라이언트
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-분류된 실패를 세고 시간으로 엔드포인트를 방출하며, 애플리케이션이 제공한 `isHealthy` 함수가 거부하는 엔드포인트는 건너뛰어요. Defjs는 건강함의 의미를 정하지 않아요. 객체를 넘기지 않으면 꺼져 있어요. pick-first, 라운드 로빈, p2c는 모두 `outlierDetection` 옵션으로 그것을 받아요(`{}`를 넘기면 기본 설정이에요). 또는 커스텀 자식을 직접 감싸요. 기본 `isFailure`는 코드가 있는 결과를 모두 세요(`NET_TIMEOUT`과 `NET_BODY_INCOMPLETE` 포함). 그것은 방출에 셀 것만 정하고, 바꿀 수 있어요. 실패가 다섯 번이면 페널티는 1000ms에서 시작하고, 방출마다 1000ms씩 늘며, 기준의 0.5배까지의 양의 jitter를 더하고, 60000ms에서 막혀요. 시간이 끝나면 시험 요청도 회복 판단도 없이 엔드포인트를 다시 고를 수 있어요. 페널티 레벨은 유지되고, 방출이 없는 10초마다 하나 낮아져요(gRPC A50과 같아요). 방출 전에 시작된 시도, 또는 엔드포인트가 방출된 동안의 시도에서 늦게 온 결과는 무시돼요. 할당량도, 마지막 호스트 보호도, 정산 격자도, 비율 기준도, 슬로 스타트도 없어요. `isHealthy`가 유일한 건강 판단이에요. 방출과 AND로 결합되므로 `true`여도 페널티를 끝내지 않고, 거기서 throw하면 `REQ_BUILD_FAILED`로 보고돼요. 모든 호스트가 끊길 수 있어요. Finagle식의 목록 안 페일오픈은 그래도 요청을 보내요. [헬스 필터링과 p2c](/ko-KR/docs/client#health-filtering-and-p2c)를 보세요.
+분류된 실패를 세고 시간으로 엔드포인트를 방출하며, 애플리케이션이 제공한 `isHealthy` 함수가 거부하는 엔드포인트는 건너뛰어요. Defjs는 건강함의 의미를 정하지 않아요. 객체를 넘기지 않으면 꺼져 있어요. pick-first, 라운드 로빈, p2c는 모두 `outlierDetection` 옵션으로 그것을 받아요(`{}`를 넘기면 기본 설정이에요). 또는 커스텀 자식을 직접 감싸요. 기본 `isFailure`는 코드가 있는 결과를 모두 세요(`NET_TIMEOUT`과 `NET_BODY_INCOMPLETE` 포함). 그것은 방출에 셀 것만 정하고, 바꿀 수 있어요. 실패가 다섯 번이면 페널티는 1000ms에서 시작하고, 방출마다 1000ms씩 늘며, 기준의 0.5배까지의 양의 jitter를 더하고, 60000ms에서 막혀요. 기본적으로(`halfOpen: false`) 시간이 끝나면 모든 호출자가 엔드포인트를 다시 고를 수 있어요. `halfOpen: true`이면 페널티 만료 시 한 번에 하나의 시험 요청만 허용하는 단일 프로브 상태로 들어가며, 성공하면 전체 트래픽을 복구하고 실패하면 `consecutiveFailures`번을 기다리지 않고 다음 페널티 레벨(`maxEjectionPercent` 적용)로 즉시 다시 방출해요. 페널티 레벨은 회복 후에도 유지되고, 방출이 없는 10초마다 하나 낮아져요(gRPC A50과 같아요). 방출 전에 시작된 시도, 또는 엔드포인트가 방출된 동안의 시도에서 늦게 온 결과는 무시돼요. `maxEjectionPercent`(기본값 `100`, 할당량 없음)는 동시에 방출할 수 있는 후보 엔드포인트 수를 제한해요(`Math.floor(endpoints.length * maxEjectionPercent / 100)`). 마지막 호스트 보호, 정산 격자, 슬로 스타트는 없어요. `isHealthy`가 유일한 건강 판단이에요. 방출과 AND로 결합되므로 `true`여도 페널티를 끝내지 않고, 거기서 throw하면 `REQ_BUILD_FAILED`로 보고돼요. 모든 호스트가 끊기거나 진행 중인 프로브를 기다릴 수 있어요. Finagle식의 목록 안 페일오픈은 그래도 요청을 보내요. [헬스 필터링과 p2c](/ko-KR/docs/client#health-filtering-and-p2c)를 보세요.
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
-HTTP, SSE, WebSocket의 재시도를 하나의 정책으로 켜요. `config.retry`에 저장돼요. `withRetry`가 없으면 모든 호출은 시도 한 번이고, 단순하며 백오프가 없어요. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같아요. 이후 `withRetry`는 정책을 대체하고, `withRetry({ maxRetries: 0 })`는 재시도를 켠 뒤 꺼요. 이 옵션은 적용될 때 소유 필드, `methods` 배열, 중첩 예산을 담아요. 옵션은 런타임에 검증되지 않아요. TypeScript가 거부할 값은 JavaScript가 다루는 대로 동작해요.
+HTTP, SSE, WebSocket의 재시도를 하나의 정책으로 켜요. `config.retry`에 저장돼요. `withRetry`가 없으면 모든 호출은 시도 한 번이고, 단순하며 백오프가 없어요. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같아요. 이후 `withRetry`는 정책을 대체하고, `withRetry({ maxRetries: 0 })`는 재시도를 켠 뒤 꺼요. 이 옵션은 적용될 때 소유 필드, `methods` 및 `statusCodes` 배열, 중첩 예산을 담아요. 옵션은 런타임에 검증되지 않아요. TypeScript가 거부할 값은 JavaScript가 다루는 대로 동작해요.
 
-기본값은 `maxRetries: 3`(첫 시도 뒤의 재시도. `0`은 재시도하지 않음), `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`(`Infinity`는 상한을 없애고, 플랫폼 타이머 한계인 `2_147_483_647` ms는 그대로 적용돼요), `jitter: 0.2`(0에서 1까지의 곱셈 계수)예요. 재시도 \_n\_은 상한이 걸린 `delayMs * factor^(n-1)`만큼 기다려요. jitter와 반올림이 뒤따르고, 최종 지연에 다시 상한이 걸려요. 기준이 0이면 0으로 남아요. `methods` 기본값은 `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`이고, 대소문자를 가리지 않고 비교해요. `attemptTimeoutMs`는 시도 하나를 제한해요. HTTP는 응답 본문이 끝날 때까지, SSE는 응답 헤더까지, WebSocket은 `open`까지예요. 시간을 다 쓴 시도는 연결 거부와 같은 실패예요. 재시도 없이 시간 제한만 하려면 `withRetry({ maxRetries: 0, attemptTimeoutMs })`를 쓰세요.
+기본값은 `maxRetries: 3`(첫 시도 뒤의 재시도. `0`은 재시도하지 않음), `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`(`Infinity`는 상한을 없애고, 플랫폼 타이머 한계인 `2_147_483_647` ms는 그대로 적용돼요), `jitter: 0.2`(0에서 1까지의 곱셈 계수: 지수 백오프에는 ±20%, `Retry-After`에는 양수 전용 `[1, 1 + jitter]`), `statusCodes: [429, 502, 503, 504]`, `retryAfter: true`, `maxRetryAfterMs: 60000`(`Infinity`는 상한을 없애며 플랫폼 타이머 한계가 적용돼요)예요. 재시도 \_n\_은 상한이 걸린 `delayMs * factor^(n-1)`만큼 기다려요. jitter와 반올림이 뒤따르고, 최종 지연에 다시 상한이 걸려요. 기준이 0이면 0으로 남아요. `retryAfter`가 켜져 있으면 `429` 또는 `503` HTTP 및 SSE 핸드셰이크 응답의 유효한 RFC 9110 `Retry-After` 헤더(`delay-seconds` 또는 `HTTP-date`)가 `maxRetryAfterMs`까지 지수 백오프를 대체해요. `methods` 기본값은 `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`이고, 대소문자를 가리지 않고 비교해요. `attemptTimeoutMs`는 시도 하나를 제한해요. HTTP는 응답 본문이 끝날 때까지, SSE는 응답 헤더까지, WebSocket은 `open`까지예요. 시간을 다 쓴 시도는 연결 거부와 같은 실패예요. 재시도 없이 시간 제한만 하려면 `withRetry({ maxRetries: 0, attemptTimeoutMs })`를 쓰세요.
 
 실패한 시도마다 모든 전송에서 같은 흐름이 이 순서로 돌아요.
 
 1. 호출자 abort, 수동 `close()`, 미디어 타입 불일치 같은 치명적 오류, 생성자가 throw하는 WebSocket, `ReadableStream` 요청 본문은 호출을 끝내요. `shouldRetry`는 호출되지 않아요.
-2. `maxRetries`번의 재시도가 이루어지면 호출이 끝나요. `shouldRetry`는 호출되지 않아요.
-3. `shouldRetry(context)`가 결정하고, 없으면 `context.retryable`이 결정해요. Promise를 돌려줄 수 있고, 호출자의 signal이 그것을 취소해요. throw하면 던진 값을 `cause`로 담아 호출이 `EXT_HOOK_FAILED`로 끝나요. 이미 열린 SSE 스트림은 `closed.code`에 `EXT_HOOK_FAILED`를 보고하고, `closed.cause`에는 던진 값을 `cause`로 가진 오류가 있어요. 이미 열린 WebSocket 세션은 `closed.kind: "error"`로 끝나고, 던진 값이 `closed.cause`예요.
-4. HTTP만: 예산이 재시도 비용을 내야 하고, 그렇지 않으면 호출이 끝나요.
-5. 호출은 백오프 지연을 기다린 뒤, 방금 실패한 엔드포인트를 포함해 모든 엔드포인트에서 밸런서가 다시 골라요. 엔드포인트가 하나면 지연 뒤에 다시 시도해요. HTTP는 재시도마다 요청을 다시 만들고 인터셉터 체인 전체를 다시 실행해요. SSE와 WebSocket은 요청을 재사용하고 URL만 다시 해석해요.
+2. `retryAfter`가 켜져 있고 `429` 또는 `503` 응답에 `maxRetryAfterMs`를 초과하는 유효한 `Retry-After` 지연이 포함되어 있으면, `shouldRetry`를 호출하거나 `budget`을 쓰지 않고 호출이 즉시 끝나요.
+3. `maxRetries`번의 재시도가 이루어지면 호출이 끝나요. `shouldRetry`는 호출되지 않아요.
+4. `shouldRetry(context)`가 결정하고, 없으면 `context.retryable`이 결정해요. Promise를 돌려줄 수 있고, 호출자의 signal이 그것을 취소해요. throw하면 던진 값을 `cause`로 담아 호출이 `EXT_HOOK_FAILED`로 끝나요. 이미 열린 SSE 스트림은 `closed.code`에 `EXT_HOOK_FAILED`를 보고하고, `closed.cause`에는 던진 값을 `cause`로 가진 오류가 있어요. 이미 열린 WebSocket 세션은 `closed.kind: "error"`로 끝나고, 던진 값이 `closed.cause`예요.
+5. HTTP만: 예산이 재시도 비용을 내야 하고, 그렇지 않으면 호출이 끝나요.
+6. 호출은 `Retry-After` 지연(`429` 또는 `503` 응답에 있고 켜져 있을 때) 또는 지수 백오프 지연을 기다린 뒤, 방금 실패한 엔드포인트를 포함해 모든 엔드포인트에서 밸런서가 다시 골라요. 엔드포인트가 하나면 지연 뒤에 다시 시도해요. HTTP는 재시도마다 요청을 다시 만들고 인터셉터 체인 전체를 다시 실행해요. SSE와 WebSocket은 요청을 재사용하고 URL만 다시 해석해요.
 
-`context`는 `transport`로 좁혀진 [`RetryContext`](/ko-KR/api/core/retrycontext-type)예요. 모든 context에는 `attempt`(곧 시작할 재시도 번호, 1부터), `cause`(결함, 오류, 또는 close cause), `retryable`(기본 정책의 판단)이 있어요. HTTP는 `method`, `endpoint`, `status`를 더하고, SSE는 `method`, `lastEventId`, `open`, `status`를 더하며, WebSocket은 `code`, `reason`, `wasClean`을 더해요. 기본을 유지하고 위에 규칙을 더하려면 `context.retryable`을 돌려주고, 그 판단을 바꾸려면 자기 결론을 돌려주세요.
+`context`는 `transport`로 좁혀진 [`RetryContext`](/ko-KR/api/core/retrycontext-type)예요. 모든 context에는 `attempt`(곧 시작할 재시도 번호, 1부터), `cause`(결함, 오류, 또는 close cause), `retryable`(기본 정책의 판단)이 있어요. HTTP는 `method`, `endpoint`, `status`, `headers`, `retryAfterMs`를 더하고, SSE는 `method`, `lastEventId`, `open`, `status`, `headers`, `retryAfterMs`를 더하며, WebSocket은 `code`, `reason`, `wasClean`을 더해요. 기본을 유지하고 위에 규칙을 더하려면 `context.retryable`을 돌려주고, 그 판단을 바꾸려면 자기 결론을 돌려주세요.
 
 기본으로 재시도할 수 있는 것은 어떤 실패를 세는지에서만 달라요.
 
-| 전송      | 기본 `retryable`                                                                                                                                                                                                                         |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP      | 메서드가 `methods`에 있고, 시도가 응답을 받지 못했거나 502, 503, 504를 받았거나 `attemptTimeoutMs`를 다 썼어요. 그 밖의 상태는 `retryable: false`와 함께 `shouldRetry`에 넘어가요. Fetch가 시작되기 전의 로컬 실패는 여기에 닿지 않아요. |
-| SSE       | 메서드가 `methods`에 있고, 핸드셰이크가 네트워크에서 실패했거나, 핸드셰이크가 502, 503, 504로 응답했거나, 시도가 `attemptTimeoutMs`를 다 썼거나, 열린 스트림이 네트워크에서 실패했어요. 스트림의 정상 종료는 재시도하지 않아요.          |
-| WebSocket | `session.close()`가 요청하지 않은 모든 close예요. 한 번도 열리지 않은 연결과 응답 없는 하트비트도 포함해요.                                                                                                                              |
+| 전송      | 기본 `retryable`                                                                                                                                                                                                                                                                          |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP      | 메서드가 `methods`에 있고, 시도가 응답을 받지 못했거나 `statusCodes`(기본값 `429`, `502`, `503`, `504`)에 속하는 상태를 받았거나 `attemptTimeoutMs`를 다 썼어요. 그 밖의 상태는 `retryable: false`와 함께 `shouldRetry`에 넘어가요. Fetch가 시작되기 전의 로컬 실패는 여기에 닿지 않아요. |
+| SSE       | 메서드가 `methods`에 있고, 핸드셰이크가 네트워크에서 실패했거나, 핸드셰이크가 `statusCodes`(기본값 `429`, `502`, `503`, `504`)에 속하는 상태로 응답했거나, 시도가 `attemptTimeoutMs`를 다 썼거나, 열린 스트림이 네트워크에서 실패했어요. 스트림의 정상 종료는 재시도하지 않아요.          |
+| WebSocket | `session.close()`가 요청하지 않은 모든 close예요. 한 번도 열리지 않은 연결과 응답 없는 하트비트도 포함해요.                                                                                                                                                                               |
 
 SSE에서는 숫자만 있는 서버 `retry:` 필드가 이후 시도의 `delayMs`를 바꾸고, 확정된 이벤트 ID는 UTF-8 바이트로 `Last-Event-ID`에 보내지며, 핸드셰이크가 성공하면 횟수가 초기화돼요. WebSocket에서는 `open`이 성공하면 횟수가 초기화돼요. 따라서 연결을 받아들이고 즉시 닫는 서버는 계속 재시도돼요. `shouldRetry`로 멈추세요. SSE와 WebSocket에는 예산이 없어요. HTTP 오프라인 실패는 재시도하지 않아요.
 
@@ -258,5 +259,19 @@ HTTP 예산은 클라이언트가 소유하고 Finagle식이에요. 기본은 20
 `pick`은 error-first 튜플을 돌려줘요. 선택인 `start`는 고른 전송이 시작하기 직전에 동기적으로 많아야 한 번 실행돼요. 선택인 `end`는 `start` 뒤에 한 번, 피어 응답이 시작될 때(또는 응답 전 실패가 있을 때) 실행돼요. 선택인 `done`은 완료 때 한 번 실행돼요. Fetch는 Linkerd의 첫 본문 프레임이나 Envoy의 스트림 경계를 드러낼 수 없어요. 모든 훅의 throw는 가둬지고, 런타임이 `reportError`를 정의하면 그것으로 보고돼요(처리되지 않은 보고는 오류 핸들러가 없는 Bun이나 Deno 프로세스를 끝낼 수 있어요). 반환된 Promise는 기다리지 않아요. `ERR_NO_CANDIDATE`은 `REQ_BUILD_FAILED`의 `cause`로만 쓰여요. `FaultCode`는 아니에요. [`isNoCandidateCause`](/ko-KR/api/core/isnocandidatecause)는 Core 사본을 넘어서도 그것을 알아봐요.
 
 밸런서는 중립 결과만 봐요. 각 전송이 자기 사실을 `DoneInfo.code`로 옮겨요. 기본 이상치 감지(outlier detection)는 코드가 있는 모든 결과를 실패로 세며, `NET_TIMEOUT`과 `NET_BODY_INCOMPLETE`도 포함해요. 원시 `DoneInfo.status`는 커스텀 밸런서만을 위해 남고, 내장 전략은 읽지 않아요. `PickInfo`는 한 번의 pick에 대한 후보 `endpoints`, `members`(클라이언트의 전체 엔드포인트 목록으로 모든 시도에서 같아요), 정의의 선택적 `meta`를 담고, 전송 구분자는 없어요.
+
+## 동시성 (`@defjs/core/concurrent`)
+
+공유 또는 파생 `Client` 위에서 선택적 동시성 제한과 fail-fast 취소를 적용해 동질 배치나 이질 작업을 동시에 실행해요.
+
+### concurrentMap(), concurrentMapSettled(), concurrentAll(), concurrentAllSettled()
+
+<ApiSignature name="concurrentMap, concurrentMapSettled, concurrentAll, concurrentAllSettled" />
+
+### ConcurrencyOptions, ConcurrentTask, ConcurrentTaskRecord
+
+<ApiSignature name="ConcurrencyOptions, ConcurrentTask, ConcurrentTaskRecord" />
+
+`concurrentMap`과 `concurrentAll`은 첫 번째 작업 결함에서 즉시 실패(fail-fast)하여 진행 중인 형제 작업을 abort해요(배치에서 앞서 열린 스트림이나 세션도 닫아요). 반면 `concurrentMapSettled`와 `concurrentAllSettled`는 형제 작업을 취소하지 않고 각 항목의 error-first 튜플을 모두 모아요. `options.concurrency`의 기본값은 `Infinity`이며 양수가 아니거나 정수가 아닌 값은 동기적으로 `RangeError`로 거부해요. [동시성 제한 및 풀링된 호출](/ko-KR/recipes/concurrency-limit)을 보세요.
 
 [클라이언트 가이드](/ko-KR/docs/client)를 보세요.

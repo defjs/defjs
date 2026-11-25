@@ -1,0 +1,25 @@
+---
+title: "Ограничения параллелизма и пулы вызовов"
+description: Защищайте нижестоящие сервисы с помощью concurrencyLimitHttpInterceptor и распараллеливайте вызовы через @defjs/core/concurrent.
+---
+
+# Ограничения параллелизма и пулы вызовов
+
+Используйте `concurrencyLimitHttpInterceptor` на `Client` в роли клиентского bulkhead-ограничителя (FIFO-очередь с опциональной защитой от переполнения `maxQueue`), а также модуль `@defjs/core/concurrent` (`concurrentMap`, `concurrentMapSettled`, `concurrentAll`, `concurrentAllSettled`) для параллельных вызовов в режиме fail-fast или settled, привязанных напрямую к этому `Client`.
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+См. также [API клиента](/ru-RU/api/client) и [API перехватчиков](/ru-RU/api/interceptors).

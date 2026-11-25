@@ -1,0 +1,53 @@
+---
+title: Transport Port (Workers & WebExtensions)
+description: Relayez les opérations HTTP, SSE et WebSocket à travers MessagePort, Workers, iframes, Electron et runtime.Port WebExtension MV3 avec une politique d'origine refusée par défaut.
+---
+
+# Transport Port (`@defjs/core/port`)
+
+`@defjs/core/port` permet à un contexte isolé (`SharedWorker`, Dedicated Worker, `iframe` isolée en sandbox, renderer Electron, ou Popup / Side Panel / Content Script de WebExtension) d'exécuter de pures définitions de SDK `@defjs/core` sur un unique port multiplexé, sans coupler les définitions au transport proxy.
+
+- Zéro dépendance runtime ; fourni via les exports de sous-chemin optionnels `@defjs/core/port` et `@defjs/core/port/webext` sans surcoût de bundle tant qu'ils ne sont pas importés
+- Partage un port unique de façon concurrente entre HTTP (y compris les envois/téléchargements `ReadableStream`), SSE (`text/event-stream`) et les connexions WebSocket
+- **Sécurité fail-closed par défaut** : `attachPortHost` refuse tout trafic tant que l'hôte ne précise pas `allowedOrigins`, `allowRequest` ou explicitement `allowAnyOrigin: true`
+
+```bash
+bun add @defjs/core
+```
+
+## Pont MessagePort (Workers, iframes, Electron)
+
+Les deux côtés conservent vos définitions de SDK inchangées. L'hôte privilégié exécute les véritables appels `fetch` / `WebSocket` ; le client isolé attache `withPortTransport(port)` à son `Client` :
+
+<Tabs items={["sdk/orders.ts", "host.ts", "client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/host.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Lors de l'appel à `attachPortHost`, conservez une référence au `PortHostHandle` renvoyé et appelez `host.close()` (ou `using host = attachPortHost(...)`) à la fermeture afin que les canaux HTTP/SSE en cours et les sessions WebSocket se ferment proprement.
+
+## Proxy WebExtension MV3 (`@defjs/core/port/webext`)
+
+L'interface `runtime.Port` des WebExtensions ne peut pas transférer directement d'objets `ArrayBuffer` entre les frontières d'extension Chromium/Firefox/Safari et se déconnecte chaque fois qu'un Service Worker Manifest V3 se met en veille. `@defjs/core/port/webext` fournit un adaptateur structurel sans dépendance `fromWebExtPort` (ne nécessitant pas `@types/chrome`) qui utilise un cadrage Base64 fragmenté en mode `"json"` et prend en charge des fonctions de connexion paresseuses pour se reconnecter automatiquement après l'hibernation du Service Worker :
+
+<include cwd lang="typescript">
+  examples/port/webext.ts#example
+</include>
+
+Consultez la [référence API Port](/fr-FR/api/port).

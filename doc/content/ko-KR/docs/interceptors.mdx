@@ -55,16 +55,16 @@ HTTP 인터셉터는 `makeResponse(...)`를 사용하여 합성 응답을 만들
 
 ## 3. 재시도와 `Retry-After`
 
-HTTP 재시도는 기본적으로 꺼져 있습니다. 연결 실패, 타임아웃, 또는 `502`, `503`, `504`를 다른 엔드포인트에서 재시도하려면 [`withRetry()`](/ko-KR/docs/load-balancing#retries)를 사용하세요. 백오프 지연 뒤에 밸런서가 다시 고르게 하고, 요청을 다시 빌드하며, 전체 인터셉터 체인을 다시 실행합니다.
+HTTP 재시도는 기본적으로 꺼져 있습니다. 연결 실패, 타임아웃, 또는 `statusCodes`(기본값 `429`, `502`, `503`, `504`)에 속하는 상태를 `429` 및 `503`에서의 네이티브 RFC 9110 `Retry-After` 지원(`retryAfter: true`, `maxRetryAfterMs: 60_000`)과 함께 재시도하려면 [`withRetry()`](/ko-KR/docs/load-balancing#retries)를 사용하세요. 지연 뒤에 밸런서가 다시 고르게 하고, 요청을 다시 빌드하며, 전체 인터셉터 체인을 다시 실행합니다.
 
-대신 애플리케이션 인터셉터가 `429`와 `Retry-After`처럼 같은 엔드포인트의 상태 처리를 구현할 수도 있습니다:
+애플리케이션이 **커스텀 동일 엔드포인트** 상태 처리——예컨대 `builder`나 외부 인터셉터를 다시 실행하지 않고 선택된 엔드포인트에서 재시도하거나, `Retry-After`가 없을 때 대체 지연을 넣거나, 빠른 실패(fail-fast) 대신 대기 시간 상한을 두는 등——가 필요할 때는 인터셉터가 직접 `next(request)`를 루프로 호출할 수 있습니다:
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **두 재시도 계층**: 이 `next(request)` 루프는 선택된 엔드포인트를 유지하며 `builder`나 외부 인터셉터를 다시 실행하지 않습니다. 연결 실패와 `502`/`503`/`504`는 `withRetry`에 맡기세요.
-- **`Retry-After` 정책**: Core의 `withRetry`는 이 헤더를 읽지 않습니다. 레시피의 30초 상한과 250 ms 대체값은 애플리케이션의 선택입니다. 서버가 요구한 지연이 더 길 때 상한을 적용하면 요청된 시간보다 일찍 재시도할 수 있습니다. 이를 허용할 수 없다면 전체 지연을 기다리거나 응답을 그대로 반환하세요.
+- **두 재시도 계층**: 이 `next(request)` 루프는 선택된 엔드포인트를 유지하며 `builder`나 외부 인터셉터를 다시 실행하지 않습니다. 연결 실패, 엔드포인트 간 장애 조치, 기본 `429`/`502`/`503`/`504` 정책은 `withRetry`에 맡기세요.
+- **내장 vs. 커스텀 `Retry-After` 정책**: Core의 `withRetry()`는 기본적으로 `429`와 `503`에서 RFC 9110 `Retry-After`를 존중합니다(서버가 요구한 지연이 `maxRetryAfterMs`를 넘으면 재시도 없이 즉시 실패합니다). 위 레시피처럼 커스텀 인터셉터 안에서 `429`를 처리한다면 이중 재시도를 피하기 위해 `withRetry({ retryAfter: false })`를 설정하거나 `statusCodes`에서 `429`를 빼세요. 레시피의 30초 상한과 250 ms 대체값은 애플리케이션의 선택이며, 더 긴 서버 지연에 상한을 걸면 요청된 시간보다 일찍 재시도할 수 있습니다.
 - **401 쓰기**: [Bearer 갱신 레시피](/ko-KR/recipes/refresh-bearer-once)는 JSON POST를 두 번 전달할 수 있습니다. 비즈니스 처리 전에 인증이 요청을 거부하고, 안정적인 멱등성 키로 서버 측 중복을 제거하도록 보장해야 합니다. 그렇지 않으면 쓰기를 자동 재전송하지 마세요. 스트림 요청 본문은 재전송하지 않습니다.
 - **전송 계층 거부(rejection) 처리**: 네트워크 오류가 발생하면 `next(request)`는 상태 코드 0 응답 대신 reject됩니다. 이 거부를 잡아서 다시 throw하면 원래의 `NET_*` 결함 코드가 보존됩니다.
 - **보낼 수 없는 요청**: HTTP 인터셉터에서 플랫폼이 요청을 거부하거나(잘못되었거나 금지된 메서드, GET 또는 HEAD 본문, 자격 증명이 있는 URL, 잘못된 `Content-Type`) `finalizeHeaders` 훅이 throw하면, `next(request)`는 라이브러리의 `BodyFailure` 래퍼가 아니라 플랫폼 자신의 오류(`TypeError`)나 훅이 던진 값으로 reject됩니다. 그것을 다시 throw하면 결함 코드(`REQ_BUILD_FAILED` 또는 `EXT_HOOK_FAILED`)가 유지되고, 다른 오류를 던지면 실패는 자신의 것(`EXT_INTERCEPTOR_FAILED`)이 됩니다. 전송 주변에서 발견되는 다른 실패는 여전히 `BodyFailure`로 `next(request)`에 닿습니다. 읽거나 디코딩하거나 미디어 타입에 맞출 수 없는 응답 본문, 잘린 본문, throw하는 업로드 진행률 옵저버(`EXT_OBSERVER_FAILED`)가 그에 해당하며, 그 옵저버는 요청을 보내기 전에도 throw할 수 있습니다.
@@ -96,17 +96,23 @@ WebSocket 인터셉터는 `next(req)`를 **최대 1회만** 호출할 수 있습
 
 ## 6. 내장 팩토리 및 헬퍼
 
-| Export                                         | 전송 방식 | 설명                                                                          |
-| ---------------------------------------------- | --------- | ----------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | `(req, next) => Promise<HttpResponse<unknown>>` 래핑                          |
-| `createSSEInterceptor(fn)`                     | SSE       | `(req, next) => Promise<EventStreamHandle<unknown>>` 래핑                     |
-| `createWebSocketInterceptor(fn)`               | WebSocket | `(req, next) => Promise<WebSocketSessionLike>` 래핑                           |
-| `createOperationInterceptor(fn)`               | 모두      | 작업 호출 전체를 `(call, next) => Promise<result>`로 래핑                     |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 요청마다 호출되는 동기 자격 증명 제공자로부터 `Authorization: Basic ...` 주입 |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | SSE 핸드셰이크 시 `Authorization: Basic ...` 주입                             |
+| Export                                         | 전송 방식 | 설명                                                                                                                                                     |
+| ---------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | `(req, next) => Promise<HttpResponse<unknown>>` 래핑                                                                                                     |
+| `createSSEInterceptor(fn)`                     | SSE       | `(req, next) => Promise<EventStreamHandle<unknown>>` 래핑                                                                                                |
+| `createWebSocketInterceptor(fn)`               | WebSocket | `(req, next) => Promise<WebSocketSessionLike>` 래핑                                                                                                      |
+| `createOperationInterceptor(fn)`               | 모두      | 작업 호출 전체를 `(call, next) => Promise<result>`로 래핑                                                                                                |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 요청마다 호출되는 동기 자격 증명 제공자로부터 `Authorization: Basic ...` 주입                                                                            |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | SSE 핸드셰이크 시 `Authorization: Basic ...` 주입                                                                                                        |
+| `concurrencyLimitHttpInterceptor(options)`     | HTTP      | 버킷별 동시 진행 시도 수를 제한(`ConcurrencyLimitInterceptorOptions`); `maxQueue`까지 FIFO 대기하고 초과 시 `BulkheadOverflowError`로 reject             |
+| `idempotencyKeyHttpInterceptor(options?)`      | HTTP      | 상태를 변경하는 메서드(`POST`, `PATCH`)에 `req.correlationId`를 재사용해 멱등성 키 헤더(`IdempotencyKeyInterceptorOptions`, 기본 `Idempotency-Key`) 주입 |
+
+`concurrencyLimitHttpInterceptor`는 재시도가 벌크헤드를 교착 상태에 빠뜨리지 않도록 `withRetry` 백오프 대기 동안 허가권을 반환하며, `maxQueue`를 초과하면 `BulkheadOverflowError`를 던집니다(`{ attempted: false }`와 함께 `EXT_INTERCEPTOR_FAILED`로 표면화). 자세한 내용은 [인터셉터 API 레퍼런스](/ko-KR/api/interceptors)를 참조하세요.
 
 ## 관련 문서
 
+- [재시도 시 멱등성 키](/ko-KR/recipes/idempotency-key)
+- [벌크헤드 동시성 제한](/ko-KR/recipes/concurrency-limit)
 - [401 후 토큰 갱신](/ko-KR/recipes/refresh-bearer-once)
 - [ETag 조건부 요청](/ko-KR/recipes/etag-revalidate)
 - [OpenTelemetry server](/ko-KR/docs/integrations/opentelemetry-server)

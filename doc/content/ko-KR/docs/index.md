@@ -12,6 +12,7 @@ Defjs는 SDK 팀이 배포하는 API 계약과 애플리케이션이 런타임�
 - [개요](/ko-KR)
 - [빠른 시작](/ko-KR/docs/start)
 - [핵심 아키텍처](/ko-KR/docs/design-decisions)
+- [비교 및 하이브리드 아키텍처](/ko-KR/docs/comparison-and-architecture)
 
 ## SDK 정의 [#defining-sdks]
 
@@ -26,6 +27,7 @@ Defjs는 SDK 팀이 배포하는 API 계약과 애플리케이션이 런타임�
 - [오류 처리](/ko-KR/docs/errors)
 - [인터셉터](/ko-KR/docs/interceptors)
 - [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)
+- [Port 전송](/ko-KR/docs/port)
 
 ## 모범 사례 [#best-practices]
 
@@ -40,5 +42,6 @@ Defjs는 SDK 팀이 배포하는 API 계약과 애플리케이션이 런타임�
 - [React](/ko-KR/docs/integrations/react)
 - [Vue](/ko-KR/docs/integrations/vue)
 - [OpenTelemetry server](/ko-KR/docs/integrations/opentelemetry-server)
+- [CLI 및 OpenAPI 생성기](/ko-KR/docs/integrations/cli)
 - [Skill](/ko-KR/docs/ai)
 - [llms.txt](/ko-KR/docs/ai-api)

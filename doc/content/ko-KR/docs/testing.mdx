@@ -26,7 +26,7 @@ description: 내 프로젝트에서 작성한 Defjs 요청 정의, struct 스키
 
 - **`https://fixture.invalid`를 쓰는 이유**: `createClient`는 요청이 `withHTTPHandle`에 들어가기 전에 URL 형식을 검증합니다. `.invalid`는 RFC 예약 도메인이므로 실수로 실제 DNS를 조회할 일이 없습니다.
 - **전송별 핸들 구분**: `withHTTPHandle`은 HTTP(`defineRequest`)만 가로챕니다. `defineEventStream`은 `withSSEHandle`, `defineWebSocket`은 `withWebSocketHandle`을 사용하세요.
-- **재시도 기본값과 `withRetry(undefined)` 주의**: `withRetry`를 생략하면 재시도는 꺼져 있습니다. 일반 단위 테스트 클라이언트에서는 생략해 `502`/`503`/`504`나 네트워크 오류가 `1s + 2s + 4s` 백오프를 기다리지 않고 1회 시도 후 바로 반환되게 하세요. 주의할 점: `withRetry()` 또는 `withRetry(undefined)`를 호출하면 **기본 3회 재시도가 켜집니다**. 공통 팩토리에서 재시도를 끄려면 `withRetry({ maxRetries: 0 })`을 명시하세요.
+- **재시도 기본값과 `withRetry(undefined)` 주의**: `withRetry`를 생략하면 재시도는 꺼져 있습니다. 일반 단위 테스트 클라이언트에서는 생략해 `429`/`502`/`503`/`504`나 네트워크 오류가 `1s + 2s + 4s` 백오프를 기다리지 않고 1회 시도 후 바로 반환되게 하세요. 주의할 점: `withRetry()` 또는 `withRetry(undefined)`를 호출하면 **기본 3회 재시도가 켜집니다**. 공통 팩토리에서 재시도를 끄려면 `withRetry({ maxRetries: 0 })`을 명시하세요.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>

@@ -1,28 +1,29 @@
 ---
 title: プラグイン統合の概要
-description: SDK 定義を結合させることなく、フレームワーク注入、サーバー可観測性、AI アシスタントスキルで Defjs クライアントを拡張します。
+description: SDK 定義を結合させることなく、フレームワーク注入、サーバー可観測性、AI アシスタントスキルでアプリケーション所有の Defjs クライアントを拡張します。
 ---
 
 # プラグイン統合の概要
 
-プラグイン（インテグレーション）は、`@defjs/core` のコアコードを変更したり SDK 定義を特定のフレームワークやテレメトリ基盤と密結合させたりすることなく、定められた拡張ポイントを通じて利用側アプリケーションの `Client` を拡張します。作成した SDK 定義は純粋な `@defjs/core` モジュールのままであり、どのプラグインを導入するかは利用側アプリケーションが自由に選択します。
+プラグイン（インテグレーション）は、`@defjs/core` を変更したり SDK 定義を特定のフレームワークやテレメトリ基盤と結合させたりすることなく、定められた拡張ポイントでアプリケーション自身の `Client` を拡張します。SDK 定義は純粋な `@defjs/core` モジュールのまま保たれ、どの統合機能を導入するかは利用側アプリケーションが選択します。
 
 すべての Defjs プラグインは、**薄いプラグイン契約（Thin Plugin Contract）** に厳格に従います。
 
 - **隠れたキャッシュや状態を持たない**: プラグインがレスポンスを保存したり、リクエストをリトライしたり、クエリ状態を管理したりすることはありません。
 - **トランスポートを置き換えない**: プラグインが背後の HTTP、SSE、WebSocket トランスポートをラップしたり置き換えたりすることはありません。
-- **呼び出し元が所有するライフサイクル**: UI プロバイダーのアンマウントやテレメトリ SDK の終了処理によって、通信中のリクエストが自動的にキャンセルされたり、アクティブなストリームが閉じられたりすることはありません。
+- **呼び出し元が所有するライフサイクル**: UI プロバイダーのアンマウントやテレメトリ SDK のシャットダウンによって、通信中のリクエストが自動的にキャンセルされたり、アクティブなストリームが閉じられたりすることはありません。
 
 ---
 
 ## 提供されているプラグインとツール
 
-| 領域                                                                    | パッケージ / リソース              | カテゴリ                 | 提供される機能                                                                                                    | アプリケーション側に残る責務                                                                      |
-| ----------------------------------------------------------------------- | ---------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| [React](/ja-JP/docs/integrations/react)                                 | `@defjs/react`                     | フレームワークプラグイン | React 18+ 向けの `ClientProvider` および `useClient(overrideClient?)`                                             | クライアントの生成、`AbortController` によるクリーンアップ、クエリキャッシュ（TanStack Query 等） |
-| [Vue](/ja-JP/docs/integrations/vue)                                     | `@defjs/vue`                       | フレームワークプラグイン | Vue 3 以降向けの `createClientPlugin`、`HTTP_CLIENT`、`injectClient(key?)`                                        | クライアントの生成、`onCleanup` / `onScopeDispose` でのキャンセル、クエリ状態                     |
-| [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`      | ミドルウェアプラグイン   | アウトバウンド HTTP、SSE、WebSocket のスパン・メトリクス・ログ用 `ClientOption`（`withOpenTelemetryServer(...)`） | OpenTelemetry SDK の初期化、エクスポーター、サンプリング、秘匿化、フラッシュ                      |
-| [AI スキル](/ja-JP/docs/ai) & [llms.txt](/ja-JP/docs/ai-api)            | `defjs/defjs` スキル & `/llms.txt` | AI ツール                | エージェントスキル（`SKILL.md`）および機械可読な Markdown ドキュメント                                            | プロジェクトにインストールされた `@defjs/core` のバージョンおよびテストスイートによる検証         |
+| 領域                                                                    | パッケージ / リソース              | カテゴリ                 | 提供される機能                                                                                                       | アプリケーション側に残る責務                                                                      |
+| ----------------------------------------------------------------------- | ---------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| [CLI](/ja-JP/docs/integrations/cli)                                     | `@defjs/cli`                       | 開発用 CLI               | Scalar を介してステートレス ESM の `@defjs/core` モジュールを生成する `defjs openapi generate` および `defineConfig` | アプリ内のエンドポイント、認証情報、インターセプター、実行時の構成                                |
+| [React](/ja-JP/docs/integrations/react)                                 | `@defjs/react`                     | フレームワークプラグイン | React 18+ 向けの `ClientProvider` および `useClient(overrideClient?)`                                                | クライアントの生成、`AbortController` によるクリーンアップ、クエリキャッシュ（TanStack Query 等） |
+| [Vue](/ja-JP/docs/integrations/vue)                                     | `@defjs/vue`                       | フレームワークプラグイン | Vue 3 以降向けの `createClientPlugin`、`HTTP_CLIENT`、`injectClient(key?)`                                           | クライアントの生成、`onCleanup` / `onScopeDispose` でのキャンセル、クエリ状態                     |
+| [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`      | ミドルウェアプラグイン   | アウトバウンド HTTP、SSE、WebSocket のスパン・メトリクス・ログ用 `ClientOption`（`withOpenTelemetryServer(...)`）    | OpenTelemetry SDK の初期化、エクスポーター、サンプリング、秘匿化、フラッシュ                      |
+| [AI スキル](/ja-JP/docs/ai) & [llms.txt](/ja-JP/docs/ai-api)            | `defjs/defjs` スキル & `/llms.txt` | AI ツール                | エージェントスキル（`SKILL.md`）および機械可読な Markdown ドキュメント                                               | プロジェクトにインストールされた `@defjs/core` のバージョンおよびテストスイートによる検証         |
 
 ---
 

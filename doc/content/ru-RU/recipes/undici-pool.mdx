@@ -1,0 +1,31 @@
+---
+title: "HTTP-хэндл на Undici Pool"
+description: Подключите пул соединений undici.Pool из Node.js к клиенту Defjs через withHTTPHandle без изменения определений SDK.
+---
+
+# HTTP-хэндл на Undici Pool
+
+В высоконагруженных BFF и серверных приложениях Node.js передавайте общий `undici.Pool` через [`withHTTPHandle`](/ru-RU/api/core/withhttphandle), чтобы пул соединений к апстримам оставался прогретым и ограниченным, пока определения SDK (`sdk/orders.ts`) сохраняют полную независимость от платформы. Не забывайте вызывать `await pool.close()` при завершении работы сервиса.
+
+<Tabs items={["sdk/orders.ts", "app/pool-handle.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/pool-handle.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+О сочетании `undici.Pool` с `p2cBalancer` и `outlierDetection` читайте в разделе [Сравнение и гибридная архитектура](/ru-RU/docs/comparison-and-architecture).

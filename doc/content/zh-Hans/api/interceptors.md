@@ -63,4 +63,26 @@ description: HTTP、SSE 与 WebSocket 拦截器构造函数。
 
 在每个请求上设置 `Authorization: Basic <encoded>`。`fn` 返回 `{ username, password }`，每个请求调用一次。可选的第二个参数 `{ encode }` 接收该凭据，并返回 `Basic ` 之后的部分；默认编码是 ``btoa(`${username}:${password}`)``。不传 `encode` 时，如果 `btoa` 不可用，创建拦截器会抛错。
 
+## 并发限制
+
+### concurrencyLimitHttpInterceptor()
+
+### BulkheadOverflowError
+
+### ConcurrencyLimitInterceptorOptions
+
+<ApiSignature name="concurrencyLimitHttpInterceptor, BulkheadOverflowError, ConcurrencyLimitInterceptorOptions" />
+
+按分桶（`key`，默认共用同一个分桶）限制在途 HTTP 尝试的并发数。超出 `maxConcurrency` 的请求按 FIFO 顺序排队（最多 `maxQueue` 个，默认 `Infinity`），或者抛出 `BulkheadOverflowError` reject（最终对外表现为 `EXT_INTERCEPTOR_FAILED` 且 `{ attempted: false }`）。在 `withRetry` 退避等待期间会释放许可；提前中止或排队期间中止的请求会解析为 `NET_ABORTED` 或 `NET_TIMEOUT`。见[并发限制与池化调用](/zh-Hans/recipes/concurrency-limit)。
+
+## 幂等键
+
+### idempotencyKeyHttpInterceptor()
+
+### IdempotencyKeyInterceptorOptions
+
+<ApiSignature name="idempotencyKeyHttpInterceptor, IdempotencyKeyInterceptorOptions" />
+
+克隆 `req.headers`，并在请求方法匹配 `methods`（默认 `['POST', 'PATCH']`）时设置 `headerName`（默认 `'Idempotency-Key'`）；当 `respectExisting` 为 `true`（默认）且请求已携带该请求头时跳过。未提供 `generate` 时，复用 `req.correlationId`（或回退为 v4 UUID），确保同一次调用的每次 `withRetry` 重试发送相同的键；提供 `generate` 时，按 `req.correlationId` 在容量上限 4,096 条的缓存中记忆结果。见[幂等键](/zh-Hans/recipes/idempotency-key)。
+
 见 [拦截器指南](/zh-Hans/docs/interceptors)。

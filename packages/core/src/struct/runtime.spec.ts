@@ -4,6 +4,7 @@ import { StructError, struct } from "./index";
 import { parseStructTuple as parse } from "./parse";
 import { assertStruct } from "./shape";
 import { DEFINITION } from "./symbols";
+import { createPrimitiveStruct } from "./runtime";
 import type { RuntimeStruct } from "./definition";
 
 function runtimeOf(value: unknown): RuntimeStruct {
@@ -202,5 +203,25 @@ describe("runtime.ts chain methods", () => {
     expect("_struct" in value).toBe(false);
     expect(isStruct(value)).toBe(true);
     expect(Object.getOwnPropertySymbols(value)).toEqual([DEFINITION]);
+  });
+
+  test("createPrimitiveStruct gates decode on is() and supports boolean decoders", () => {
+    const wrappedString = createPrimitiveStruct<string>({
+      kind: "string",
+      expected: "non-empty",
+      is: (v): v is string => typeof v === "string",
+      decode: (v, invalid) => (v.length > 0 ? v.toUpperCase() : invalid),
+    });
+    expect(parse(wrappedString, "ok")[1]).toBe("OK");
+    expect(parse(wrappedString, 123)[0]).toBeInstanceOf(StructError);
+
+    const boolFlag = createPrimitiveStruct<boolean>({
+      kind: "boolean",
+      expected: "true",
+      is: (v): v is boolean => v === true,
+      decode: (v, invalid) => (v ? true : invalid),
+    });
+    expect(parse(boolFlag, true)[1]).toBe(true);
+    expect(parse(boolFlag, false)[0]).toBeInstanceOf(StructError);
   });
 });

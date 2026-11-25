@@ -1,3 +1,4 @@
+import { registerOwnStruct } from "./guards";
 import { DEFINITION } from "./symbols";
 import type { FAILED } from "./symbols";
 import type { Struct, StructLike } from "./types";
@@ -61,7 +62,7 @@ export function makeStruct<TStruct extends StructLike = RuntimeStruct>(
     });
 
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: every constructor returns a published struct type (Struct<I, O>, ObjectStruct<T>, RecordStruct<S>, …) whose `_struct` brand and phantom members exist only in the type system, so no runtime object can be checked into one, and this is the one place a struct object is given that type. Tried: an optional `_struct` in the published StructLike (`readonly _struct?: StructTypes<I, O, OO>`) breaks inference, 385 errors in 55 files; a class with `declare readonly _struct` still cannot declare each constructor's phantom members and moves the methods off Object.prototype; a real `_struct` property adds an own key to every struct
-  return {
+  const created = {
     [DEFINITION]: definition,
     alias(name: string) {
       return makeStruct({
@@ -82,4 +83,6 @@ export function makeStruct<TStruct extends StructLike = RuntimeStruct>(
       return withFlags({ optional: true });
     },
   } as TStruct & RuntimeStruct;
+  registerOwnStruct(created, definition);
+  return created;
 }

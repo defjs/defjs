@@ -26,7 +26,7 @@ Importiere deine echten `defineRequest`-Operationen aus dem Projekt und erstelle
 
 - **Warum `https://fixture.invalid`**: `createClient` prüft die Basis-URL, bevor die Anfrage `withHTTPHandle` erreicht; `.invalid` ist per RFC reserviert und löst auch bei Konfigurationsfehlern nie echte DNS-Anfragen aus.
 - **Ein Handle pro Transportart**: `withHTTPHandle` fängt ausschließlich HTTP (`defineRequest`) ab. Nutze `withSSEHandle` für `defineEventStream` und `withWebSocketHandle` für `defineWebSocket`.
-- **Retry-Standardwerte und die `withRetry(undefined)`-Falle**: Ohne `withRetry` sind Wiederholungsversuche aus. Lasse `withRetry` in normalen Unit-Tests weg, damit `502`/`503`/`504`- und Netzwerkfehler-Tests ohne `1s + 2s + 4s`-Backoff sofort nach einem Versuch zurückkehren. Achtung: `withRetry()` oder `withRetry(undefined)` aktiviert **3 Standard-Retries**. Wenn du Retries aus einer Basis-Factory explizit abschalten willst, übergib `withRetry({ maxRetries: 0 })`.
+- **Retry-Standardwerte und die `withRetry(undefined)`-Falle**: Ohne `withRetry` sind Wiederholungsversuche aus. Lasse `withRetry` in normalen Unit-Tests weg, damit `429`-/`502`-/`503`-/`504`- und Netzwerkfehler-Tests ohne `1s + 2s + 4s`-Backoff sofort nach einem Versuch zurückkehren. Achtung: `withRetry()` oder `withRetry(undefined)` aktiviert **3 Standard-Retries**. Wenn du Retries aus einer Basis-Factory explizit abschalten willst, übergib `withRetry({ maxRetries: 0 })`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>

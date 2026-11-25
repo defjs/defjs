@@ -11,9 +11,11 @@ export const overviewGroups = [
   "errors",
   "interceptors",
   "struct",
+  "port",
   "vue",
   "react",
   "opentelemetry-server",
+  "cli",
 ] as const;
 
 export interface DescribedEntry {

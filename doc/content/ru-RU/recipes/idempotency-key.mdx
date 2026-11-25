@@ -1,0 +1,25 @@
+---
+title: "Ключи идемпотентности"
+description: Безопасно повторяйте мутирующие запросы POST или PATCH с помощью idempotencyKeyHttpInterceptor и нативного backoff при 429 Retry-After.
+---
+
+# Ключи идемпотентности
+
+По умолчанию `withRetry` повторяет только идемпотентные HTTP-методы (`GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`). Когда нужно разрешить повторы для эндпоинтов `POST` или `PATCH`, сочетайте `withRetry` с `idempotencyKeyHttpInterceptor()`, чтобы каждая повторная попытка одного и того же логического вызова использовала `req.correlationId` в заголовке `Idempotency-Key`, а последующие вызовы получали свежие ключи.
+
+<Tabs items={["sdk/payments.ts", "app/charge.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/sdk/payments.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/idempotency-key/app/charge.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Подробнее о бюджетах повторов и обработке `Retry-After` смотрите в разделах [Перехватчики](/ru-RU/docs/interceptors) и [Балансировка нагрузки](/ru-RU/docs/load-balancing).

@@ -54,7 +54,7 @@ tuple 第三項是 `open` 的啟動快照；重連之後，`stream.open` 會跟�
 
 重試設定在 client 上（`withRetry`），請求選項 `retry` 會為單次呼叫替換該策略。同一套策略也服務 HTTP 與 WebSocket。
 
-每次交握成功後都會重設重試次數與 backoff 指數；它們以每次中斷為單位，因此即使設定 `maxRetries: 1`，長時間的工作階段仍可能建立多次連線。伺服器正常 EOF 不會重連，EOF 時未完成的事件也不會提交其 id。回傳 502、503 或 504 的交握會像連線被拒絕一樣，依相同規則（方法、`shouldRetry`、`maxRetries`、`ReadableStream` 請求本文）重試；其他任何非 2xx 交握會帶著 `retryable: false` 交給 `shouldRetry`，因此除非你的函式另有決定，否則會結束串流。重試用盡以及被拒絕的非 2xx 交握都以 `HTTP_STATUS` 結束；請查看即時的 `stream.open.response.status` 取得該狀態。預設值、決策順序與 UTF-8 的 `Last-Event-ID` 處理，見 [`withRetry`](/zh-Hant-TW/api/core/withretry)。
+每次交握成功後都會重設重試次數與 backoff 指數；它們以每次中斷為單位，因此即使設定 `maxRetries: 1`，長時間的工作階段仍可能建立多次連線。伺服器正常 EOF 不會重連，EOF 時未完成的事件也不會提交其 id。回傳狀態碼在 `statusCodes` 中（預設為 `429`、`502`、`503` 或 `504`）的交握會像連線被拒絕一樣，依相同規則（方法、`shouldRetry`、`maxRetries`、`ReadableStream` 請求本文）重試，並在啟用 `retryAfter` 時對 `429` 與 `503` 遵循 RFC 9110 `Retry-After`；其他任何非 2xx 交握會帶著 `retryable: false` 交給 `shouldRetry`，因此除非你的函式另有決定，否則會結束串流。重試用盡以及被拒絕的非 2xx 交握都以 `HTTP_STATUS` 結束；請查看即時的 `stream.open.response.status` 取得該狀態。預設值、決策順序與 UTF-8 的 `Last-Event-ID` 處理，見 [`withRetry`](/zh-Hant-TW/api/core/withretry)。
 
 剖析器遵循 WHATWG 的 SSE 行與欄位規則，並且在每條實體串流開頭只移除一個前導 UTF-8 BOM。data 或 ID 值中的 U+FEFF 會保留；較晚出現、以 BOM 為前綴的欄位名稱會當成未知欄位忽略。多行 data 會以 `\n` 連接，空行會分派一個帶有 data 的事件，EOF 時未完成的事件則會被丟棄。
 

@@ -63,4 +63,26 @@ description: منشئات معترضات HTTP وSSE وWebSocket.
 
 يضع `Authorization: Basic <encoded>` على كل طلب. تُرجع `fn` القيمة `{ username, password }` وتُستدعى لكل طلب. يتلقى الوسيط الثاني الاختياري `{ encode }` بيانات الاعتماد تلك ويُرجع الجزء بعد `Basic `؛ والترميز الافتراضي هو ``btoa(`${username}:${password}`)``. دون `encode`، يُلقي إنشاء المعترض استثناءً عندما لا يتوفر `btoa`.
 
+## حد التزامن
+
+### concurrencyLimitHttpInterceptor()
+
+### BulkheadOverflowError
+
+### ConcurrencyLimitInterceptorOptions
+
+<ApiSignature name="concurrencyLimitHttpInterceptor, BulkheadOverflowError, ConcurrencyLimitInterceptorOptions" />
+
+يحدّد محاولات HTTP الجارية المتزامنة لكل حزمة (`key`، والافتراضي حزمة واحدة مشتركة). تنتظر الطلبات التي تتجاوز `maxConcurrency` بترتيب FIFO حتى `maxQueue` (الافتراضي `Infinity`)، أو تُرفض بـ `BulkheadOverflowError` (الذي يظهر بوصفه `EXT_INTERCEPTOR_FAILED` مع `{ attempted: false }`). تُحرَّر التصاريح أثناء فترات انتظار التراجع في `withRetry`، وتُحل الطلبات الملغاة مسبقًا أو الملغاة أثناء الانتظار في الطابور بـ `NET_ABORTED` أو `NET_TIMEOUT`. انظر [حدود التزامن والاستدعاءات المجمَّعة](/ar/recipes/concurrency-limit).
+
+## مفتاح عدم التكرار
+
+### idempotencyKeyHttpInterceptor()
+
+### IdempotencyKeyInterceptorOptions
+
+<ApiSignature name="idempotencyKeyHttpInterceptor, IdempotencyKeyInterceptorOptions" />
+
+يستنسخ `req.headers` ويضبط `headerName` (الافتراضي `'Idempotency-Key'`) على الطلبات التي يطابق أسلوبها `methods` (الافتراضي `['POST', 'PATCH']`)، متخطيًا الطلبات التي تحمل الترويسة مسبقًا عندما يكون `respectExisting` مساويًا لـ `true` (الافتراضي). دون `generate`، يعيد استخدام `req.correlationId` (أو يرجع إلى UUID v4) بحيث ترسل كل محاولة `withRetry` لاستدعاء واحد المفتاح نفسه؛ ومع `generate`، يخزّن النتيجة مؤقتًا حسب `req.correlationId` في ذاكرة تخزين مؤقت محدودة بـ 4,096 مدخلًا. انظر [مفاتيح عدم التكرار](/ar/recipes/idempotency-key).
+
 انظر [دليل المعترضات](/ar/docs/interceptors).

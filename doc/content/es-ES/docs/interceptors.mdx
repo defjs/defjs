@@ -55,16 +55,16 @@ Un interceptor HTTP puede devolver una respuesta sintética sin llamar a `next(r
 
 ## 3. Reintentos y `Retry-After`
 
-Los reintentos HTTP están desactivados por defecto. Para reintentar un fallo de conexión, un tiempo de espera o un `502`, `503` o `504` en otro endpoint, usa [`withRetry()`](/es-ES/docs/load-balancing#retries). Tras el retardo de backoff deja que el balanceador vuelva a elegir, reconstruye la petición y ejecuta de nuevo toda la cadena de interceptores.
+Los reintentos HTTP están desactivados por defecto. Para reintentar un fallo de conexión, un tiempo de espera o un estado presente en `statusCodes` (`429`, `502`, `503` o `504` por defecto) con soporte nativo RFC 9110 de `Retry-After` en `429` y `503` (`retryAfter: true`, `maxRetryAfterMs: 60_000`), usa [`withRetry()`](/es-ES/docs/load-balancing#retries). Tras el retardo deja que el balanceador vuelva a elegir, reconstruye la petición y ejecuta de nuevo toda la cadena de interceptores.
 
-Un interceptor de la aplicación puede, en cambio, tratar estados en el mismo endpoint, como `429` y `Retry-After`:
+Cuando una aplicación necesita un manejo de estados **personalizado en el mismo endpoint** —como reintentar en el endpoint seleccionado sin volver a ejecutar el `builder` ni los interceptores externos, sustituir una demora de respaldo cuando falta `Retry-After` o limitar las esperas en vez de fallar de inmediato—, un interceptor puede hacer un bucle directamente sobre `next(request)`:
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **Dos capas de reintentos**: Este bucle `next(request)` permanece en el endpoint seleccionado y no vuelve a ejecutar el builder ni los interceptores externos. Los fallos de conexión y los `502`/`503`/`504` corresponden a `withRetry`.
-- **Política de `Retry-After`**: El `withRetry` de Core no lee esta cabecera. El tope de 30 segundos y la alternativa de 250 ms de la receta son decisiones de la aplicación. Limitar un retardo mayor del servidor puede reintentar antes de lo solicitado; si no es aceptable, espera el retardo completo o devuelve la respuesta.
+- **Dos capas de reintentos**: Este bucle `next(request)` permanece en el endpoint seleccionado y no vuelve a ejecutar el builder ni los interceptores externos. Los fallos de conexión, la conmutación por error entre endpoints y las políticas por defecto para `429`/`502`/`503`/`504` corresponden a `withRetry`.
+- **Política `Retry-After` integrada frente a personalizada**: El `withRetry()` de Core respeta por defecto `Retry-After` RFC 9110 en `429` y `503` (fallando de inmediato sin reintentar si el retardo solicitado por el servidor supera `maxRetryAfterMs`). Si gestionas `429` dentro de un interceptor personalizado como en la receta anterior, configura `withRetry({ retryAfter: false })` (u omite `429` de `statusCodes`) para evitar reintentos duplicados; el tope de 30 segundos y la alternativa de 250 ms de la receta son decisiones de la aplicación, y limitar un retardo mayor del servidor puede reintentar antes de lo solicitado.
 - **Escrituras tras 401**: La [receta de renovación Bearer](/es-ES/recipes/refresh-bearer-once) puede entregar un POST JSON dos veces. Exige un rechazo de autenticación antes del procesamiento de negocio y una clave de idempotencia estable con desduplicación en el servidor, o no repitas automáticamente las escrituras. Los cuerpos de petición en streaming no se repiten.
 - **Tratamiento de rechazos de transporte**: `next(request)` rechaza cuando ocurre un error de red (no existe una respuesta con estado 0). Capturar y relanzar ese rechazo preserva el código de fallo original `NET_*`.
 - **Peticiones que no pueden enviarse**: en un interceptor HTTP, cuando la plataforma rechaza la petición (un método no válido o prohibido, un cuerpo en GET o HEAD, una URL con credenciales, un `Content-Type` no válido) o un hook `finalizeHeaders` lanza una excepción, `next(request)` rechaza con el error propio de la plataforma (un `TypeError`) o con el valor que lanzó el hook, no con el envoltorio `BodyFailure` de la biblioteca. Relanzarlo conserva el código de fallo (`REQ_BUILD_FAILED` o `EXT_HOOK_FAILED`); lanzar un error distinto hace que el fallo sea tuyo (`EXT_INTERCEPTOR_FAILED`). Los demás fallos que aparecen alrededor del transporte siguen llegando a `next(request)` como `BodyFailure`: un cuerpo de respuesta que no se puede leer, decodificar o hacer coincidir con su tipo de medio, un cuerpo truncado y un observador de progreso de subida que lanza (`EXT_OBSERVER_FAILED`), lo que puede ocurrir antes de enviar la petición.
@@ -96,17 +96,23 @@ Un interceptor de transporte ve una petición cada vez: una entrada que falla la
 
 ## 6. Factorías integradas y utilidades
 
-| Export                                         | Transporte | Descripción                                                                                        |
-| ---------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP       | Envuelve `(req, next) => Promise<HttpResponse<unknown>>`                                           |
-| `createSSEInterceptor(fn)`                     | SSE        | Envuelve `(req, next) => Promise<EventStreamHandle<unknown>>`                                      |
-| `createWebSocketInterceptor(fn)`               | WebSocket  | Envuelve `(req, next) => Promise<WebSocketSessionLike>`                                            |
-| `createOperationInterceptor(fn)`               | Todos      | Envuelve `(call, next) => Promise<result>` alrededor de una llamada de operación completa          |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP       | Inyecta `Authorization: Basic ...` desde un proveedor sincrónico al que se llama en cada solicitud |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE        | Inyecta `Authorization: Basic ...` en los handshakes de SSE                                        |
+| Export                                         | Transporte | Descripción                                                                                                                                                                               |
+| ---------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP       | Envuelve `(req, next) => Promise<HttpResponse<unknown>>`                                                                                                                                  |
+| `createSSEInterceptor(fn)`                     | SSE        | Envuelve `(req, next) => Promise<EventStreamHandle<unknown>>`                                                                                                                             |
+| `createWebSocketInterceptor(fn)`               | WebSocket  | Envuelve `(req, next) => Promise<WebSocketSessionLike>`                                                                                                                                   |
+| `createOperationInterceptor(fn)`               | Todos      | Envuelve `(call, next) => Promise<result>` alrededor de una llamada de operación completa                                                                                                 |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP       | Inyecta `Authorization: Basic ...` desde un proveedor sincrónico al que se llama en cada solicitud                                                                                        |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE        | Inyecta `Authorization: Basic ...` en los handshakes de SSE                                                                                                                               |
+| `concurrencyLimitHttpInterceptor(options)`     | HTTP       | Limita los intentos en curso simultáneos por cubo (`ConcurrencyLimitInterceptorOptions`); encola en FIFO hasta `maxQueue` y rechaza el desbordamiento con `BulkheadOverflowError`         |
+| `idempotencyKeyHttpInterceptor(options?)`      | HTTP       | Inyecta una cabecera de clave de idempotencia (`IdempotencyKeyInterceptorOptions`, por defecto `Idempotency-Key`) en métodos mutantes (`POST`, `PATCH`), reutilizando `req.correlationId` |
+
+`concurrencyLimitHttpInterceptor` libera los permisos durante las esperas de backoff de `withRetry` para que los reintentos no puedan bloquear el bulkhead, y lanza `BulkheadOverflowError` (expuesto como `EXT_INTERCEPTOR_FAILED` con `{ attempted: false }`) cuando se supera `maxQueue`. Consulta la [referencia de API de Interceptores](/es-ES/api/interceptors).
 
 ## Lecturas relacionadas
 
+- [Claves de idempotencia en reintentos](/es-ES/recipes/idempotency-key)
+- [Límites de concurrencia tipo bulkhead](/es-ES/recipes/concurrency-limit)
 - [Renovar un token Bearer una sola vez tras un 401](/es-ES/recipes/refresh-bearer-once)
 - [Solicitudes condicionales ETag](/es-ES/recipes/etag-revalidate)
 - [OpenTelemetry en el servidor](/es-ES/docs/integrations/opentelemetry-server)

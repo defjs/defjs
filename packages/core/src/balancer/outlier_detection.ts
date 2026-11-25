@@ -6,9 +6,10 @@ import type { Balancer, DoneInfo } from "./balancer";
  * Failure counting that ejects an endpoint for a while, and an optional
  * application-defined health check.
  * The library does not know what healthy means. It counts classified failures,
- * ejects an endpoint by time, and puts it back when the time is up; only
- * `isHealthy` can say that an endpoint is unfit, and only the application
- * supplies it. No timers, ejection quotas, settlement grid, or slow start are used.
+ * ejects an endpoint by time, and puts it back when the time is up (or admits
+ * one probe at a time when `halfOpen` is enabled); only `isHealthy` can say
+ * that an endpoint is unfit, and only the application supplies it. No timers,
+ * settlement grid, or slow start are used.
  * @group client
  * @see {@link outlierDetection}
  */
@@ -39,6 +40,19 @@ export interface OutlierDetectionOptions {
    * thrown value as `cause`.
    */
   readonly isHealthy?: (endpoint: string) => boolean;
+  /**
+   * When `true`, an endpoint whose ejection penalty has expired admits only one
+   * trial request at a time until that probe settles; a successful probe restores
+   * full traffic and a failed probe immediately re-ejects the endpoint with the
+   * next penalty level. Defaults to `false`.
+   */
+  readonly halfOpen?: boolean;
+  /**
+   * Maximum percentage of candidate endpoints that may be ejected at once, in
+   * `[0, 100]`. Defaults to `100` (no quota; fail-open still applies when every
+   * endpoint is ejected).
+   */
+  readonly maxEjectionPercent?: number;
 }
 /** One penalty level decays per ten seconds without an ejection (gRPC A50 and Envoy default to 10 s). */
 const LEVEL_DECAY_MS = 10_000;
@@ -51,6 +65,10 @@ interface HealthState {
   consecutive: number;
   /** Counts ejections, so a sample from an attempt that started before one can be told apart. */
   ejections: number;
+  /** True after an ejection when `halfOpen` is enabled until one trial request succeeds. */
+  awaitingProbe: boolean;
+  /** True while the single half-open trial request is in flight. */
+  probing: boolean;
 }
 /** Default classifier: every classified attempt failure, including timeouts and incomplete bodies. */
 function defaultEndpointFailure(info: DoneInfo): boolean {
@@ -59,20 +77,23 @@ function defaultEndpointFailure(info: DoneInfo): boolean {
 /** Clean or expired states are evicted first, then partial failure sequences, then ejected endpoints. */
 function penalizedLast(state: HealthState): number {
   if (monotonicNow() < state.until) return 2;
-  return state.consecutive === 0 ? 0 : 1;
+  return state.consecutive === 0 && !state.awaitingProbe ? 0 : 1;
 }
 /**
  * Wraps a strategy with consecutive-failure ejection by time.
  * Five attributed failures eject an endpoint by default. The penalty is the
  * minimum penalty (1s by default) times the penalty level, so successive
  * ejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5
- * times the base is added, and the total caps at 60s. When the time is up the
- * endpoint is selectable again; nothing probes it or decides that it has
- * recovered. As in gRPC outlier detection (gRFC A50) a success never clears the
- * penalty level: every ejection raises it by one and every ten seconds without
- * one lowers it by one, evaluated when the endpoint is next used. An endpoint
- * that accepts a connection and then drops it is therefore ejected for longer
- * each time, as long as its failures return faster than one level decays.
+ * times the base is added, and the total caps at 60s. By default (`halfOpen:
+ * false`), when the time is up the endpoint is selectable again for every
+ * caller; setting `halfOpen: true` admits only one trial request at a time
+ * after penalty expiry, restoring full traffic on success or immediately
+ * re-ejecting on failure. As in gRPC outlier detection (gRFC A50) a success
+ * never clears the penalty level: every ejection raises it by one and every ten
+ * seconds without one lowers it by one, evaluated when the endpoint is next
+ * used. An endpoint that accepts a connection and then drops it is therefore
+ * ejected for longer each time, as long as its failures return faster than one
+ * level decays.
  * Every classified failure code fails by default, including NET_TIMEOUT and
  * NET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection
  * count timeouts and resets; `isFailure` replaces that rule. An attempted
@@ -85,10 +106,11 @@ function penalizedLast(state: HealthState): number {
  * `isHealthy`, when supplied, is the only health judgement and combines with
  * ejection by AND: it can keep an endpoint out, and `true` cannot let an ejected
  * endpoint in. If it rejects every endpoint that is not ejected, it is ignored
- * for that pick. If every endpoint is ejected, the original current list is
- * used (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection
- * quota. All callbacks are synchronous; no timer is created. Configuration is
- * captured at construction.
+ * for that pick. If every endpoint is ejected (or waiting on an in-flight
+ * half-open probe), the original current list is used (Finagle panic mode).
+ * `maxEjectionPercent` defaults to `100` (no quota); lowering it caps how many
+ * endpoints may be ejected simultaneously. All callbacks are synchronous; no
+ * timer is created. Configuration is captured at construction.
  * History holds at least 256 endpoints, and at least the current list, shared
  * across endpoint lists. LRU clean or expired states are evicted first, then
  * partial failure sequences, then the oldest protected state only if every
@@ -112,6 +134,8 @@ export function outlierDetection(
   const consecutive = options?.consecutiveFailures ?? 5;
   const isFailure = options?.isFailure ?? defaultEndpointFailure;
   const isHealthy = options?.isHealthy;
+  const halfOpen = options?.halfOpen ?? false;
+  const maxEjectionPercent = options?.maxEjectionPercent ?? 100;
   const states = new Map<string, HealthState>();
   function stateFor(endpoint: string, members: number): HealthState {
     let state = states.get(endpoint);
@@ -122,6 +146,8 @@ export function outlierDetection(
         healthyFrom: 0,
         consecutive: 0,
         ejections: 0,
+        awaitingProbe: false,
+        probing: false,
       };
     }
     rememberEndpoint(states, endpoint, state, penalizedLast, members);
@@ -136,6 +162,25 @@ export function outlierDetection(
     state.level = Math.max(0, state.level - steps);
     state.healthyFrom += steps * LEVEL_DECAY_MS;
   }
+  function canEject(
+    pool: readonly string[],
+    target: string,
+    now: number,
+  ): boolean {
+    if (maxEjectionPercent >= 100) return true;
+    const cap = Math.floor((pool.length * maxEjectionPercent) / 100);
+    if (cap <= 0) return false;
+    let ejected = 0;
+    for (const endpoint of pool) {
+      if (endpoint === target) continue;
+      const other = states.get(endpoint);
+      if (other !== undefined && now < other.until) {
+        ejected += 1;
+        if (ejected >= cap) return false;
+      }
+    }
+    return true;
+  }
   function ejectEndpoint(state: HealthState, now: number): void {
     state.level += 1;
     const base = Math.min(minimum * state.level, maximum);
@@ -148,24 +193,66 @@ export function outlierDetection(
     state.healthyFrom = state.until;
     state.consecutive = 0;
     state.ejections += 1;
+    state.awaitingProbe = halfOpen;
+    state.probing = false;
   }
-  function sample(state: HealthState, report: DoneInfo): void {
+  function sample(
+    state: HealthState,
+    endpoint: string,
+    report: DoneInfo,
+    pool: readonly string[],
+  ): void {
     const now = monotonicNow();
     refresh(state, now);
     if (!report.attempted || consecutive === 0) return;
-    state.consecutive = isFailure(report) ? state.consecutive + 1 : 0;
-    if (state.consecutive >= consecutive) ejectEndpoint(state, now);
+    if (!isFailure(report)) {
+      state.consecutive = 0;
+      return;
+    }
+    state.consecutive += 1;
+    if (state.consecutive >= consecutive) {
+      if (canEject(pool, endpoint, now)) {
+        ejectEndpoint(state, now);
+      } else {
+        state.consecutive = consecutive;
+      }
+    }
   }
   return {
     pick(info) {
       const now = monotonicNow();
       const members = info.members ?? info.endpoints;
-      const available = info.endpoints.filter((endpoint) => {
+      const ejected: Array<{
+        readonly endpoint: string;
+        readonly until: number;
+      }> = [];
+      for (const endpoint of info.endpoints) {
         const state = states.get(endpoint);
-        if (state === undefined) return true;
+        if (state === undefined) continue;
         refresh(state, now);
-        return now >= state.until;
-      });
+        if (now < state.until) {
+          ejected.push({ endpoint, until: state.until });
+        }
+      }
+      const cap =
+        maxEjectionPercent >= 100
+          ? info.endpoints.length
+          : Math.floor((info.endpoints.length * maxEjectionPercent) / 100);
+      let excluded: Set<string> | undefined;
+      if (ejected.length > 0 && cap > 0) {
+        if (ejected.length > cap) {
+          ejected.sort((a, b) => b.until - a.until);
+          excluded = new Set(
+            ejected.slice(0, cap).map((item) => item.endpoint),
+          );
+        } else {
+          excluded = new Set(ejected.map((item) => item.endpoint));
+        }
+      }
+      const available = info.endpoints.filter(
+        (endpoint) =>
+          !excluded?.has(endpoint) && !states.get(endpoint)?.probing,
+      );
       let candidates: readonly string[] =
         isHealthy === undefined
           ? available
@@ -186,6 +273,11 @@ export function outlierDetection(
       // An attempt that starts while the endpoint is ejected, or that an
       // ejection overtakes, no longer says anything about the endpoint.
       const counted = now >= state.until ? state.ejections : undefined;
+      const isProbe =
+        halfOpen && now >= state.until && state.awaitingProbe && !state.probing;
+      if (isProbe) {
+        state.probing = true;
+      }
       const childDone = result.done;
       return [
         null,
@@ -196,7 +288,29 @@ export function outlierDetection(
           done(report) {
             // The child hears first, so an `isFailure` that throws cannot leave state it reserved unreleased.
             childDone?.(report);
-            if (state.ejections === counted) sample(state, report);
+            if (isProbe) {
+              // Release the probe lock before calling `isFailure` so a throw never stalls future probes.
+              state.probing = false;
+              if (state.ejections === counted && report.attempted) {
+                const doneNow = monotonicNow();
+                refresh(state, doneNow);
+                if (isFailure(report)) {
+                  if (canEject(info.endpoints, result.endpoint, doneNow)) {
+                    ejectEndpoint(state, doneNow);
+                  } else {
+                    state.awaitingProbe = false;
+                    state.consecutive = consecutive;
+                  }
+                } else {
+                  state.awaitingProbe = false;
+                  state.consecutive = 0;
+                }
+              }
+              return;
+            }
+            if (state.ejections === counted) {
+              sample(state, result.endpoint, report, info.endpoints);
+            }
           },
         },
       ];

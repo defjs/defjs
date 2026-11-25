@@ -62,7 +62,7 @@ export function createFetchInitBase(
   request: HttpRequest,
   options: {
     defaultAccept: string;
-    headers: Headers;
+    headers: Headers | Readonly<Record<string, string>>;
     signal?: AbortSignal;
     wrapReadableStreamBody?: (
       body: ReadableStream<Uint8Array>,
@@ -70,7 +70,7 @@ export function createFetchInitBase(
   },
 ): RequestInit & { duplex?: "half" } {
   const { headers } = options;
-  if (!headers.has("Accept")) {
+  if (headers instanceof Headers && !headers.has("Accept")) {
     headers.set("Accept", options.defaultAccept);
   }
 

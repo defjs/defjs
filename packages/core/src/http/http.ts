@@ -9,6 +9,7 @@ import type { OutboundBuilder } from "../internal/outbound_request";
 import type { OperationCall } from "../interceptor/interceptor";
 import { executeOperation } from "../internal/operation";
 import type { AnyStruct, Infer } from "../struct";
+import { compilePathTemplate } from "../internal/url";
 import { executeHttp } from "./execute";
 
 /**
@@ -212,6 +213,7 @@ export function defineRequest<
   const method = definition.method;
   const meta = definition.meta;
   const path = definition.path;
+  const pathTemplate = compilePathTemplate(path);
   const output = definition.output;
   const error = definition.error;
   const endpoint = {
@@ -222,6 +224,7 @@ export function defineRequest<
     meta,
     output,
     path,
+    pathTemplate,
   };
 
   const call: OperationCall = { transport: "http", method, path, meta };

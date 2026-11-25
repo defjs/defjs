@@ -95,7 +95,7 @@
     "name": "OutlierDetectionOptions",
     "kind": "type",
     "slug": "core/outlierdetectionoptions-type",
-    "description": "Failure counting that ejects an endpoint for a while, and an optional application-defined health check. The library does not know what healthy means. It counts classified failures, ejects an endpoint by time, and puts it back when the time is up; only isHealthy can say that an endpoint is unfit, and only the application supplies it. No timers, ejection quotas, settlement grid, or slow start are used."
+    "description": "Failure counting that ejects an endpoint for a while, and an optional application-defined health check. The library does not know what healthy means. It counts classified failures, ejects an endpoint by time, and puts it back when the time is up (or admits one probe at a time when halfOpen is enabled); only isHealthy can say that an endpoint is unfit, and only the application supplies it. No timers, settlement grid, or slow start are used."
   },
   {
     "package": "@defjs/core",
@@ -221,7 +221,7 @@
     "name": "outlierDetection",
     "kind": "function",
     "slug": "core/outlierdetection",
-    "description": "Wraps a strategy with consecutive-failure ejection by time. Five attributed failures eject an endpoint by default. The penalty is the minimum penalty (1s by default) times the penalty level, so successive ejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5 times the base is added, and the total caps at 60s. When the time is up the endpoint is selectable again; nothing probes it or decides that it has recovered. As in gRPC outlier detection (gRFC A50) a success never clears the penalty level: every ejection raises it by one and every ten seconds without one lowers it by one, evaluated when the endpoint is next used. An endpoint that accepts a connection and then drops it is therefore ejected for longer each time, as long as its failures return faster than one level decays. Every classified failure code fails by default, including NET_TIMEOUT and NET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection count timeouts and resets; isFailure replaces that rule. An attempted outcome without a code resets the streak; unattributed attempts leave it unchanged. The outcome of an attempt that began before an ejection, or while the endpoint was ejected, is ignored even if it arrives after the endpoint is selectable again, so late results do not eject it anew. The child receives the filtered candidates as endpoints and the unfiltered members, so ejection does not look like a membership change to it. isHealthy, when supplied, is the only health judgement and combines with ejection by AND: it can keep an endpoint out, and true cannot let an ejected endpoint in. If it rejects every endpoint that is not ejected, it is ignored for that pick. If every endpoint is ejected, the original current list is used (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer is created. Configuration is captured at construction. History holds at least 256 endpoints, and at least the current list, shared across endpoint lists. LRU clean or expired states are evicted first, then partial failure sequences, then the oldest protected state only if every retained endpoint is ejected. Temporary candidate exclusion does not itself erase a penalty."
+    "description": "Wraps a strategy with consecutive-failure ejection by time. Five attributed failures eject an endpoint by default. The penalty is the minimum penalty (1s by default) times the penalty level, so successive ejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5 times the base is added, and the total caps at 60s. By default (halfOpen: false), when the time is up the endpoint is selectable again for every caller; setting halfOpen: true admits only one trial request at a time after penalty expiry, restoring full traffic on success or immediately re-ejecting on failure. As in gRPC outlier detection (gRFC A50) a success never clears the penalty level: every ejection raises it by one and every ten seconds without one lowers it by one, evaluated when the endpoint is next used. An endpoint that accepts a connection and then drops it is therefore ejected for longer each time, as long as its failures return faster than one level decays. Every classified failure code fails by default, including NET_TIMEOUT and NET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection count timeouts and resets; isFailure replaces that rule. An attempted outcome without a code resets the streak; unattributed attempts leave it unchanged. The outcome of an attempt that began before an ejection, or while the endpoint was ejected, is ignored even if it arrives after the endpoint is selectable again, so late results do not eject it anew. The child receives the filtered candidates as endpoints and the unfiltered members, so ejection does not look like a membership change to it. isHealthy, when supplied, is the only health judgement and combines with ejection by AND: it can keep an endpoint out, and true cannot let an ejected endpoint in. If it rejects every endpoint that is not ejected, it is ignored for that pick. If every endpoint is ejected (or waiting on an in-flight half-open probe), the original current list is used (Finagle panic mode). maxEjectionPercent defaults to 100 (no quota); lowering it caps how many endpoints may be ejected simultaneously. All callbacks are synchronous; no timer is created. Configuration is captured at construction. History holds at least 256 endpoints, and at least the current list, shared across endpoint lists. LRU clean or expired states are evicted first, then partial failure sequences, then the oldest protected state only if every retained endpoint is ejected. Temporary candidate exclusion does not itself erase a penalty."
   },
   {
     "package": "@defjs/core",
@@ -834,6 +834,20 @@
   },
   {
     "package": "@defjs/core",
+    "name": "BulkheadOverflowError",
+    "kind": "type",
+    "slug": "core/bulkheadoverflowerror-type",
+    "description": "Cause attached to EXT_INTERCEPTOR_FAILED when concurrencyLimitHttpInterceptor rejects a request because its queue is full (maxQueue reached)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ConcurrencyLimitInterceptorOptions",
+    "kind": "type",
+    "slug": "core/concurrencylimitinterceptoroptions-type",
+    "description": "Options for concurrencyLimitHttpInterceptor."
+  },
+  {
+    "package": "@defjs/core",
     "name": "HttpInterceptor",
     "kind": "type",
     "slug": "core/httpinterceptor-type",
@@ -845,6 +859,13 @@
     "kind": "type",
     "slug": "core/httpinterceptornext-type",
     "description": "Continuation that runs the rest of the HTTP interceptor chain, or the handler."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "IdempotencyKeyInterceptorOptions",
+    "kind": "type",
+    "slug": "core/idempotencykeyinterceptoroptions-type",
+    "description": "Options for idempotencyKeyHttpInterceptor."
   },
   {
     "package": "@defjs/core",
@@ -953,6 +974,13 @@
   },
   {
     "package": "@defjs/core",
+    "name": "concurrencyLimitHttpInterceptor",
+    "kind": "function",
+    "slug": "core/concurrencylimithttpinterceptor",
+    "description": "HTTP interceptor that caps concurrent in-flight HTTP attempts per bucket."
+  },
+  {
+    "package": "@defjs/core",
     "name": "createHttpInterceptor",
     "kind": "function",
     "slug": "core/createhttpinterceptor",
@@ -978,6 +1006,13 @@
     "kind": "function",
     "slug": "core/createwebsocketinterceptor",
     "description": "Wraps a WebSocketInterceptorFn as a tagged WebSocketInterceptor."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "idempotencyKeyHttpInterceptor",
+    "kind": "function",
+    "slug": "core/idempotencykeyhttpinterceptor",
+    "description": "HTTP interceptor that attaches an idempotency key header to mutating requests."
   },
   {
     "package": "@defjs/core",
@@ -1316,6 +1351,55 @@
     "description": "Object struct that is encoded as an URL-encoded form when it is the request body."
   },
   {
+    "package": "@defjs/core/concurrent",
+    "name": "ConcurrencyOptions",
+    "kind": "type",
+    "slug": "core/concurrent/concurrencyoptions-type",
+    "description": "Execution bounds and cancellation options shared by helpers in @defjs/core/concurrent."
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "ConcurrentTask",
+    "kind": "type",
+    "slug": "core/concurrent/concurrenttask-type",
+    "description": "Thunk passed to concurrentAll or concurrentAllSettled."
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "ConcurrentTaskRecord",
+    "kind": "type",
+    "slug": "core/concurrent/concurrenttaskrecord-type",
+    "description": "Keyed dictionary of heterogeneous ConcurrentTask functions passed to concurrentAll or concurrentAllSettled."
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "concurrentAll",
+    "kind": "function",
+    "slug": "core/concurrent/concurrentall",
+    "description": "Runs a tuple of heterogeneous Defjs tasks concurrently, failing fast on the first fault."
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "concurrentAllSettled",
+    "kind": "function",
+    "slug": "core/concurrent/concurrentallsettled",
+    "description": "Runs a tuple of heterogeneous Defjs tasks concurrently and returns each task's own error-first tuple."
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "concurrentMap",
+    "kind": "function",
+    "slug": "core/concurrent/concurrentmap",
+    "description": "Runs one operation over many inputs concurrently, failing fast on the first fault."
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "concurrentMapSettled",
+    "kind": "function",
+    "slug": "core/concurrent/concurrentmapsettled",
+    "description": "Runs one operation over many inputs concurrently and collects every error-first result tuple."
+  },
+  {
     "package": "@defjs/core/xsrf",
     "name": "XSRFOptions",
     "kind": "type",
@@ -1328,6 +1412,153 @@
     "kind": "function",
     "slug": "core/withxsrf",
     "description": "Enables XSRF cookie-to-header forwarding for browser HTTP requests."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortClientOptions",
+    "kind": "type",
+    "slug": "core/port/portclientoptions-type",
+    "description": "Options shared by withPortTransport, createPortHTTPHandle, createPortSSEHandle, and createPortWebSocketHandle."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortDisconnectListener",
+    "kind": "type",
+    "slug": "core/port/portdisconnectlistener-type",
+    "description": "Listener invoked when the underlying port disconnects."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortEndpoint",
+    "kind": "type",
+    "slug": "core/port/portendpoint-type",
+    "description": "Custom bidirectional port abstraction accepted by withPortTransport and attachPortHost alongside native MessagePort."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortHostHandle",
+    "kind": "type",
+    "slug": "core/port/porthosthandle-type",
+    "description": "Handle returned by attachPortHost to tear down active channels and detach listeners."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortHostOptions",
+    "kind": "type",
+    "slug": "core/port/porthostoptions-type",
+    "description": "Configuration passed to attachPortHost."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortLike",
+    "kind": "type",
+    "slug": "core/port/portlike-type",
+    "description": "Native MessagePort or custom PortEndpoint accepted by @defjs/core/port."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortMessageListener",
+    "kind": "type",
+    "slug": "core/port/portmessagelistener-type",
+    "description": "Listener invoked when an incoming wire frame arrives from the peer port."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortRequestCheckContext",
+    "kind": "type",
+    "slug": "core/port/portrequestcheckcontext-type",
+    "description": "Normalized outgoing request context passed to PortHostOptions.allowRequest."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortWebSocketConstructor",
+    "kind": "type",
+    "slug": "core/port/portwebsocketconstructor-type",
+    "description": "Constructor signature accepted by PortHostOptions.WebSocket."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortWebSocketHandle",
+    "kind": "type",
+    "slug": "core/port/portwebsockethandle-type",
+    "description": "WebSocket instance handle returned by createPortWebSocketHandle, exposing mutable binaryType."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortWebSocketHandleConstructor",
+    "kind": "type",
+    "slug": "core/port/portwebsockethandleconstructor-type",
+    "description": "Constructor returned by createPortWebSocketHandle, directly constructable and assignable to @defjs/core's WebSocketHandleConstructor."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortWireMode",
+    "kind": "type",
+    "slug": "core/port/portwiremode-type",
+    "description": "Encoding mode used for binary payloads over a multiplexed port."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "attachPortHost",
+    "kind": "function",
+    "slug": "core/port/attachporthost",
+    "description": "Attaches the network-capable host side of a multiplexed @defjs/core/port channel."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "createPortHTTPHandle",
+    "kind": "function",
+    "slug": "core/port/createporthttphandle",
+    "description": "Builds a FetchHandle that proxies HTTP requests across port using the shared multiplexer for that port."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "createPortSSEHandle",
+    "kind": "function",
+    "slug": "core/port/createportssehandle",
+    "description": "Builds a FetchHandle that proxies Server-Sent Events handshakes and chunked streams across port using the shared multiplexer for that port."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "createPortWebSocketHandle",
+    "kind": "function",
+    "slug": "core/port/createportwebsockethandle",
+    "description": "Builds a WebSocketHandleConstructor that proxies WebSocket sessions across port using the shared multiplexer for that port."
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "withPortTransport",
+    "kind": "function",
+    "slug": "core/port/withporttransport",
+    "description": "Configures an application-owned @defjs/core client to route HTTP, SSE, and WebSocket operations over a multiplexed port."
+  },
+  {
+    "package": "@defjs/core/port/webext",
+    "name": "WebExtEvent",
+    "kind": "type",
+    "slug": "core/port/webext/webextevent-type",
+    "description": "Minimal event subscription surface compatible with WebExtension runtime.Port.onMessage and runtime.Port.onDisconnect."
+  },
+  {
+    "package": "@defjs/core/port/webext",
+    "name": "WebExtPort",
+    "kind": "type",
+    "slug": "core/port/webext/webextport-type",
+    "description": "Minimal WebExtension runtime.Port structural interface accepted by fromWebExtPort."
+  },
+  {
+    "package": "@defjs/core/port/webext",
+    "name": "WebExtPortOptions",
+    "kind": "type",
+    "slug": "core/port/webext/webextportoptions-type",
+    "description": "Options accepted by fromWebExtPort."
+  },
+  {
+    "package": "@defjs/core/port/webext",
+    "name": "fromWebExtPort",
+    "kind": "function",
+    "slug": "core/port/webext/fromwebextport",
+    "description": "Adapts a WebExtension runtime.Port instance or lazy connector callback into a PortEndpoint."
   },
   {
     "package": "@defjs/react",
@@ -1412,5 +1643,124 @@
     "kind": "function",
     "slug": "opentelemetry-server/withopentelemetryserver",
     "description": "Client option that installs outbound OpenTelemetry interceptors for every operation call and for HTTP, SSE, and WebSocket."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "CliDiagnostic",
+    "kind": "type",
+    "slug": "cli/clidiagnostic-type",
+    "description": "Structured diagnostic emitted during CLI parsing, lowering, or generation."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "CliDiagnosticSeverity",
+    "kind": "type",
+    "slug": "cli/clidiagnosticseverity-type",
+    "description": "Severity level attached to a CLI diagnostic."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "CliIo",
+    "kind": "type",
+    "slug": "cli/cliio-type",
+    "description": "Output streams injected into runCli."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "DefjsConfig",
+    "kind": "type",
+    "slug": "cli/defjsconfig-type",
+    "description": "Root configuration accepted by defineConfig in defjs.config.ts."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "GenerateOpenApiOptions",
+    "kind": "type",
+    "slug": "cli/generateopenapioptions-type",
+    "description": "Programmatic options passed to generateOpenApi."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiDocumentObject",
+    "kind": "type",
+    "slug": "cli/openapidocumentobject-type",
+    "description": "Plain OpenAPI document object, such as an imported JSON or TypeScript specification module."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiErrorStrategy",
+    "kind": "type",
+    "slug": "cli/openapierrorstrategy-type",
+    "description": "Strategy for emitting error structs on HTTP operations."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiGenerateResult",
+    "kind": "type",
+    "slug": "cli/openapigenerateresult-type",
+    "description": "Summary returned by generateOpenApi."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiGenerationMode",
+    "kind": "type",
+    "slug": "cli/openapigenerationmode-type",
+    "description": "File synchronization strategy for OpenAPI code generation."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiInput",
+    "kind": "type",
+    "slug": "cli/openapiinput-type",
+    "description": "Accepted OpenAPI source for OpenApiTargetConfig."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiMixed2xxStrategy",
+    "kind": "type",
+    "slug": "cli/openapimixed2xxstrategy-type",
+    "description": "Strategy when an operation declares both body-bearing 2xx responses (such as 200 JSON) and empty 2xx responses (such as 204 No Content)."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiOutputConfig",
+    "kind": "type",
+    "slug": "cli/openapioutputconfig-type",
+    "description": "Output directory and formatting options for a generated Defjs API target."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiOutputFormat",
+    "kind": "type",
+    "slug": "cli/openapioutputformat-type",
+    "description": "Supported output module formats for generated Defjs definitions."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiTargetConfig",
+    "kind": "type",
+    "slug": "cli/openapitargetconfig-type",
+    "description": "Single OpenAPI generation target configured in defjs.config.ts or passed to generateOpenApi."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "defineConfig",
+    "kind": "function",
+    "slug": "cli/defineconfig",
+    "description": "Identity configuration helper that provides type safety for defjs.config.ts."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "generateOpenApi",
+    "kind": "function",
+    "slug": "cli/generateopenapi",
+    "description": "Generates Defjs request, event-stream, and schema modules from a single OpenAPI target."
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "runCli",
+    "kind": "function",
+    "slug": "cli/runcli",
+    "description": "Executes the @defjs/cli command router with explicit arguments and I/O streams."
   }
 ]

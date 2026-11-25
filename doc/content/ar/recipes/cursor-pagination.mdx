@@ -1,0 +1,31 @@
+---
+title: "التصفح بالمؤشر (Cursor pagination)"
+description: دفق نقاط النهاية المقسَّمة إلى صفحات بنظافة عبر مولّد غير متزامن وتمرير إلغاء AbortSignal لكل صفحة.
+---
+
+# التصفح بالمؤشر (Cursor pagination)
+
+أبقِ العملية المقسَّمة إلى صفحات داخل وحدة SDK (`listOrders`) وغلّف متابعة المؤشر داخل دالة مساعدة نقية في التطبيق (`listAllOrders`) تنتج مصفوفات بنمط Go (`[err, item]`) وتتوقف فوراً عند الفشل أو إلغاء المستدعي.
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+راجع دليلي [العميل](/ar/docs/client) و[عمليات HTTP](/ar/docs/http) للاطلاع على قواعد اشتقاق `signal` لكل استدعاء.

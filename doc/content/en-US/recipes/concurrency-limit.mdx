@@ -1,0 +1,25 @@
+---
+title: "Concurrency limits & pooled calls"
+description: Protect downstream origins with concurrencyLimitHttpInterceptor and fan out cleanly via @defjs/core/concurrent.
+---
+
+# Concurrency limits & pooled calls
+
+Use `concurrencyLimitHttpInterceptor` on the `Client` as a client-wide bulkhead (FIFO queueing with optional `maxQueue` overflow protection), and use `@defjs/core/concurrent` (`concurrentMap`, `concurrentMapSettled`, `concurrentAll`, `concurrentAllSettled`) for fail-fast or settled parallel calls bound directly to that `Client`.
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+See [Client API](/api/client) and [Interceptors API](/api/interceptors).

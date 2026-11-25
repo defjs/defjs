@@ -55,16 +55,16 @@ HTTP インターセプターは、`next(req)` を呼び出さずに `makeRespon
 
 ## 3. リトライと `Retry-After`
 
-HTTP リトライはデフォルトで無効です。接続失敗、タイムアウト、または `502`、`503`、`504` を別のエンドポイントでリトライするには、[`withRetry()`](/ja-JP/docs/load-balancing#retries) を使います。バックオフの遅延のあと、バランサーに選び直させ、リクエストを再構築して、インターセプターチェーン全体を再実行します。
+HTTP リトライはデフォルトで無効です。接続失敗、タイムアウト、または `statusCodes` に含まれるステータス（デフォルトでは `429`、`502`、`503`、`504`）を、`429` と `503` に対するネイティブの RFC 9110 `Retry-After` 対応（`retryAfter: true`、`maxRetryAfterMs: 60_000`）付きでリトライするには、[`withRetry()`](/ja-JP/docs/load-balancing#retries) を使います。遅延のあと、バランサーに選び直させ、リクエストを再構築して、インターセプターチェーン全体を再実行します。
 
-代わりにアプリケーションのインターセプターで、`429` や `Retry-After` など、同じエンドポイントに対するステータス処理を実装することもできます。
+`builder` や外側のインターセプターを再実行せず選択済みエンドポイント上でリトライしたい場合、`Retry-After` がないときにフォールバック遅延を補いたい場合、あるいはフェイルファストせず待機時間に上限を設けたい場合など、アプリケーションが**同一エンドポイント上のカスタム**ステータス処理を必要とするときは、インターセプターで直接 `next(request)` をループできます。
 
 <include cwd lang="typescript">
   examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **2 層のリトライ**: この `next(request)` ループは選択済みのエンドポイントに留まり、`builder` や外側のインターセプターを再実行しません。接続失敗と `502`/`503`/`504` は `withRetry` に任せます。
-- **`Retry-After` ポリシー**: Core の `withRetry` はこのヘッダーを読みません。レシピの 30 秒の上限と 250 ms のフォールバックはアプリケーション側の選択です。サーバーが求める遅延がより長い場合、上限によって指定より早くリトライする可能性があります。それを許容できなければ、指定された遅延全体を待つか、そのままレスポンスを返してください。
+- **2 層のリトライ**: この `next(request)` ループは選択済みのエンドポイントに留まり、`builder` や外側のインターセプターを再実行しません。接続失敗、エンドポイント間のフェイルオーバー、およびデフォルトの `429`/`502`/`503`/`504` ポリシーは `withRetry` が担います。
+- **組み込み vs カスタムの `Retry-After` ポリシー**: Core の `withRetry()` はデフォルトで `429` と `503` に対して RFC 9110 の `Retry-After` に従います（サーバーが要求する遅延が `maxRetryAfterMs` を超えると、リトライせず即座にフェイルファストします）。上のレシピのようなカスタムインターセプターで `429` を処理する場合は、二重リトライを防ぐため `withRetry({ retryAfter: false })` を構成する（または `statusCodes` から `429` を外す）ようにしてください。レシピの 30 秒の上限と 250 ms のフォールバックはアプリケーション側の選択であり、より長いサーバー指定の遅延に上限をかけると、要求より早くリトライする可能性があります。
 - **401 と書き込み**: [Bearer 更新レシピ](/ja-JP/recipes/refresh-bearer-once) は JSON POST を 2 回送信する場合があります。業務処理前の認証拒否と、安定した冪等性キーによるサーバー側の重複排除を必須とするか、書き込みの自動再送を行わないでください。ストリームのリクエストボディは再送されません。
 - **トランスポート例外のハンドリング**: ネットワークエラーが発生した場合、`next(request)` は reject されます（ステータス 0 のレスポンスは存在しません）。この拒否を捕捉して再度 throw することで、元の `NET_*` Fault コードが保持されます。
 - **送れないリクエスト**: HTTP インターセプターでは、プラットフォームがリクエストを拒否したとき（不正または禁止されたメソッド、GET または HEAD のボディ、認証情報を含む URL、不正な `Content-Type`）、または `finalizeHeaders` フックが throw したとき、`next(request)` はライブラリの `BodyFailure` ラッパーではなく、プラットフォーム自身のエラー（`TypeError`）またはフックが投げた値で reject します。それを再 throw すると Fault コード（`REQ_BUILD_FAILED` または `EXT_HOOK_FAILED`）が保たれ、別のエラーを throw すると失敗は自分のものになります（`EXT_INTERCEPTOR_FAILED`）。トランスポートの周囲で見つかるその他の失敗は、引き続き `BodyFailure` として `next(request)` に届きます。読めない、デコードできない、またはメディアタイプに合わないレスポンスボディ、途中で切れたボディ、throw するアップロード進捗オブザーバー（`EXT_OBSERVER_FAILED`）です。後者はリクエストが送られる前に起き得ます。
@@ -96,17 +96,23 @@ WebSocket インターセプターが `next(req)` を呼び出せるのは **最
 
 ## 6. 組み込みファクトリとヘルパー
 
-| エクスポート                                   | トランスポート | 説明                                                                                     |
-| ---------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP           | `(req, next) => Promise<HttpResponse<unknown>>` をラップ                                 |
-| `createSSEInterceptor(fn)`                     | SSE            | `(req, next) => Promise<EventStreamHandle<unknown>>` をラップ                            |
-| `createWebSocketInterceptor(fn)`               | WebSocket      | `(req, next) => Promise<WebSocketSessionLike>` をラップ                                  |
-| `createOperationInterceptor(fn)`               | すべて         | 操作呼び出し全体を包む `(call, next) => Promise<result>` をラップ                        |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP           | リクエストごとに呼ばれる同期の認証情報プロバイダーから `Authorization: Basic ...` を注入 |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE            | SSE ハンドシェイク時に `Authorization: Basic ...` を注入                                 |
+| エクスポート                                   | トランスポート | 説明                                                                                                                                                              |
+| ---------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP           | `(req, next) => Promise<HttpResponse<unknown>>` をラップ                                                                                                          |
+| `createSSEInterceptor(fn)`                     | SSE            | `(req, next) => Promise<EventStreamHandle<unknown>>` をラップ                                                                                                     |
+| `createWebSocketInterceptor(fn)`               | WebSocket      | `(req, next) => Promise<WebSocketSessionLike>` をラップ                                                                                                           |
+| `createOperationInterceptor(fn)`               | すべて         | 操作呼び出し全体を包む `(call, next) => Promise<result>` をラップ                                                                                                 |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP           | リクエストごとに呼ばれる同期の認証情報プロバイダーから `Authorization: Basic ...` を注入                                                                          |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE            | SSE ハンドシェイク時に `Authorization: Basic ...` を注入                                                                                                          |
+| `concurrencyLimitHttpInterceptor(options)`     | HTTP           | バケットごとに同時実行中の試行数を制限（`ConcurrencyLimitInterceptorOptions`）。`maxQueue` まで FIFO キューイングし、超過時は `BulkheadOverflowError` で拒否      |
+| `idempotencyKeyHttpInterceptor(options?)`      | HTTP           | 状態変更メソッド（`POST`、`PATCH`）に冪等性キーヘッダー（`IdempotencyKeyInterceptorOptions`、デフォルト `Idempotency-Key`）を注入し、`req.correlationId` を再利用 |
+
+`concurrencyLimitHttpInterceptor` は `withRetry` のバックオフ待機中にパーミットを解放するため、リトライがバルクヘッドをデッドロックさせることはなく、`maxQueue` を超えた場合は `BulkheadOverflowError` をスローします（`{ attempted: false }` 付きの `EXT_INTERCEPTOR_FAILED` として返ります）。詳細は [Interceptors API リファレンス](/ja-JP/api/interceptors) を参照してください。
 
 ## 関連ドキュメント
 
+- [リトライ時の冪等性キー](/ja-JP/recipes/idempotency-key)
+- [バルクヘッド同時実行数制限](/ja-JP/recipes/concurrency-limit)
 - [401 後のトークン自動更新](/ja-JP/recipes/refresh-bearer-once)
 - [ETag 条件付きリクエスト](/ja-JP/recipes/etag-revalidate)
 - [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server)

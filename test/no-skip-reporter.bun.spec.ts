@@ -75,7 +75,15 @@ export default defineConfig({
     // The nested run sees neither the outer Vitest variables nor CI.
     const { CI, ...env } = envWithoutVitest();
     const { code, stdout, stderr } = await run(
-      [process.execPath, "run", "vitest", "run", "--root", dir],
+      [
+        process.execPath,
+        "run",
+        "vitest",
+        "run",
+        "--root",
+        dir,
+        "--no-fsModuleCache",
+      ],
       { cwd: repoRoot, env },
     );
     return { code, output: `${stdout}\n${stderr}` };

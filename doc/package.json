@@ -16,6 +16,7 @@
     "isbot": "^5.2.3"
   },
   "devDependencies": {
+    "@defjs/cli": "workspace:*",
     "@defjs/core": "workspace:^",
     "@defjs/opentelemetry-server": "workspace:*",
     "@defjs/react": "workspace:*",
@@ -28,6 +29,7 @@
     "@react-router/dev": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/mdx": "catalog:",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitest/coverage-istanbul": "catalog:",
@@ -38,6 +40,7 @@
     "react-dom": "catalog:",
     "react-router": "catalog:",
     "tailwindcss": "catalog:",
+    "undici": "^8.13.1",
     "vite": "catalog:",
     "vitest": "catalog:",
     "vue": "3.5.45"

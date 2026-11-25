@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
+  compilePathTemplate,
   createResolvedRequestUrl,
   createSearchParams,
+  fillCompiledPath,
   fillUrl,
   mergeHeaders,
+  resolveDirectQueryString,
 } from "./url";
 
 describe("url helpers", () => {
@@ -184,5 +187,45 @@ describe("url helpers", () => {
     expect(fillUrl("/files/:__proto__", record)).toBe("/files/safe");
     expect(createSearchParams(record).get("__proto__")).toBe("safe");
     expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
+  });
+
+  test("compiles path templates and resolves direct query strings", () => {
+    expect(compilePathTemplate("/users")).toBeUndefined();
+    expect(compilePathTemplate("/foo:/bar")).toBeUndefined();
+
+    const single = compilePathTemplate("/users/:id");
+    expect(single).toEqual({
+      kind: "single",
+      prefix: "/users/",
+      param: "id",
+      suffix: "",
+    });
+    expect(fillCompiledPath("/users", undefined, { extra: "1" })).toBe(
+      "/users",
+    );
+    expect(() => fillCompiledPath("/users", undefined, { extra: "" })).toThrow(
+      'path value for "extra" must be a non-empty path segment',
+    );
+
+    const multi = compilePathTemplate("/users/:id/posts/:postId");
+    expect(() => fillCompiledPath("/users/:id/posts/:postId", multi)).toThrow(
+      "Missing path param: id",
+    );
+
+    expect(
+      createResolvedRequestUrl("https://api.example.com", "users").href,
+    ).toBe("https://api.example.com/users");
+
+    expect(resolveDirectQueryString(undefined)).toBe("");
+    expect(resolveDirectQueryString(new URLSearchParams({ a: "1" }))).toBe(
+      "a=1",
+    );
+    expect(resolveDirectQueryString({ a: "1", b: "2" })).toBe("a=1&b=2");
+    expect(
+      resolveDirectQueryString({ a: "1" }, (q) => `raw=${String(q["a"])}`),
+    ).toBe("raw=1");
+    expect(() =>
+      fillCompiledPath("/users/:id", single, { other: "1" }),
+    ).toThrow("Missing path param: id");
   });
 });

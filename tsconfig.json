@@ -2,7 +2,12 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "paths": {
+      "@defjs/cli": ["./packages/cli/src"],
       "@defjs/core": ["./packages/core/src"],
+      "@defjs/core/concurrent": ["./packages/core/src/concurrent"],
+      "@defjs/core/xsrf": ["./packages/core/src/xsrf"],
+      "@defjs/core/port": ["./packages/core/src/port"],
+      "@defjs/core/port/webext": ["./packages/core/src/port/webext"],
       "@defjs/opentelemetry-server": ["./packages/opentelemetry-server/src"],
       "@defjs/react": ["./packages/react/src"],
       "@defjs/vue": ["./packages/vue/src"]
@@ -11,6 +16,7 @@
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
   "exclude": [
+    "bench",
     "node_modules",
     "**/dist",
     "**/coverage",

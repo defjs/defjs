@@ -1,0 +1,44 @@
+---
+title: Port
+description: Defjs クライアント向けの多重化 MessagePort および MV3 WebExtension プロキシトランスポートです。
+---
+
+# Port トランスポート (`@defjs/core/port` & `@defjs/core/port/webext`)
+
+多重化 `MessagePort` と WebExtension `runtime.Port` 用のトランスポートハンドル、およびデフォルト拒否のホストブリッジです。[Port トランスポートガイド](/ja-JP/docs/port) を参照してください。
+
+## クイック例
+
+<include cwd>examples/api/port.ts#example</include>
+
+## クライアントハンドル (`@defjs/core/port`)
+
+### withPortTransport
+
+<ApiSignature name="withPortTransport" />
+
+### createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle
+
+<ApiSignature name="createPortHTTPHandle, createPortSSEHandle, createPortWebSocketHandle" />
+
+<ApiSignature name="PortClientOptions, PortWebSocketHandle, PortWebSocketHandleConstructor" />
+
+## ホストアタッチ (`@defjs/core/port`)
+
+### attachPortHost
+
+<ApiSignature name="attachPortHost" />
+
+<ApiSignature name="PortHostOptions, PortHostHandle, PortRequestCheckContext, PortWebSocketConstructor" />
+
+## Port 抽象インターフェイス
+
+<ApiSignature name="PortLike, PortEndpoint, PortWireMode, PortMessageListener, PortDisconnectListener" />
+
+## WebExtension アダプター (`@defjs/core/port/webext`)
+
+### fromWebExtPort
+
+<ApiSignature name="fromWebExtPort" />
+
+<ApiSignature name="WebExtPort, WebExtEvent, WebExtPortOptions" />

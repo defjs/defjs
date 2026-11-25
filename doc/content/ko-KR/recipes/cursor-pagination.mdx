@@ -1,0 +1,31 @@
+---
+title: "커서 페이지네이션"
+description: 비동기 제너레이터와 페이지별 AbortSignal 취소를 사용해 페이지네이션된 엔드포인트를 깔끔하게 스트리밍합니다.
+---
+
+# 커서 페이지네이션
+
+페이지네이션된 작업은 SDK 모듈(`listOrders`)에 두고, 커서 이어 받기는 Go 스타일의 `[err, item]` 튜플을 yield하며 실패 또는 호출자 중단 시 즉시 멈추는 순수 애플리케이션 헬퍼(`listAllOrders`)로 감싸세요.
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+호출별 `signal` 파생 규칙은 [클라이언트](/ko-KR/docs/client) 및 [HTTP 작업](/ko-KR/docs/http) 문서를 참조하세요.

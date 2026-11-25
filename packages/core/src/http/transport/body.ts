@@ -49,6 +49,19 @@ function isArrayBufferBacked(
   return view.buffer instanceof ArrayBuffer;
 }
 
+export function resolveEffectiveContentType(
+  request: HttpRequest,
+): string | null {
+  const body = request.body;
+  // bodyContentType describes the body the builder produced; a replaced body is detected again.
+  const sameBody =
+    !Object.hasOwn(request, BODY_CONTENT_TYPE_SOURCE) ||
+    request.bodyContentTypeSource === body;
+  return sameBody && request.bodyContentType !== undefined
+    ? request.bodyContentType
+    : resolveHttpBodyContentType(body);
+}
+
 export function applyRequestContentType(
   request: HttpRequest,
   headers: Headers,
@@ -62,14 +75,7 @@ export function applyRequestContentType(
   if (body === undefined || headers.has("Content-Type")) {
     return;
   }
-  // bodyContentType describes the body the builder produced; a replaced body is detected again.
-  const sameBody =
-    !Object.hasOwn(request, BODY_CONTENT_TYPE_SOURCE) ||
-    request.bodyContentTypeSource === body;
-  const contentType =
-    sameBody && request.bodyContentType !== undefined
-      ? request.bodyContentType
-      : resolveHttpBodyContentType(body);
+  const contentType = resolveEffectiveContentType(request);
   if (contentType) {
     headers.set("Content-Type", contentType);
   }

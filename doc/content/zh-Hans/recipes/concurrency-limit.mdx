@@ -1,0 +1,25 @@
+---
+title: "并发限制与池化调用"
+description: 使用 concurrencyLimitHttpInterceptor 保护下游源站，并通过 @defjs/core/concurrent 优雅地进行并发扇出。
+---
+
+# 并发限制与池化调用
+
+在 `Client` 上使用 `concurrencyLimitHttpInterceptor` 作为客户端级并发舱壁（支持 FIFO 排队以及可选的 `maxQueue` 溢出保护），并配合 `@defjs/core/concurrent`（`concurrentMap`、`concurrentMapSettled`、`concurrentAll`、`concurrentAllSettled`）直接绑定该 `Client` 执行快速失败（fail-fast）或全量汇总（settled）的并发调用。
+
+<Tabs items={["sdk/inventory.ts", "app/batch.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/sdk/inventory.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/concurrency-limit/app/batch.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+参阅 [Client API](/zh-Hans/api/client) 与[拦截器 API](/zh-Hans/api/interceptors)。

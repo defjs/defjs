@@ -26,7 +26,7 @@ description: 教你在自己的專案中為 Defjs 請求定義、struct 結構�
 
 - **為什麼要填 `https://fixture.invalid`**：`createClient` 會在請求進入 `withHTTPHandle` 前檢查基礎 URL 是否合法；`.invalid` 是 RFC 保留網域，就算設定寫漏也不會真正查到公網 DNS。
 - **注意 Handle 各自對應的協定**：`withHTTPHandle` **只攔截 HTTP 操作（`defineRequest`）**；測試 `defineEventStream` 請用 `withSSEHandle`，測試 `defineWebSocket` 請用 `withWebSocketHandle`。
-- **關於 `withRetry` 預設值與踩雷點**：未設定 `withRetry` 時預設**不重試**。一般單元測試請省略 `withRetry`，讓 `502`/`503`/`504` 與斷線測試在單次嘗試後立刻返回，避免卡在 `1s + 2s + 4s` 退避等待。**特別注意**：呼叫 `withRetry()` 或傳入 `withRetry(undefined)` 會預設開啟 **3 次重試**；若要覆寫共用工廠並明確關閉重試，請傳 `withRetry({ maxRetries: 0 })`。
+- **關於 `withRetry` 預設值與踩雷點**：未設定 `withRetry` 時預設**不重試**。一般單元測試請省略 `withRetry`，讓 `429`/`502`/`503`/`504` 與斷線測試在單次嘗試後立刻返回，避免卡在 `1s + 2s + 4s` 退避等待。**特別注意**：呼叫 `withRetry()` 或傳入 `withRetry(undefined)` 會預設開啟 **3 次重試**；若要覆寫共用工廠並明確關閉重試，請傳 `withRetry({ maxRetries: 0 })`。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>

@@ -1,0 +1,53 @@
+---
+title: Port 傳輸（Workers 與 WebExtensions）
+description: 透過具預設拒絕來源策略的多工代理，在 MessagePort、Workers、iframe、Electron 與 MV3 WebExtension runtime.Port 之間代理 HTTP、SSE 與 WebSocket 操作。
+---
+
+# Port 傳輸（`@defjs/core/port`）
+
+`@defjs/core/port` 讓隔離的執行環境（`SharedWorker`、Dedicated Worker、沙箱 `iframe`、Electron renderer，或 WebExtension Popup / Side Panel / Content Script）能透過單一多工連接埠執行純粹的 `@defjs/core` SDK 定義，而無需將定義耦合到代理傳輸層。
+
+- 零執行時期依賴；作為可選子路徑 `@defjs/core/port` 與 `@defjs/core/port/webext` 提供，未匯入時零打包體積開銷
+- 在同一條埠連線上同時共用 HTTP（包含 `ReadableStream` 上傳／下載）、SSE（`text/event-stream`）與 WebSocket 連線
+- **預設採取安全失敗封閉（Fail-closed）原則**：除非主機明確指定 `allowedOrigins`、`allowRequest` 或 `allowAnyOrigin: true`，否則 `attachPortHost` 會拒絕所有流量
+
+```bash
+bun add @defjs/core
+```
+
+## MessagePort 橋接（Workers、iframe、Electron）
+
+通訊兩端均保持 SDK 定義不變。具備權限的主機執行真實的 `fetch` / `WebSocket` 呼叫；受限的沙箱客戶端只要將 `withPortTransport(port)` 掛載到其 `Client` 上即可：
+
+<Tabs items={["sdk/orders.ts", "host.ts", "client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/host.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+呼叫 `attachPortHost` 時，請保留回傳的 `PortHostHandle` 參照，並在結束清理時呼叫 `host.close()`（或使用 `using host = attachPortHost(...)`），以確保進行中的 HTTP/SSE 通道與 WebSocket 工作階段都能順利關閉。
+
+## MV3 WebExtension 代理（`@defjs/core/port/webext`）
+
+WebExtension 的 `runtime.Port` 無法直接跨 Chromium／Firefox／Safari 擴充功能邊界傳遞 `ArrayBuffer` 物件，且 Manifest V3 的 Service Worker 進入休眠時會中斷連線。`@defjs/core/port/webext` 提供零依賴的結構化轉接函式 `fromWebExtPort`（不需要 `@types/chrome`），採用 `"json"` 分塊 Base64 訊框格式，並支援延遲連接器函式，在 Service Worker 休眠喚醒後自動重建連線：
+
+<include cwd lang="typescript">
+  examples/port/webext.ts#example
+</include>
+
+請參閱 [Port API 參考](/zh-Hant-TW/api/port)。

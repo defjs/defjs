@@ -1,0 +1,53 @@
+---
+title: Port 전송 (Workers 및 WebExtensions)
+description: 기본 거부(default-deny) 출처 정책과 함께 MessagePort, Workers, iframe, Electron, MV3 WebExtension runtime.Port 전반에 걸쳐 HTTP, SSE, WebSocket 작업을 프록시합니다.
+---
+
+# Port 전송 (`@defjs/core/port`)
+
+`@defjs/core/port`를 사용하면 격리된 컨텍스트(`SharedWorker`, Dedicated Worker, 샌드박스 처리된 `iframe`, Electron 렌더러, 또는 WebExtension Popup / Side Panel / Content Script)가 정의를 프록시 전송에 결합하지 않고도 다중화된 단일 포트를 통해 순수 `@defjs/core` SDK 정의를 실행할 수 있습니다.
+
+- 런타임 의존성 없음; 선택적 `@defjs/core/port` 및 `@defjs/core/port/webext` 서브패스 export로 제공되며 가져오지 않으면 번들 크기에 영향을 주지 않습니다
+- 단일 포트를 HTTP(`ReadableStream` 업로드/다운로드 포함), SSE(`text/event-stream`), WebSocket 연결에서 동시에 공유
+- **기본 fail-closed 보안**: 호스트가 `allowedOrigins`, `allowRequest` 또는 명시적인 `allowAnyOrigin: true`를 지정하지 않으면 `attachPortHost`가 모든 트래픽을 거부합니다
+
+```bash
+bun add @defjs/core
+```
+
+## MessagePort 브리지 (Workers, iframe, Electron)
+
+양쪽 모두 SDK 정의를 변경 없이 그대로 유지합니다. 권한이 있는 호스트는 실제 `fetch` / `WebSocket` 호출을 실행하고, 샌드박스 클라이언트는 `Client`에 `withPortTransport(port)`를 연결합니다:
+
+<Tabs items={["sdk/orders.ts", "host.ts", "client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/host.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+`attachPortHost`를 호출할 때는 반환된 `PortHostHandle` 참조를 유지하고, 정리 시 `host.close()`(또는 `using host = attachPortHost(...)`)를 호출하여 진행 중인 HTTP/SSE 채널과 WebSocket 세션이 깔끔하게 닫히도록 하세요.
+
+## MV3 WebExtension 프록시 (`@defjs/core/port/webext`)
+
+WebExtension `runtime.Port`는 Chromium/Firefox/Safari 확장 프로그램 경계 간에 `ArrayBuffer` 객체를 직접 전송할 수 없으며, Manifest V3 Service Worker가 일시 중단될 때마다 연결이 끊어집니다. `@defjs/core/port/webext`는 `"json"` 청크 Base64 프레이밍을 사용하고 Service Worker 휴면(hibernation) 이후 자동 재연결을 위한 지연 커넥터 함수를 지원하는, 의존성 없는 구조적 어댑터 `fromWebExtPort`(`@types/chrome` 불필요)를 제공합니다:
+
+<include cwd lang="typescript">
+  examples/port/webext.ts#example
+</include>
+
+자세한 내용은 [Port API 레퍼런스](/ko-KR/api/port)를 참조하세요.

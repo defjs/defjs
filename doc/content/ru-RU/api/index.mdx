@@ -13,24 +13,26 @@ description: Найдите API определений SDK, настройку �
 
 ## Пакеты
 
-| Пакет                                                            | Что можно найти                                                   |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`@defjs/core`](/ru-RU/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
-| [`@defjs/vue`](/ru-RU/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
-| [`@defjs/react`](/ru-RU/api/react)                               | `ClientProvider`, `useClient`                                     |
-| [`@defjs/opentelemetry-server`](/ru-RU/api/opentelemetry-server) | `withOpenTelemetryServer`, опции по транспортам                   |
+| Пакет                                                            | Что можно найти                                                                                                 |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](/ru-RU/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket, `@defjs/core/concurrent`, `@defjs/core/port` |
+| [`@defjs/cli`](/ru-RU/api/cli)                                   | `defineConfig`, `generateOpenApi`, `runCli`, опции целей OpenAPI                                                |
+| [`@defjs/vue`](/ru-RU/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`                                                             |
+| [`@defjs/react`](/ru-RU/api/react)                               | `ClientProvider`, `useClient`                                                                                   |
+| [`@defjs/opentelemetry-server`](/ru-RU/api/opentelemetry-server) | `withOpenTelemetryServer`, опции по транспортам                                                                 |
 
 ## @defjs/core
 
-| Страница                                | Что можно найти                                                       |
-| --------------------------------------- | --------------------------------------------------------------------- |
-| [Client](/ru-RU/api/client)             | `createClient`, опции `with*`, `Client`                               |
-| [HTTP](/ru-RU/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
-| [Struct](/ru-RU/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
-| [Errors](/ru-RU/api/errors)             | варианты и фабрики `Fault`                                            |
-| [Interceptors](/ru-RU/api/interceptors) | хелперы interceptor HTTP / SSE / WebSocket                            |
-| [SSE](/ru-RU/api/sse)                   | `defineEventStream`, дескриптор потока                                |
-| [WebSocket](/ru-RU/api/web-socket)      | `defineWebSocket`, сессия                                             |
+| Страница                                | Что можно найти                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Client](/ru-RU/api/client)             | `createClient`, опции `with*`, `Client`, `@defjs/core/concurrent`                     |
+| [HTTP](/ru-RU/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse`                 |
+| [Struct](/ru-RU/api/struct)             | `struct.*`, `Infer`, `StructError`                                                    |
+| [Errors](/ru-RU/api/errors)             | варианты и фабрики `Fault`                                                            |
+| [Interceptors](/ru-RU/api/interceptors) | встроенные хелперы перехватчиков и HTTP / SSE / WebSocket                             |
+| [SSE](/ru-RU/api/sse)                   | `defineEventStream`, дескриптор потока                                                |
+| [WebSocket](/ru-RU/api/web-socket)      | `defineWebSocket`, сессия                                                             |
+| [Port](/ru-RU/api/port)                 | `withPortTransport`, `attachPortHost`, `createPort*Handle`, `@defjs/core/port/webext` |
 
 ## Связанное
 

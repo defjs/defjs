@@ -63,4 +63,26 @@ description: HTTP, SSE, WebSocket 인터셉터 생성자예요.
 
 요청마다 `Authorization: Basic <encoded>`를 설정해요. `fn`은 `{ username, password }`를 반환하고 요청마다 호출돼요. 선택적 두 번째 인자 `{ encode }`는 그 자격 증명을 받아 `Basic ` 뒤의 부분을 반환해요. 기본 인코딩은 ``btoa(`${username}:${password}`)``예요. `encode` 없이 `btoa`를 쓸 수 없으면 인터셉터를 만들 때 throw해요.
 
+## 동시성 제한
+
+### concurrencyLimitHttpInterceptor()
+
+### BulkheadOverflowError
+
+### ConcurrencyLimitInterceptorOptions
+
+<ApiSignature name="concurrencyLimitHttpInterceptor, BulkheadOverflowError, ConcurrencyLimitInterceptorOptions" />
+
+버킷별(`key`, 기본값은 공유 버킷 하나)로 동시에 진행 중인 HTTP 시도 수를 제한해요. `maxConcurrency`를 넘는 요청은 최대 `maxQueue`(기본값 `Infinity`)까지 FIFO 순서로 대기하거나, `BulkheadOverflowError`로 reject돼요(`{ attempted: false }`와 함께 `EXT_INTERCEPTOR_FAILED`로 표면화돼요). 허가권(permit)은 `withRetry` 백오프 대기 동안 반환되며, 시작 전이나 대기 중에 abort된 요청은 `NET_ABORTED` 또는 `NET_TIMEOUT`으로 해결돼요. [동시성 제한 및 풀링된 호출](/ko-KR/recipes/concurrency-limit)을 보세요.
+
+## 멱등성 키
+
+### idempotencyKeyHttpInterceptor()
+
+### IdempotencyKeyInterceptorOptions
+
+<ApiSignature name="idempotencyKeyHttpInterceptor, IdempotencyKeyInterceptorOptions" />
+
+`req.headers`를 복제하고 메서드가 `methods`(기본값 `['POST', 'PATCH']`)와 일치하는 요청에 `headerName`(기본값 `'Idempotency-Key'`)을 설정해요. `respectExisting`이 `true`(기본값)일 때 이미 해당 헤더가 있는 요청은 건너뛰어요. `generate`가 없으면 `req.correlationId`를 재사용(또는 v4 UUID로 폴백)하므로 한 호출의 모든 `withRetry` 시도가 같은 키를 보내요. `generate`가 있으면 최대 4,096개 항목의 제한된 캐시에서 `req.correlationId`를 기준으로 메모이제이션해요. [멱등성 키](/ko-KR/recipes/idempotency-key)를 보세요.
+
 [인터셉터 가이드](/ko-KR/docs/interceptors)를 보세요.

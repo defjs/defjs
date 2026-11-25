@@ -23,12 +23,16 @@ test("an empty object enables every default", () => {
     jitter: 0.2,
     attemptTimeoutMs: undefined,
     methods: ["GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"],
+    statusCodes: [429, 502, 503, 504],
+    retryAfter: true,
+    maxRetryAfterMs: 60_000,
     shouldRetry: undefined,
   });
 });
 
 test("given fields replace their defaults and methods compare case-insensitively", () => {
   const shouldRetry = () => true;
+  const statusCodes = [500, 503];
   const policy = resolveRetryPolicy({
     maxRetries: 0,
     delayMs: 5,
@@ -37,8 +41,12 @@ test("given fields replace their defaults and methods compare case-insensitively
     jitter: 0,
     attemptTimeoutMs: 100,
     methods: ["post"],
+    statusCodes,
+    retryAfter: false,
+    maxRetryAfterMs: 5000,
     shouldRetry,
   });
+  statusCodes.push(429);
   expect(policy).toEqual({
     maxRetries: 0,
     delayMs: 5,
@@ -47,6 +55,9 @@ test("given fields replace their defaults and methods compare case-insensitively
     jitter: 0,
     attemptTimeoutMs: 100,
     methods: ["POST"],
+    statusCodes: [500, 503],
+    retryAfter: false,
+    maxRetryAfterMs: 5000,
     shouldRetry,
   });
   expect(policy && isRetryMethod(policy, "Post")).toBe(true);

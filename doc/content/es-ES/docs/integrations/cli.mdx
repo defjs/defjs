@@ -1,0 +1,105 @@
+---
+title: CLI y generador OpenAPI
+description: Genera definiciones @defjs/core ESM sin estado y esquemas struct a partir de especificaciones Swagger 2.0 y OpenAPI 3.0–3.2 con @defjs/cli.
+---
+
+# CLI y generador OpenAPI
+
+`@defjs/cli` es una CLI de desarrollo para Node.js (`>= 22.18.0`) y Bun —distribuida como un paquete ESM de un único archivo sin dependencias de ejecución, con `@defjs/core` como dependencia peer opcional— que convierte especificaciones Swagger 2.0 y OpenAPI 3.0–3.2 (mediante `@scalar/openapi-parser` empaquetado) en definiciones de `@defjs/core` y esquemas `struct` **ESM sin estado** usando un impresor AST integrado de 2 espacios. Los módulos generados no capturan ningún cliente, no crean clases y anotan las declaraciones puras con `/*#__PURE__*/`.
+
+Instálala como dependencia de desarrollo:
+
+```bash
+bun add -D @defjs/cli
+```
+
+Ejecutar `defjs` sin argumentos muestra la ayuda y finaliza limpiamente.
+
+## Configuración y API programática
+
+Configura los objetivos en `defjs.config.ts` (o `.mts` / `.mjs` / `.js`, cargados mediante `import()` nativo de Node `>= 22.18` o Bun) mediante `defineConfig`, o llama a `generateOpenApi` desde un script personalizado:
+
+<Tabs items={["openapi/orders.json", "defjs.config.ts", "app/generate.ts"]}>
+  <Tab>
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders API", "version": "1.0.0" },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "status"],
+                  "properties": {
+                    "id": { "type": "number" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/defjs.config.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/app/generate.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Después ejecuta la generación o las comprobaciones de desviación en CI mediante la CLI:
+
+```bash
+npx @defjs/cli openapi generate
+npx @defjs/cli openapi generate --check
+```
+
+## Opciones clave y salvaguardas de Defjs
+
+| Flag / Opción                       | Valores                                                                                                           | Comportamiento                                                                                                                                                                                                          |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--input`, `input`                  | Archivo local `.yaml`/`.yml`/`.json`/`.ts`/`.mts`/`.js`/`.mjs`, URL `http(s):`, objeto importado o función loader | Carga módulos `.ts`/`.mts`/`.js`/`.mjs` mediante `import()` nativo de Node `>= 22.18` / Bun y especificaciones vía Scalar (`upgrade` para Swagger 2.0 / 3.0 en un único archivo; conserva `$ref` entre varios archivos) |
+| `--format`, `format`                | `ts` (por defecto), `tsx`, `js` (`.js` + `.d.ts`), `mjs` (`.mjs` + `.d.mts`)                                      | Emite módulos ESM sin estado agrupados por etiqueta en `schema/` y `request/` (más un módulo raíz compartido `util` cuando es necesario)                                                                                |
+| `--mode`, `mode`                    | `sync` (por defecto), `scaffold`                                                                                  | `sync` limpia archivos gestionados obsoletos y verifica la cabecera de propiedad; `scaffold` solo escribe archivos ausentes                                                                                             |
+| `--error-strategy`, `errorStrategy` | `none` (por defecto), `union`                                                                                     | `none` evita decodificar errores HTML de pasarela no-2xx; `union` sintetiza un struct `error` no-2xx documentado                                                                                                        |
+| `--mixed-2xx`, `mixed2xxStrategy`   | `omit` (por defecto), `split`                                                                                     | Cuando una operación combina 2xx con cuerpo y `204`, `omit` avisa limpiamente y omite `output`, mientras que `split` añade `<op>NoContent`                                                                              |
+| `--check`                           | booleano                                                                                                          | Sale con código `1` cuando algún archivo gestionado difiere o sería eliminado                                                                                                                                           |
+
+El código generado respeta todos los contratos de Defjs:
+
+- `input` + `builder` síncrono explícito (pasando directamente `body: input.body` tipado cuando los cuerpos JSON llevan alias `.alias(...)`)
+- Los estilos de query distintos del valor por defecto (`deepObject`, `pipeDelimited`, `spaceDelimited`, `form` con `explode: false`, `json`), así como los serializadores de parámetros de path y header distintos del valor por defecto (`label`, `matrix`, `simple` para arrays/objetos), emiten únicamente la clausura de helpers necesaria en un módulo raíz compartido `util` (`util.ts`/`.tsx`/`.js`/`.mjs` + `util.d.ts`/`.d.mts` para formatos JS), importado desde `../util` por los archivos `request/<group>`
+- Las respuestas en streaming `text/event-stream` (`itemSchema`) emiten `defineEventStream` en lugar de `defineRequest`
+- Los esquemas mutua o autorrecursivos emiten declaraciones en postorden topológico con getters perezosos en los ciclos de objetos, evitando fallos `ReferenceError` de TDZ al cargar el módulo
+
+Consulta la [referencia de API del CLI](/es-ES/api/cli).

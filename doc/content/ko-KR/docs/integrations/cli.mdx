@@ -1,0 +1,105 @@
+---
+title: CLI 및 OpenAPI 생성기
+description: "@defjs/cli를 사용해 Swagger 2.0 및 OpenAPI 3.0–3.2 사양으로부터 상태 없는 ESM @defjs/core 정의와 struct 스키마를 생성합니다."
+---
+
+# CLI 및 OpenAPI 생성기
+
+`@defjs/cli`는 런타임 의존성이 전혀 없는 단일 파일 ESM 번들로 제공되며(`@defjs/core`는 선택적 피어 의존성), 내장 2칸 들여쓰기 AST 프린터를 사용해 Swagger 2.0 및 OpenAPI 3.0–3.2 사양(번들된 `@scalar/openapi-parser` 기반)을 **상태 없는 ESM** `@defjs/core` 정의와 `struct` 스키마로 변환하는 개발용 Node.js(`>= 22.18.0`) 및 Bun CLI입니다. 생성된 모듈은 클라이언트를 캡처하지 않고 클래스를 만들지 않으며, 순수 선언에 `/*#__PURE__*/` 주석을 붙입니다.
+
+개발 의존성으로 설치합니다:
+
+```bash
+bun add -D @defjs/cli
+```
+
+인자 없이 `defjs`를 실행하면 도움말을 출력하고 정상 종료합니다.
+
+## 구성 및 프로그래밍 방식 API
+
+`defjs.config.ts`(또는 `.mts` / `.mjs` / `.js`, 네이티브 Node `>= 22.18` 또는 Bun `import()`로 로드됨)에서 `defineConfig`로 대상을 구성하거나 커스텀 스크립트에서 `generateOpenApi`를 호출하세요:
+
+<Tabs items={["openapi/orders.json", "defjs.config.ts", "app/generate.ts"]}>
+  <Tab>
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders API", "version": "1.0.0" },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "status"],
+                  "properties": {
+                    "id": { "type": "number" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/defjs.config.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/app/generate.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+그런 다음 CLI를 통해 코드를 생성하거나 CI 드리프트 검사를 실행하세요:
+
+```bash
+npx @defjs/cli openapi generate
+npx @defjs/cli openapi generate --check
+```
+
+## 주요 플래그 및 Defjs 가드레일
+
+| 플래그 / 옵션                       | 값                                                                                                 | 동작                                                                                                                                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--input`, `input`                  | 로컬 `.yaml`/`.yml`/`.json`/`.ts`/`.mts`/`.js`/`.mjs`, `http(s):` URL, 가져온 객체, 또는 로더 함수 | `.ts`/`.mts`/`.js`/`.mjs` 모듈은 네이티브 Node `>= 22.18` / Bun `import()`로 로드하고, 사양은 Scalar로 로드합니다(단일 파일 Swagger 2.0 / 3.0은 `upgrade`, 다중 파일 `$ref`는 보존) |
+| `--format`, `format`                | `ts` (기본값), `tsx`, `js` (`.js` + `.d.ts`), `mjs` (`.mjs` + `.d.mts`)                            | `schema/` 및 `request/` 아래에 태그별로 그룹화된 상태 없는 ESM 모듈을 출력합니다(필요 시 공유 루트 `util` 모듈 포함)                                                                |
+| `--mode`, `mode`                    | `sync` (기본값), `scaffold`                                                                        | `sync`는 오래된 관리 파일을 정리하고 헤더 소유권을 검증하며, `scaffold`는 누락된 파일만 작성합니다                                                                                  |
+| `--error-strategy`, `errorStrategy` | `none` (기본값), `union`                                                                           | `none`은 비`2xx` HTML 게이트웨이 오류 디코딩을 피하고, `union`은 문서화된 비`2xx` `error` struct를 합성합니다                                                                       |
+| `--mixed-2xx`, `mixed2xxStrategy`   | `omit` (기본값), `split`                                                                           | 작업에 본문이 있는 `2xx`와 `204`가 섞여 있으면 `omit`은 깔끔하게 경고하고 `output`을 생략하며, `split`은 `<op>NoContent`를 추가합니다                                               |
+| `--check`                           | boolean                                                                                            | 관리되는 파일이 하나라도 다르거나 삭제될 예정이면 종료 코드 `1`로 종료합니다                                                                                                        |
+
+생성된 코드는 모든 Defjs 계약을 준수합니다:
+
+- `input` + 명시적인 동기 `builder` (JSON 본문에 `.alias(...)` 이름 변경이 포함된 경우 타입화된 `body: input.body`를 직접 전달)
+- 기본값이 아닌 쿼리 스타일(`deepObject`, `pipeDelimited`, `spaceDelimited`, `explode: false`인 `form`, `json`)과 기본값이 아닌 경로 및 헤더 파라미터 직렬화기(`label`, `matrix`, 배열/객체용 `simple`)는 필요한 헬퍼 클로저만 공유 루트 `util` 모듈(`util.ts`/`.tsx`/`.js`/`.mjs`, JS 형식의 경우 `+ util.d.ts`/`.d.mts`)로 내보내며, `request/<group>` 파일이 `../util`에서 이를 import합니다
+- 스트리밍 `text/event-stream` (`itemSchema`) 응답은 `defineRequest` 대신 `defineEventStream`을 출력합니다
+- 상호 재귀 또는 자기 재귀 스키마는 객체 순환 참조에 지연 getter 프로퍼티를 포함한 위상 정렬 후위(post-order) 선언을 출력하여 모듈 로드 시 `ReferenceError` TDZ 충돌을 방지합니다
+
+자세한 내용은 [CLI API 레퍼런스](/ko-KR/api/cli)를 참조하세요.

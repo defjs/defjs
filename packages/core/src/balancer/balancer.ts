@@ -1,9 +1,16 @@
 import { rememberEndpoint } from "./retention";
 import { monotonicNow } from "./clock";
+import { ERR_NO_CANDIDATE, isNoCandidateCause } from "./no_candidate";
+import {
+  createStickyPicker,
+  defaultPickFirstBalancer,
+} from "./pick_first_default";
 import {
   withHealthFilter,
   type OutlierDetectionOptions,
 } from "./outlier_detection";
+
+export { ERR_NO_CANDIDATE, isNoCandidateCause };
 
 /**
  * Chooses one endpoint for a call.
@@ -155,50 +162,6 @@ export interface DoneInfo {
   readonly status?: number;
 }
 
-const NO_ENDPOINT_BRAND = Symbol.for("defjs.cause.no-endpoint");
-
-/**
- * Sentinel for an empty candidate list.
- *
- * Built-in balancers return it as `[ERR_NO_CANDIDATE, undefined]`. The runtime
- * reports that as `REQ_BUILD_FAILED` and keeps this error as `cause`. It is not
- * a `FaultCode`. The non-enumerable `Symbol.for("defjs.cause.no-endpoint")`
- * brand lets {@link isNoCandidateCause} recognize the sentinel from another
- * Core copy.
- *
- * @group client
- * @see {@link isNoCandidateCause}
- */
-export const ERR_NO_CANDIDATE: Error = brandSentinel(
-  new Error("No endpoint available"),
-);
-
-/**
- * Whether `cause` is {@link ERR_NO_CANDIDATE}, including a copy from another Core build.
- *
- * Returns `true` when `cause` carries the non-enumerable
- * `Symbol.for("defjs.cause.no-endpoint")` brand. Other values return `false`.
- * Pass `fault.cause`; this does not unwrap faults.
- *
- * @group client
- * @see {@link ERR_NO_CANDIDATE}
- */
-export function isNoCandidateCause(cause: unknown): boolean {
-  return (
-    typeof cause === "object" && cause !== null && NO_ENDPOINT_BRAND in cause
-  );
-}
-
-function brandSentinel(error: Error): Error {
-  Object.defineProperty(error, NO_ENDPOINT_BRAND, {
-    configurable: false,
-    enumerable: false,
-    value: true,
-    writable: false,
-  });
-  return error;
-}
-
 /**
  * Options for {@link pickFirstBalancer}.
  *
@@ -258,75 +221,22 @@ export interface PickFirstOptions {
  */
 export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   const shuffle = options?.shuffle ?? false;
-  const keys = new Map<string, number>();
-  let sticky: string | undefined;
-  let leftFirstAt: number | undefined;
   const failbackMs = options?.failbackMs;
-
-  const child: Balancer = {
-    pick(info) {
-      const candidates = info.endpoints;
-      if (candidates.length === 0) {
-        return [ERR_NO_CANDIDATE, undefined];
-      }
-      const members = info.members ?? candidates;
-      const order = shuffle ? shuffledOrder(members, keys) : members;
-      const first = order[0];
-      if (first === undefined) {
-        return [ERR_NO_CANDIDATE, undefined];
-      }
-      if (sticky === undefined || !order.includes(sticky)) {
-        sticky = first;
-      }
-      if (
-        sticky !== first &&
-        candidates.includes(first) &&
-        failbackMs !== undefined &&
-        leftFirstAt !== undefined &&
-        monotonicNow() - leftFirstAt >= failbackMs
-      ) {
-        sticky = first;
-      }
-      const chosen = nextCandidate(order, order.indexOf(sticky), candidates);
-      if (chosen === undefined) {
-        return [ERR_NO_CANDIDATE, undefined];
-      }
-      return [
-        null,
-        {
-          endpoint: chosen,
-          done(report) {
-            if (!advancesSticky(report) || sticky !== chosen) return;
-            const next = order[(order.indexOf(chosen) + 1) % order.length];
-            if (chosen === first && next !== first)
-              leftFirstAt = monotonicNow();
-            sticky = next;
-          },
-        },
-      ];
-    },
-  };
-  return withHealthFilter(child, options?.outlierDetection);
-}
-
-function advancesSticky(report: DoneInfo): boolean {
-  return (
-    report.attempted &&
-    (report.code === "NET_UNREACHABLE" || report.code === "NET_UNAVAILABLE")
-  );
-}
-
-/** First member at or after `offset`, wrapping, that is a candidate of this pick. */
-function nextCandidate(
-  order: readonly string[],
-  offset: number,
-  candidates: readonly string[],
-): string | undefined {
-  return (
-    order.find(
-      (endpoint, index) => index >= offset && candidates.includes(endpoint),
-    ) ?? order.find((endpoint) => candidates.includes(endpoint))
-  );
+  const outlierDetection = options?.outlierDetection;
+  if (!shuffle && failbackMs === undefined && !outlierDetection) {
+    return defaultPickFirstBalancer();
+  }
+  const keys = new Map<string, number>();
+  const child = createStickyPicker({
+    failback:
+      failbackMs === undefined
+        ? undefined
+        : { ms: failbackMs, now: monotonicNow },
+    orderMembers: shuffle
+      ? (members) => shuffledOrder(members, keys)
+      : undefined,
+  });
+  return withHealthFilter(child, outlierDetection);
 }
 
 /** Shuffle keys have no eviction priority: the least recently used one goes first. */

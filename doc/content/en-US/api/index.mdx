@@ -13,24 +13,26 @@ Signatures are the contract. Follow the [quick start](/docs/start) and [SDK publ
 
 ## Packages
 
-| Package                                                    | What you look up                                                  |
-| ---------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`@defjs/core`](/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
-| [`@defjs/vue`](/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
-| [`@defjs/react`](/api/react)                               | `ClientProvider`, `useClient`                                     |
-| [`@defjs/opentelemetry-server`](/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                  |
+| Package                                                    | What you look up                                                                                                |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket, `@defjs/core/concurrent`, `@defjs/core/port` |
+| [`@defjs/cli`](/api/cli)                                   | `defineConfig`, `generateOpenApi`, `runCli`, OpenAPI target options                                             |
+| [`@defjs/vue`](/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`                                                             |
+| [`@defjs/react`](/api/react)                               | `ClientProvider`, `useClient`                                                                                   |
+| [`@defjs/opentelemetry-server`](/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                                                                |
 
 ## @defjs/core
 
-| Page                              | What you look up                                                      |
-| --------------------------------- | --------------------------------------------------------------------- |
-| [Client](/api/client)             | `createClient`, `with*` options, `Client`                             |
-| [HTTP](/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
-| [Struct](/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
-| [Errors](/api/errors)             | `Fault` variants and factories                                        |
-| [Interceptors](/api/interceptors) | HTTP / SSE / WebSocket interceptor helpers                            |
-| [SSE](/api/sse)                   | `defineEventStream`, stream handle                                    |
-| [WebSocket](/api/web-socket)      | `defineWebSocket`, session                                            |
+| Page                              | What you look up                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------- |
+| [Client](/api/client)             | `createClient`, `with*` options, `Client`, `@defjs/core/concurrent`                   |
+| [HTTP](/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse`                 |
+| [Struct](/api/struct)             | `struct.*`, `Infer`, `StructError`                                                    |
+| [Errors](/api/errors)             | `Fault` variants and factories                                                        |
+| [Interceptors](/api/interceptors) | HTTP / SSE / WebSocket / built-in interceptor helpers                                 |
+| [SSE](/api/sse)                   | `defineEventStream`, stream handle                                                    |
+| [WebSocket](/api/web-socket)      | `defineWebSocket`, session                                                            |
+| [Port](/api/port)                 | `withPortTransport`, `attachPortHost`, `createPort*Handle`, `@defjs/core/port/webext` |
 
 ## Related
 

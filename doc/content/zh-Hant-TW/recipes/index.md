@@ -14,6 +14,10 @@ description: 建置並發布可重用的 SDK，並在取用端應用程式中設
 - [取消與逾時](/zh-Hant-TW/recipes/cancel-http) — 結合呼叫端的 `AbortController` 與 `AbortSignal.timeout(...)`，並明確區分 `NET_ABORTED` 與 `NET_TIMEOUT`。
 - [ETag 條件請求](/zh-Hant-TW/recipes/etag-revalidate) — 發送 `If-None-Match`，將 `304 Not Modified` 作為 `HTTP_STATUS` 錯誤處理，並在應用程式程式碼中維護快取 `Map`。
 - [GraphQL 請求](/zh-Hant-TW/recipes/graphql-http-envelope) — 透過 HTTP `POST` 發送 GraphQL 查詢，並在應用程式輔助函式中拆解 `errors[]` 與 `.nullish()` 的 `data`。
+- [游標分頁](/zh-Hant-TW/recipes/cursor-pagination) — 使用非同步產生器（async generator）串流讀取分頁 API 結果，並轉傳每頁的 `AbortSignal` 取消訊號。
+- [冪等鍵](/zh-Hant-TW/recipes/idempotency-key) — 透過 `idempotencyKeyHttpInterceptor` 在 `POST`/`PATCH` 重試時自動附加 `Idempotency-Key` 標頭。
+- [並行限制與池化呼叫](/zh-Hant-TW/recipes/concurrency-limit) — 透過 `concurrencyLimitHttpInterceptor` 與 `@defjs/core/concurrent` 原語限制進行中的請求數量。
+- [Undici Pool HTTP Handle](/zh-Hant-TW/recipes/undici-pool) — 將 `undici.Pool` 橋接至 `withHTTPHandle`，在 Node.js 中實作 keep-alive 連線池重用。
 
 ## 身分驗證
 

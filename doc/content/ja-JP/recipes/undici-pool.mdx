@@ -1,0 +1,31 @@
+---
+title: "Undici Pool HTTP ハンドル"
+description: SDK 定義を変更することなく、withHTTPHandle を使用して Node.js の undici.Pool コネクションプールを Defjs クライアントに接続します。
+---
+
+# Undici Pool HTTP ハンドル
+
+高スループットな Node.js 製 BFF やバックエンドサービスでは、[`withHTTPHandle`](/ja-JP/api/core/withhttphandle) 経由で共有 `undici.Pool` を注入します。これにより、SDK 定義（`sdk/orders.ts`）をプラットフォーム非依存のままに保ちつつ、複数のアップストリーム接続をウォームかつ上限付きで維持できます。シャットダウン時には必ず `await pool.close()` を呼び出してください。
+
+<Tabs items={["sdk/orders.ts", "app/pool-handle.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/pool-handle.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+`undici.Pool` と `p2cBalancer` や `outlierDetection` を組み合わせる方法については、[比較とハイブリッドアーキテクチャ](/ja-JP/docs/comparison-and-architecture) を参照してください。

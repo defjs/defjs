@@ -1,0 +1,31 @@
+---
+title: "カーソルページネーション"
+description: 非同期ジェネレーターとページ単位の AbortSignal キャンセルを使って、ページ分割されたエンドポイントをクリーンにストリーミングします。
+---
+
+# カーソルページネーション
+
+ページネーションを行う操作定義（`listOrders`）は SDK モジュールに置き、カーソル継続の処理は純粋なアプリケーションヘルパー関数（`listAllOrders`）の中にラップします。このヘルパーは Go スタイルの `[err, item]` タプルを yield し、エラーや呼び出し元のキャンセルが発生すると即座に停止します。
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+呼び出しごとの `signal` 派生ルールについては、[Client](/ja-JP/docs/client) および [HTTP 操作](/ja-JP/docs/http) を参照してください。

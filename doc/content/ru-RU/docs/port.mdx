@@ -1,0 +1,53 @@
+---
+title: Транспорт Port (Workers и WebExtensions)
+description: Проксируйте операции HTTP, SSE и WebSocket через MessagePort, Workers, iframe, Electron и MV3 WebExtension runtime.Port с политикой запрета origin по умолчанию.
+---
+
+# Транспорт Port (`@defjs/core/port`)
+
+`@defjs/core/port` позволяет изолированному контексту (`SharedWorker`, Dedicated Worker, изолированному в sandbox `iframe`, Electron renderer или Popup / Side Panel / Content Script в WebExtension) выполнять чистые SDK-определения `@defjs/core` поверх одного мультиплексированного порта без привязки определений к прокси-транспорту.
+
+- Ноль runtime-зависимостей; поставляется как опциональные subpath-экспорты `@defjs/core/port` и `@defjs/core/port/webext` с нулевыми накладными расходами на бандл без явного импорта
+- Делит один порт одновременно между HTTP (включая загрузки и скачивания через `ReadableStream`), SSE (`text/event-stream`) и WebSocket-соединениями
+- **Отказобезопасный режим по умолчанию (fail-closed)**: `attachPortHost` отклоняет весь трафик, пока хост явно не укажет `allowedOrigins`, `allowRequest` или `allowAnyOrigin: true`
+
+```bash
+bun add @defjs/core
+```
+
+## Мост MessagePort (Workers, iframe, Electron)
+
+Обе стороны оставляют определения вашего SDK без изменений. Привилегированный хост выполняет реальные вызовы `fetch` и `WebSocket`; изолированный клиент подключает `withPortTransport(port)` к своему `Client`:
+
+<Tabs items={["sdk/orders.ts", "host.ts", "client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/host.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/port/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+При вызове `attachPortHost` сохраните ссылку на возвращённый `PortHostHandle` и вызывайте `host.close()` (или `using host = attachPortHost(...)`) при завершении работы, чтобы открытые каналы HTTP/SSE и сессии WebSocket закрывались чисто.
+
+## Прокси MV3 WebExtension (`@defjs/core/port/webext`)
+
+WebExtension `runtime.Port` не умеет передавать объекты `ArrayBuffer` напрямую через границы расширений Chromium/Firefox/Safari и разрывает соединение каждый раз, когда Service Worker Manifest V3 уходит в спящий режим. Модуль `@defjs/core/port/webext` предоставляет структурный адаптер без зависимостей `fromWebExtPort` (не требующий `@types/chrome`), который использует чанковую Base64-упаковку `"json"` и поддерживает ленивые функции подключения для автоматического переподключения после гибернации Service Worker:
+
+<include cwd lang="typescript">
+  examples/port/webext.ts#example
+</include>
+
+Смотрите [справку API Port](/ru-RU/api/port).

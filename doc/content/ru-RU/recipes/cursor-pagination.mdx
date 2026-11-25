@@ -1,0 +1,31 @@
+---
+title: "Курсорная пагинация"
+description: Организуйте потоковое чтение постраничных эндпоинтов через асинхронный генератор с отменой по AbortSignal для каждой страницы.
+---
+
+# Курсорная пагинация
+
+Держите пагинированную операцию внутри модуля SDK (`listOrders`), а продолжение по курсору вынесите в чистый вспомогательный генератор приложения (`listAllOrders`), который отдаёт Go-кортежи `[err, item]` и немедленно останавливается при сбое или отмене вызывающим кодом.
+
+<Tabs items={["sdk/orders.ts", "app/paginate.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/paginate.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cursor-pagination/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Правила наследования `signal` на отдельный вызов смотрите в разделах [Клиент](/ru-RU/docs/client) и [HTTP-операции](/ru-RU/docs/http).

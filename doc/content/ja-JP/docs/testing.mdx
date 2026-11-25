@@ -26,7 +26,7 @@ description: 自分のプロジェクト内で書いた Defjs のリクエスト
 
 - **`https://fixture.invalid` を指定する理由**：`createClient` は `withHTTPHandle` に渡る前に URL を検証します。`.invalid` は RFC 予約ドメインのため誤って公開 DNS に飛ぶ心配がありません。
 - **プロトコルごとに専用のハンドルを使用**：`withHTTPHandle` は HTTP（`defineRequest`）のみを扱います。SSE は `withSSEHandle`、WebSocket は `withWebSocketHandle` を使います。
-- **リトライの既定値と `withRetry(undefined)` の罠**：`withRetry` を省略するとリトライは無効になります。通常の単体テストでは省略し、`502`/`503`/`504` やネットワークエラーが `1s + 2s + 4s` のバックオフを待たず 1 回で返るようにしてください。なお `withRetry()` や `withRetry(undefined)` は既定の **3 回リトライを有効にする**ため、明示的にオフにする場合は `withRetry({ maxRetries: 0 })` を渡してください。
+- **リトライの既定値と `withRetry(undefined)` の罠**：`withRetry` を省略するとリトライは無効になります。通常の単体テストでは省略し、`429`/`502`/`503`/`504` やネットワークエラーが `1s + 2s + 4s` のバックオフを待たず 1 回で返るようにしてください。なお `withRetry()` や `withRetry(undefined)` は既定の **3 回リトライを有効にする**ため、明示的にオフにする場合は `withRetry({ maxRetries: 0 })` を渡してください。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>

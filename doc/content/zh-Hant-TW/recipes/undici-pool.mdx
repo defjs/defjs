@@ -1,0 +1,31 @@
+---
+title: "Undici Pool HTTP Handle"
+description: 使用 withHTTPHandle 將 Node.js 的 undici.Pool 連線池橋接至 Defjs client，同時完全不需更動 SDK 定義。
+---
+
+# Undici Pool HTTP Handle
+
+在高吞吐量的 Node.js BFF 與後端服務中，透過 [`withHTTPHandle`](/zh-Hant-TW/api/core/withhttphandle) 注入共用的 `undici.Pool`，即可讓多條上游連線保持預熱與受限重用，而 SDK 定義（`sdk/orders.ts`）則維持完全跨平台的純淨。請務必在服務關閉時呼叫 `await pool.close()` 釋放連線池。
+
+<Tabs items={["sdk/orders.ts", "app/pool-handle.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/pool-handle.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/undici-pool/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+關於結合 `undici.Pool`、`p2cBalancer` 與 `outlierDetection` 的架構設計，請參閱[競品比較與混合架構](/zh-Hant-TW/docs/comparison-and-architecture)。

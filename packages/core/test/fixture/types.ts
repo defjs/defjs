@@ -11,6 +11,7 @@ export type ScenarioName = keyof ScenarioParams;
 export interface ScriptStep {
   readonly status: number;
   readonly headers?: FixtureHeaders;
+  readonly exposeHeaders?: boolean;
   readonly chunks: readonly string[]; // UTF-8 文本块
   readonly then: StepThen;
 }

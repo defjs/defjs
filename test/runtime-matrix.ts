@@ -21,6 +21,12 @@ export interface Project {
 // the root specs compare what the configs and the package scripts do with it.
 export const workspaces: readonly Workspace[] = [
   {
+    name: "cli",
+    cwd: "packages/cli",
+    dirs: ["packages/cli/"],
+    runtimes: ["node", "bun"],
+  },
+  {
     name: "core",
     cwd: "packages/core",
     dirs: ["packages/core/"],

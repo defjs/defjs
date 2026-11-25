@@ -1,16 +1,16 @@
 ---
 title: Defjs
-description: 재사용 가능한 API 정의와 애플리케이션 소유 클라이언트로 TypeScript SDK를 설계하고 배포합니다.
+description: TypeScript SDK & Resilient Client Kit — 재사용 가능한 HTTP, SSE, WebSocket 계약을 애플리케이션 소유의 복원력 있는 클라이언트와 분리해 정의합니다.
 ---
 
 # Defjs
 
-**API 계약은 한 번만 정의하고, 실행 환경은 애플리케이션마다 구성하세요.**
+**TypeScript SDK & Resilient Client Kit — API 계약은 한 번만 정의하고, 실행 환경은 애플리케이션마다 구성하세요.**
 
 Defjs는 TypeScript SDK를 두 가지 영역으로 명확히 분리합니다:
 
-- **SDK 정의 (`@defjs/core`)** — 공개 SDK를 배포하든 앱 내부의 API 계층을 정리하든, `struct` 스키마와 함께 타입화된 HTTP, SSE, WebSocket 작업을 선언합니다. 정의는 순수한 데이터이므로 import해도 네트워크 호출이 시작되거나 전역 클라이언트에 묶이지 않습니다.
-- **애플리케이션 실행** — 애플리케이션은 자체 `Client`를 생성하고(`createClient(withEndpoint(...))`), 자격 증명·인터셉터·로드 밸런서를 구성한 뒤 작업을 호출할 때 전달합니다.
+- **SDK 정의 (`@defjs/core`, `@defjs/cli`)** — `struct` 스키마와 함께 타입화된 HTTP, SSE, WebSocket 작업을 선언합니다(직접 작성하거나 OpenAPI 2.0/3.0/3.1/3.2 사양에서 상태 없는 ESM으로 생성 가능). 정의는 순수한 데이터이므로 import해도 네트워크 호출이 시작되거나 전역 클라이언트에 묶이지 않습니다.
+- **복원력 있는 애플리케이션 실행 (`@defjs/core`)** — 애플리케이션은 자체 `Client`를 생성하고(`createClient(withEndpoint(...))`), 자격 증명과 인터셉터(`basicAuth*`, `idempotencyKeyHttpInterceptor`, `concurrencyLimitHttpInterceptor`)를 연결하며, P2C 로드 밸런싱 및 `outlierDetection`(`halfOpen`, `maxEjectionPercent`)을 구성하고, `429`/`Retry-After` 재시도를 활성화하거나 `@defjs/core/concurrent`로 팬아웃하고 `@defjs/core/port`로 워커/확장 프로그램을 연결할 수 있습니다.
 
 ## 한눈에 보기: SDK 정의 vs. 애플리케이션 실행
 
@@ -45,9 +45,10 @@ Defjs는 TypeScript SDK를 두 가지 영역으로 명확히 분리합니다:
 
 1. **[빠른 시작](/ko-KR/docs/start)** — 작업을 정의하고, 로컬 Fetch 핸들로 오프라인 테스트를 진행한 뒤, 실제 서비스에 연결해 봅니다.
 2. **[핵심 아키텍처](/ko-KR/docs/design-decisions)** — 6가지 응답 디코딩 규칙, error-first 튜플, 리소스 소유권 모델을 이해합니다.
-3. **[SDK 정의하기](/ko-KR/docs/struct)** — [Struct](/ko-KR/docs/struct)로 통신 계약을 선언하고 [HTTP](/ko-KR/docs/http), [SSE](/ko-KR/docs/sse), [WebSocket](/ko-KR/docs/web-socket) 작업을 export합니다.
-4. **[클라이언트 및 실행](/ko-KR/docs/client)** — [Client](/ko-KR/docs/client)를 구성하고, 타입화된 [오류](/ko-KR/docs/errors)를 처리하며, [인터셉터](/ko-KR/docs/interceptors)와 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)를 설정합니다.
-5. **[모범 사례와 테스트](/ko-KR/docs/best-practices)** — [엔지니어링 컨벤션](/ko-KR/docs/best-practices)에 맞춰 [애플리케이션 API 계층](/ko-KR/docs/application-api)이나 [공개 SDK](/ko-KR/docs/public-sdk)를 구성하고 결정론적 [테스트](/ko-KR/docs/testing)를 작성합니다.
+3. **[비교 및 하이브리드 BFF 아키텍처](/ko-KR/docs/comparison-and-architecture)** — Defjs를 `fetch`, `ky`, `ofetch`, `openapi-fetch`, `oRPC`와 비교하고 Defjs + oRPC/Hono BFF 블루프린트 및 벤치마크를 확인합니다.
+4. **[SDK 정의하기](/ko-KR/docs/struct)** — [Struct](/ko-KR/docs/struct)로 통신 계약을 선언하고 [HTTP](/ko-KR/docs/http), [SSE](/ko-KR/docs/sse), [WebSocket](/ko-KR/docs/web-socket) 작업을 export합니다.
+5. **[클라이언트 및 실행](/ko-KR/docs/client)** — [Client](/ko-KR/docs/client)를 구성하고, 타입화된 [오류](/ko-KR/docs/errors)를 처리하며, [인터셉터](/ko-KR/docs/interceptors)와 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)를 설정합니다.
+6. **[모범 사례와 테스트](/ko-KR/docs/best-practices)** — [엔지니어링 컨벤션](/ko-KR/docs/best-practices)에 맞춰 [애플리케이션 API 계층](/ko-KR/docs/application-api)이나 [공개 SDK](/ko-KR/docs/public-sdk)를 구성하고 결정론적 [테스트](/ko-KR/docs/testing)를 작성합니다.
 
 ## 지원되는 전송 방식 및 결과 튜플
 
@@ -63,12 +64,13 @@ HTTP 요청 실패 시 튜플은 `[err, undefined, undefined]`가 됩니다. `er
 
 ## 공식 패키지
 
-| 패키지                        | 역할                                                                    | 가이드                                                                |
-| ----------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `@defjs/core`                 | 런타임 의존성이 없는 SDK 정의, `struct`, 클라이언트, 인터셉터           | [빠른 시작](/ko-KR/docs/start)                                        |
-| `@defjs/react`                | React 18+를 위한 `ClientProvider` 및 `useClient()` 컨텍스트 주입        | [React 통합](/ko-KR/docs/integrations/react)                          |
-| `@defjs/vue`                  | Vue 3 이상을 위한 `createClientPlugin`, `HTTP_CLIENT`, `injectClient()` | [Vue 통합](/ko-KR/docs/integrations/vue)                              |
-| `@defjs/opentelemetry-server` | 서버 사이드 아웃바운드 span, 메트릭, 진단 로그 수집                     | [OpenTelemetry Server](/ko-KR/docs/integrations/opentelemetry-server) |
+| 패키지                        | 역할                                                                               | 가이드                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `@defjs/core`                 | 의존성 없는 SDK 정의, `struct`, 클라이언트, 복원력, 미들웨어, `concurrent`, `port` | [빠른 시작](/ko-KR/docs/start)                                        |
+| `@defjs/cli`                  | OpenAPI 2.0–3.2 사양에서 상태 없는 ESM 정의를 생성하는 개발용 CLI                  | [CLI 통합](/ko-KR/docs/integrations/cli)                              |
+| `@defjs/react`                | React 18+를 위한 `ClientProvider` 및 `useClient()` 컨텍스트 주입                   | [React 통합](/ko-KR/docs/integrations/react)                          |
+| `@defjs/vue`                  | Vue 3 이상을 위한 `createClientPlugin`, `HTTP_CLIENT`, `injectClient()`            | [Vue 통합](/ko-KR/docs/integrations/vue)                              |
+| `@defjs/opentelemetry-server` | 서버 사이드 아웃바운드 span, 메트릭, 진단 로그 수집                                | [OpenTelemetry Server](/ko-KR/docs/integrations/opentelemetry-server) |
 
 ## 인기 실전 레시피
 
@@ -76,6 +78,10 @@ HTTP 요청 실패 시 튜플은 `[err, undefined, undefined]`가 됩니다. `er
 - [JSON 데이터 전송 및 유효성 검증](/ko-KR/recipes/post-json)
 - [선언된 404 상태 코드 처리](/ko-KR/recipes/get-declared-404)
 - [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)
+- [커서 기반 페이지네이션 스트림](/ko-KR/recipes/cursor-pagination)
+- [재시도 시 멱등성 키 적용](/ko-KR/recipes/idempotency-key)
+- [벌크헤드 동시성 제한](/ko-KR/recipes/concurrency-limit)
+- [Undici Pool로 연결 재사용하기](/ko-KR/recipes/undici-pool)
 - [401 발생 시 Bearer 토큰 1회 갱신](/ko-KR/recipes/refresh-bearer-once)
 - [SSE 스트림 이벤트 소비](/ko-KR/recipes/consume-sse)
 - [WebSocket 세션 열기](/ko-KR/recipes/websocket-session)

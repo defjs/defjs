@@ -14,6 +14,10 @@ Commencez par [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk) pour d
 - [Annulation et délais d'attente](/fr-FR/recipes/cancel-http) — combiner un `AbortController` appelant avec `AbortSignal.timeout(...)` et distinguer `NET_ABORTED` de `NET_TIMEOUT`.
 - [Requêtes conditionnelles ETag](/fr-FR/recipes/etag-revalidate) — envoyer `If-None-Match`, traiter `304 Not Modified` comme un fault `HTTP_STATUS` et conserver le cache `Map` dans le code applicatif.
 - [Requêtes GraphQL](/fr-FR/recipes/graphql-http-envelope) — envoyer une requête GraphQL par HTTP `POST` et extraire `errors[]` en traitant `data` comme `.nullish()` dans une fonction utilitaire.
+- [Pagination par curseur](/fr-FR/recipes/cursor-pagination) — diffuser des résultats d'API paginés avec un générateur asynchrone et propager l'annulation `AbortSignal` par page.
+- [Clés d'idempotence](/fr-FR/recipes/idempotency-key) — attacher automatiquement des en-têtes `Idempotency-Key` lors des retries `POST`/`PATCH` à l'aide de `idempotencyKeyHttpInterceptor`.
+- [Limites de concurrence & appels groupés](/fr-FR/recipes/concurrency-limit) — borner les requêtes en cours avec `concurrencyLimitHttpInterceptor` et les primitives `@defjs/core/concurrent`.
+- [Handle HTTP Undici Pool](/fr-FR/recipes/undici-pool) — relier `undici.Pool` à `withHTTPHandle` pour le pooling de connexions keep-alive sous Node.js.
 
 ## Authentification
 

@@ -52,6 +52,14 @@ export function concatChunks(
   chunks: Uint8Array[],
   totalLength: number,
 ): Uint8Array<ArrayBuffer> {
+  // PERF: single ArrayBuffer-backed chunk avoids allocating and copying a second buffer.
+  if (chunks.length === 1) {
+    for (const chunk of chunks) {
+      if (chunk.buffer instanceof ArrayBuffer) {
+        return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+      }
+    }
+  }
   const chunksAll = new Uint8Array(totalLength);
   let position = 0;
   for (const chunk of chunks) {

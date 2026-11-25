@@ -49,10 +49,9 @@ test.each(nodePackages)(
     const lock: unknown = JSON.parse(
       readFileSync(join(root, pkg, "package-lock.json"), "utf8"),
     );
-    const lockRoot = recordField(
-      recordField(expectRecord(lock, "package-lock.json"), "packages"),
-      "",
-    );
+    const lockRecord = expectRecord(lock, "package-lock.json");
+    const packages = recordField(lockRecord, "packages");
+    const lockRoot = recordField(packages, "");
     expect(stringMap(lockRoot["dependencies"])).toEqual(
       stringMap(manifest["dependencies"]),
     );
@@ -62,6 +61,17 @@ test.each(nodePackages)(
     expect(stringMap(lockRoot["peerDependencies"])).toEqual(
       stringMap(manifest["peerDependencies"]),
     );
+    for (const [key, entry] of Object.entries(packages)) {
+      if (key === "") continue;
+      expect(key.startsWith("node_modules/")).toBe(true);
+      const pkgEntry = expectRecord(entry, key);
+      expect(pkgEntry["link"]).not.toBe(true);
+      expect(pkgEntry["extraneous"]).not.toBe(true);
+      expect(typeof pkgEntry["resolved"]).toBe("string");
+      expect(pkgEntry["resolved"]).not.toBe("");
+      expect(typeof pkgEntry["integrity"]).toBe("string");
+      expect(pkgEntry["integrity"]).not.toBe("");
+    }
   },
 );
 

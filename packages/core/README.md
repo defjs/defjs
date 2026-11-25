@@ -1,8 +1,8 @@
 # @defjs/core
 
-Design reusable HTTP, SSE, and WebSocket APIs as data, then execute them with an application-owned client.
+**TypeScript SDK & Resilient Client Kit** — define reusable HTTP, SSE, and WebSocket APIs as data, then execute them with an application-owned client.
 
-`def` means `define`. An SDK author exports operation definitions and data contracts. The consuming application supplies the endpoint, credentials, interceptors, and transport. Importing a definition starts no request and binds no client.
+`def` means `define`. An SDK author exports operation definitions and data contracts. The consuming application supplies the endpoint, credentials, interceptors, retries, load balancing, and transport. Importing a definition starts no request and binds no client.
 
 ## Install
 
@@ -10,7 +10,7 @@ Design reusable HTTP, SSE, and WebSocket APIs as data, then execute them with an
 bun add @defjs/core
 ```
 
-The package is ESM and declares no runtime dependencies. Declarations target `ESNext`, whose lib set includes `ESNext.Disposable`, plus `DOM` and `DOM.Iterable`; those entries supply types only, not polyfills. Because Defjs is pre-1.0, consult the documentation for the version you installed.
+The package is ESM and declares no runtime dependencies. Declarations target `ESNext` (`ESNext.Disposable` + `DOM` + `DOM.Iterable` types only). Subpath entries include `@defjs/core/concurrent` (fail-fast & settled concurrency primitives bound to a `Client`), the browser-only `@defjs/core/xsrf`, `@defjs/core/port` (multiplexed `MessagePort` proxy transport with default-deny host policies), and `@defjs/core/port/webext` (MV3 WebExtension `runtime.Port` adapter).
 
 ## Quick start
 
@@ -56,7 +56,8 @@ Calling `getOrder(client, { id: 1 })` validates, builds, and sends the request. 
 - `input` declares parameters; a synchronous, pure `builder` places them on `path`, `query`, `headers`, and `body`. Every definition with `input` requires an explicit `builder`.
 - Structs validate at runtime. `output` is the 2xx body, `error` every other status; omit a side and that body is never read.
 - Failures are returned as `Fault` instances in an error-first tuple — `HTTP_STATUS`, `REQ_*`, `NET_*`, `RES_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `String(err)` gives `DefjsFault: <message>`, because every fault is named `DefjsFault`; `err.code` and the cause chain stay structured for logs.
-- Retries are off by default. `withRetry` turns them on with one policy for HTTP, SSE, and WebSocket; a streaming request body never retries. Defaults, endpoint selection, and health filtering are described in [Load balancing](https://defjs.lyz.cloud/docs/load-balancing).
+- Auth, idempotency keys, and concurrency bulkheads belong in interceptors (`basicAuthHttpInterceptor`, `basicAuthSSEInterceptor`, `idempotencyKeyHttpInterceptor`, `concurrencyLimitHttpInterceptor`). Pooled fan-outs live in `@defjs/core/concurrent` (`concurrentMap`, `concurrentMapSettled`, `concurrentAll`, `concurrentAllSettled`).
+- Retries are off by default. `withRetry` turns them on with one policy for HTTP, SSE, and WebSocket, including native `429` + RFC `Retry-After` handling, retry `correlationId` propagation, and `outlierDetection` (`halfOpen`, `maxEjectionPercent`) for multi-endpoint load balancing; a streaming request body never retries. Defaults, endpoint selection, and health filtering are described in [Load balancing](https://defjs.lyz.cloud/docs/load-balancing).
 - A timeout or cancellation does not prove the server missed a write. Keep an application idempotency contract before replaying writes.
 - The caller owns every returned SSE stream and WebSocket session. Both are `AsyncDisposable`: use `await using`, or call `close()` and await `closed`.
 - Inject a Fetch-compatible function with `withHTTPHandle(...)` to test a client without a server — see [Test with a handle](https://defjs.lyz.cloud/recipes/test-with-handle).
@@ -65,7 +66,7 @@ Calling `getOrder(client, { id: 1 })` validates, builds, and sends the request. 
 
 - [Getting started](https://defjs.lyz.cloud/docs/start)
 - [Client](https://defjs.lyz.cloud/docs/client) · [Errors](https://defjs.lyz.cloud/docs/errors) · [Struct](https://defjs.lyz.cloud/docs/struct)
-- [HTTP](https://defjs.lyz.cloud/docs/http) · [SSE](https://defjs.lyz.cloud/docs/sse) · [WebSocket](https://defjs.lyz.cloud/docs/web-socket)
+- [HTTP](https://defjs.lyz.cloud/docs/http) · [SSE](https://defjs.lyz.cloud/docs/sse) · [WebSocket](https://defjs.lyz.cloud/docs/web-socket) · [Port transport](https://defjs.lyz.cloud/docs/port)
 
 ## License
 

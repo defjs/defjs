@@ -144,6 +144,10 @@ export interface HttpRequest {
    * unread and does not fall back to `responseType`.
    */
   readonly errorResponseType?: HttpResponseType;
+  /** Per-call identifier shared across all attempts of one HTTP execution, including retries. Read-only; never sent automatically as an HTTP header. */
+  readonly correlationId?: string;
+  /** Zero-based retry attempt count for this HTTP execution (`0` on the initial attempt, `1` on the first retry, and so on). Read-only. */
+  readonly retryAttempt?: number;
   uploadProgress?: HttpProgressFn;
   withCredentials?: boolean;
   /**

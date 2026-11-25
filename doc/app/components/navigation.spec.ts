@@ -126,6 +126,7 @@ const guidePaths = [
   "",
   "/docs/start",
   "/docs/design-decisions",
+  "/docs/comparison-and-architecture",
   "/docs/struct",
   "/docs/http",
   "/docs/sse",
@@ -134,6 +135,7 @@ const guidePaths = [
   "/docs/errors",
   "/docs/interceptors",
   "/docs/load-balancing",
+  "/docs/port",
   "/docs/best-practices",
   "/docs/application-api",
   "/docs/public-sdk",
@@ -146,6 +148,7 @@ const integrationPaths = [
   "/docs/integrations/react",
   "/docs/integrations/vue",
   "/docs/integrations/opentelemetry-server",
+  "/docs/integrations/cli",
 ];
 const recipePaths = [
   "/recipes/post-json",
@@ -153,6 +156,10 @@ const recipePaths = [
   "/recipes/cancel-http",
   "/recipes/etag-revalidate",
   "/recipes/graphql-http-envelope",
+  "/recipes/cursor-pagination",
+  "/recipes/idempotency-key",
+  "/recipes/concurrency-limit",
+  "/recipes/undici-pool",
   "/recipes/refresh-bearer-once",
   "/recipes/consume-sse",
   "/recipes/websocket-session",
@@ -173,7 +180,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
         .map((p) => p.url)
         .sort(),
     );
-    expect(new Set(pages.map((p) => p.url)).size).toBe(246);
+    expect(new Set(pages.map((p) => p.url)).size).toBe(305);
     for (const page of pages) {
       expect(source.getPageByUrl(page.url, locale)?.path).toBe(
         `${locale}/${page.$ref}`,
@@ -359,7 +366,7 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     flattenTree([guide])
       .slice(1, 5)
       .map((n) => n.name),
-  ).toEqual(["项目概览", "快速开始", "设计决策", "数据结构 / Struct"]);
+  ).toEqual(["项目概览", "快速开始", "设计决策", "竞品对比与混合架构"]);
 });
 
 test("SSR mobile directory resolves a trailing-slash article from the same navigation tree", () => {
@@ -400,7 +407,7 @@ test("design decisions sit in the preface group and native previous/next follows
     );
     expect(
       findNeighbour(tree, `${prefix}/docs/design-decisions`).next?.url,
-    ).toBe(`${prefix}/docs/struct`);
+    ).toBe(`${prefix}/docs/comparison-and-architecture`);
     expect(findNeighbour(tree, `${prefix}/docs/testing`).previous?.url).toBe(
       `${prefix}/docs/public-sdk`,
     );

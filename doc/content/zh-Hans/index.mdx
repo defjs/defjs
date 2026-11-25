@@ -1,16 +1,16 @@
 ---
 title: Defjs
-description: 定义一次可复用的 TypeScript API 契约，由各个应用程序自主配置 Client 及其执行流程。
+description: TypeScript SDK 与弹性客户端工具包（Resilient Client Kit）—— 将可复用的 HTTP、SSE 与 WebSocket 契约定义与由应用自主掌控的弹性 Client 分离。
 ---
 
 # Defjs
 
-**写一次 API 契约定义，执行细节交给每个应用自己配置。**
+**TypeScript SDK 与弹性客户端工具包 —— 写一次 API 契约定义，执行细节交给每个应用自己配置。**
 
 无论你是发布独立的 npm SDK，还是只想把团队内部项目的前后端接口层整理清楚，Defjs 都把接口的两端职责拆开：
 
-- **接口契约定义 (`@defjs/core`)** —— 使用 `defineRequest`、`defineEventStream` 和 `defineWebSocket` 声明带类型的 HTTP、SSE 与 WebSocket 操作，并用 `struct` 描述数据结构。定义本身是纯数据：只导入它不会发起任何请求，也不会绑死全局 Client。
-- **应用运行时执行** —— 具体应用在边界处创建自己的 `Client`（`createClient(withEndpoint(...))`），按需挂上认证凭据、拦截器和负载均衡，再在调用操作时把 `Client` 传进去。
+- **SDK 契约定义（`@defjs/core`、`@defjs/cli`）** —— 使用 `defineRequest`、`defineEventStream` 和 `defineWebSocket` 声明带类型的 HTTP、SSE 与 WebSocket 操作及其 `struct` schema（既可手写，也可从 OpenAPI 2.0/3.0/3.1/3.2 规范生成为无状态 ESM 模块）。定义本身是纯数据：只导入它不会发起任何网络调用，也不会绑定全局 Client。
+- **应用弹性执行（`@defjs/core`）** —— 应用在自身边界处创建 `Client`（`createClient(withEndpoint(...))`），挂上凭据与拦截器（`basicAuth*`、`idempotencyKeyHttpInterceptor`、`concurrencyLimitHttpInterceptor`），配置 P2C 负载均衡与 `outlierDetection`（`halfOpen`、`maxEjectionPercent`），开启 `429`/`Retry-After` 重试，通过 `@defjs/core/concurrent` 并发扇出，或借助 `@defjs/core/port` 桥接 Worker 与浏览器扩展。
 
 ## 快速浏览：接口定义 vs. 应用执行
 
@@ -45,9 +45,10 @@ description: 定义一次可复用的 TypeScript API 契约，由各个应用程
 
 1. **[快速开始](/zh-Hans/docs/start)** —— 定义第一个接口，用本地 Fetch 句柄不联网测试一遍，再接上真实后端服务。
 2. **[核心架构设计](/zh-Hans/docs/design-decisions)** —— 搞懂六条响应解码规则、错误优先元组写法，以及连接资源的释放方式。
-3. **[定义接口与数据契约](/zh-Hans/docs/struct)** —— 用 [Struct](/zh-Hans/docs/struct) 声明参数和返回格式，导出 [HTTP](/zh-Hans/docs/http)、[SSE](/zh-Hans/docs/sse) 和 [WebSocket](/zh-Hans/docs/web-socket) 操作。
-4. **[Client 与执行](/zh-Hans/docs/client)** —— 配置 [Client](/zh-Hans/docs/client)，处理带类型的 [错误](/zh-Hans/docs/errors)，接入 [拦截器](/zh-Hans/docs/interceptors)，配置 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)。
-5. **[工程规范与测试](/zh-Hans/docs/best-practices)** —— 遵循 [工程规范](/zh-Hans/docs/best-practices)，组织项目内的 [应用接口层](/zh-Hans/docs/application-api) 或设计 [公共 SDK](/zh-Hans/docs/public-sdk)，并编写稳定可复现的本地 [测试](/zh-Hans/docs/testing)。
+3. **[竞品对比与混合 BFF 架构](/zh-Hans/docs/comparison-and-architecture)** —— 将 Defjs 与 `fetch`、`ky`、`ofetch`、`openapi-fetch` 及 `oRPC` 客观对比，并查看 Defjs + oRPC/Hono 混合 BFF 蓝图与基准测试。
+4. **[定义接口与数据契约](/zh-Hans/docs/struct)** —— 用 [Struct](/zh-Hans/docs/struct) 声明参数和返回格式，导出 [HTTP](/zh-Hans/docs/http)、[SSE](/zh-Hans/docs/sse) 和 [WebSocket](/zh-Hans/docs/web-socket) 操作。
+5. **[Client 与执行](/zh-Hans/docs/client)** —— 配置 [Client](/zh-Hans/docs/client)，处理带类型的 [错误](/zh-Hans/docs/errors)，接入 [拦截器](/zh-Hans/docs/interceptors)，配置 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)。
+6. **[工程规范与测试](/zh-Hans/docs/best-practices)** —— 遵循 [工程规范](/zh-Hans/docs/best-practices)，组织项目内的 [应用接口层](/zh-Hans/docs/application-api) 或设计 [公共 SDK](/zh-Hans/docs/public-sdk)，并编写稳定可复现的本地 [测试](/zh-Hans/docs/testing)。
 
 ## 支持的传输协议与返回元组
 
@@ -65,7 +66,8 @@ HTTP 请求失败时，元组是 `[err, undefined, undefined]`，因为响应元
 
 | 软件包                        | 定位与能力                                                                               | 相关文档                                                                |
 | ----------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `@defjs/core`                 | 零运行时依赖的接口定义、`struct`、Client 与拦截器                                        | [快速开始](/zh-Hans/docs/start)                                         |
+| `@defjs/core`                 | 零依赖的 SDK 定义、`struct`、Client、弹性容错、中间件、`concurrent` 与 `port`            | [快速开始](/zh-Hans/docs/start)                                         |
+| `@defjs/cli`                  | 开发期 CLI，从 OpenAPI 2.0–3.2 规范生成无状态 ESM 定义                                   | [CLI 集成](/zh-Hans/docs/integrations/cli)                              |
 | `@defjs/react`                | 面向 React 18+ 的 `ClientProvider` 上下文与 `useClient()` Hook                           | [React 集成](/zh-Hans/docs/integrations/react)                          |
 | `@defjs/vue`                  | 面向 Vue 3 及以上版本的 `createClientPlugin` 插件、`HTTP_CLIENT` 标识与 `injectClient()` | [Vue 集成](/zh-Hans/docs/integrations/vue)                              |
 | `@defjs/opentelemetry-server` | 服务端出站 OpenTelemetry Trace Spans、指标与结构化诊断日志                               | [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server) |
@@ -76,6 +78,10 @@ HTTP 请求失败时，元组是 `[err, undefined, undefined]`，因为响应元
 - [发送并校验 JSON 数据](/zh-Hans/recipes/post-json)
 - [按业务预期处理 404 响应](/zh-Hans/recipes/get-declared-404)
 - [取消进行中的 HTTP 请求](/zh-Hans/recipes/cancel-http)
+- [游标分页流](/zh-Hans/recipes/cursor-pagination)
+- [重试时自动携带幂等键](/zh-Hans/recipes/idempotency-key)
+- [舱壁并发限流与池化调用](/zh-Hans/recipes/concurrency-limit)
+- [使用 Undici Pool 复用连接](/zh-Hans/recipes/undici-pool)
 - [401 自动刷新一次 Bearer Token](/zh-Hans/recipes/refresh-bearer-once)
 - [消费 SSE 服务端推送流](/zh-Hans/recipes/consume-sse)
 - [打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)

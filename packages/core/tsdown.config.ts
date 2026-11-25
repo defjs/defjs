@@ -8,7 +8,13 @@ const cdnBundle = "./index.min.js";
 export default defineConfig([
   libraryConfig(
     manifest,
-    { index, xsrf: "src/xsrf/index.ts" },
+    {
+      index,
+      concurrent: "src/concurrent/index.ts",
+      xsrf: "src/xsrf/index.ts",
+      port: "src/port/index.ts",
+      "port/webext": "src/port/webext/index.ts",
+    },
     { unpkg: cdnBundle, jsdelivr: cdnBundle },
   ),
   // The minified bundle that the CDN fields point at.

@@ -214,6 +214,7 @@ describe("repository spec names", () => {
 
 describe("vitest selection", () => {
   // Sequentially starts the 12 Vitest list processes, one config at a time.
+  // Disable fsModuleCache so listing never clears the shared root cache mid-run.
   beforeAll(async () => {
     for (const { cwd, config, name } of projects) {
       const { code, stdout, stderr } = await run(
@@ -224,6 +225,7 @@ describe("vitest selection", () => {
           "list",
           "--filesOnly",
           "--json",
+          "--no-fsModuleCache",
           "--config",
           config,
         ],

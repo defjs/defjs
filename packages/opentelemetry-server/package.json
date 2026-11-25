@@ -1,6 +1,6 @@
 {
   "name": "@defjs/opentelemetry-server",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Append OpenTelemetry interceptors to an application-owned Defjs client.",
   "bugs": {
     "url": "https://github.com/defjs/defjs/issues"
@@ -11,6 +11,7 @@
     "url": "git+https://github.com/defjs/defjs.git"
   },
   "type": "module",
+  "sideEffects": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -32,7 +33,7 @@
     "vitest": "^5.1.0"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.8.1",
+    "@defjs/core": "^0.9.0",
     "@opentelemetry/api": "^1.0.0",
     "@opentelemetry/core": "^2.0.0 || ^3.0.0"
   }

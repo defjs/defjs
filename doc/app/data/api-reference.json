@@ -461,7 +461,7 @@
     "slug": "core/derivableclient-type",
     "source": "packages/core/src/client/client.ts",
     "group": "client",
-    "description": "Callable root client returned by `createClient`.\n\nA factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. `client()` and `client(undefined)` store no request options. `client({})` keeps the empty snapshot produced by reading each top-level field; it is not dropped by inspecting keys.\n\nEach provided field is read once, in declaration order, onto a new options object. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `retry` copies `maxRetries`, `delayMs`, `factor`, `maxDelayMs`, `jitter`, `attemptTimeoutMs`, a `methods` array, `shouldRetry`, and `budget`. Missing nested blocks stay `undefined` and do not enable heartbeat or retry. `signal`, `beforeConnect`, and every callback keep their identity. A getter on these fixed fields runs during the call. If it throws, the exception escapes and is not converted into a fault; the factory stays usable.",
+    "description": "Callable root client returned by `createClient`.\n\nA factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. `client()` and `client(undefined)` store no request options. `client({})` keeps the empty snapshot produced by reading each top-level field; it is not dropped by inspecting keys.\n\nEach provided field is read once, in declaration order, onto a new options object. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `retry` copies `maxRetries`, `delayMs`, `factor`, `maxDelayMs`, `jitter`, `attemptTimeoutMs`, `methods` and `statusCodes` arrays, `retryAfter`, `maxRetryAfterMs`, `shouldRetry`, and `budget`. Missing nested blocks stay `undefined` and do not enable heartbeat or retry. `signal`, `beforeConnect`, and every callback keep their identity. A getter on these fixed fields runs during the call. If it throws, the exception escapes and is not converted into a fault; the factory stays usable.",
     "related": [
       "@defjs/core:createClient",
       "@defjs/core:Client",
@@ -543,7 +543,7 @@
     "name": "ERR_NO_CANDIDATE",
     "kind": "constant",
     "slug": "core/err-no-candidate",
-    "source": "packages/core/src/balancer/balancer.ts",
+    "source": "packages/core/src/balancer/no_candidate.ts",
     "group": "client",
     "description": "Sentinel for an empty candidate list.\n\nBuilt-in balancers return it as `[ERR_NO_CANDIDATE, undefined]`. The runtime\nreports that as `REQ_BUILD_FAILED` and keeps this error as `cause`. It is not\na `FaultCode`. The non-enumerable `Symbol.for(\"defjs.cause.no-endpoint\")`\nbrand lets {@link isNoCandidateCause} recognize the sentinel from another\nCore copy.",
     "related": ["@defjs/core:isNoCandidateCause"],
@@ -606,7 +606,7 @@
     "slug": "core/httpretrycontext-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "What `shouldRetry` receives after a failed HTTP attempt.\n\n`cause` is the fault the attempt returned. `status` is the response status when the attempt got a response. `retryable` is `true` for a method in `methods` and a failure without a response, a 502, 503, or 504 response, or an attempt timeout.",
+    "description": "What `shouldRetry` receives after a failed HTTP attempt.\n\n`cause` is the fault the attempt returned. `status` is the response status when the attempt got a response, and `headers` holds its response headers. `retryAfterMs` is present for a `429` or `503` response carrying a valid RFC 9110 `Retry-After` header when `retryAfter` is enabled. `retryable` is `true` for a method in `methods` and a failure without a response, a status in `statusCodes` (429, 502, 503, or 504 by default), or an attempt timeout.",
     "related": ["@defjs/core:RetryOptions"],
     "exampleFiles": [],
     "returns": [],
@@ -650,6 +650,24 @@
         "tags": []
       },
       {
+        "name": "headers",
+        "description": "Response headers, when the attempt got a response.",
+        "type": "Headers | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retryAfterMs",
+        "description": "Parsed RFC 9110 `Retry-After` delay in milliseconds for a `429` or `503` response when `retryAfter` is enabled.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
         "name": "attempt",
         "description": "Number of the retry about to start. The first retry is `1`. For SSE and WebSocket the count restarts at `1` after a connection is established again.",
         "type": "number",
@@ -679,7 +697,7 @@
     ],
     "overloads": [
       {
-        "signature": "interface HttpRetryContext extends RetryContextBase {\n  readonly transport: \"http\";\n  readonly method: string;\n  readonly endpoint: string;\n  readonly status?: number;\n}",
+        "signature": "interface HttpRetryContext extends RetryContextBase {\n  readonly transport: \"http\";\n  readonly method: string;\n  readonly endpoint: string;\n  readonly status?: number;\n  readonly headers?: Headers;\n  readonly retryAfterMs?: number;\n}",
         "parameters": []
       }
     ]
@@ -691,7 +709,7 @@
     "slug": "core/outlierdetectionoptions-type",
     "source": "packages/core/src/balancer/outlier_detection.ts",
     "group": "client",
-    "description": "Failure counting that ejects an endpoint for a while, and an optional\napplication-defined health check.\nThe library does not know what healthy means. It counts classified failures,\nejects an endpoint by time, and puts it back when the time is up; only\n`isHealthy` can say that an endpoint is unfit, and only the application\nsupplies it. No timers, ejection quotas, settlement grid, or slow start are used.",
+    "description": "Failure counting that ejects an endpoint for a while, and an optional\napplication-defined health check.\nThe library does not know what healthy means. It counts classified failures,\nejects an endpoint by time, and puts it back when the time is up (or admits\none probe at a time when `halfOpen` is enabled); only `isHealthy` can say\nthat an endpoint is unfit, and only the application supplies it. No timers,\nsettlement grid, or slow start are used.",
     "related": ["@defjs/core:outlierDetection"],
     "exampleFiles": [],
     "returns": [],
@@ -751,11 +769,29 @@
         "required": false,
         "deprecated": false,
         "tags": []
+      },
+      {
+        "name": "halfOpen",
+        "description": "When `true`, an endpoint whose ejection penalty has expired admits only one\ntrial request at a time until that probe settles; a successful probe restores\nfull traffic and a failed probe immediately re-ejects the endpoint with the\nnext penalty level. Defaults to `false`.",
+        "type": "boolean | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "maxEjectionPercent",
+        "description": "Maximum percentage of candidate endpoints that may be ejected at once, in\n`[0, 100]`. Defaults to `100` (no quota; fail-open still applies when every\nendpoint is ejected).",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "overloads": [
       {
-        "signature": "interface OutlierDetectionOptions {\n  readonly consecutiveFailures?: number;\n  readonly minPenaltyMs?: number;\n  readonly maxPenaltyMs?: number;\n  readonly jitterRatio?: number;\n  readonly isFailure?: (info: DoneInfo) => boolean;\n  readonly isHealthy?: (endpoint: string) => boolean;\n}",
+        "signature": "interface OutlierDetectionOptions {\n  readonly consecutiveFailures?: number;\n  readonly minPenaltyMs?: number;\n  readonly maxPenaltyMs?: number;\n  readonly jitterRatio?: number;\n  readonly isFailure?: (info: DoneInfo) => boolean;\n  readonly isHealthy?: (endpoint: string) => boolean;\n  readonly halfOpen?: boolean;\n  readonly maxEjectionPercent?: number;\n}",
         "parameters": []
       }
     ]
@@ -1169,13 +1205,13 @@
     "slug": "core/retryoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Opt-in retry policy for HTTP, SSE, and WebSocket.\n\nCall {@link withRetry}() or pass `{}` to enable retries with the defaults. Without a policy every call makes one attempt. Per call, `client({ retry })` replaces the client's policy as a whole value.\n\nAfter each failed attempt the policy decides in this order:\n\n1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, a WebSocket whose constructor throws, and a `ReadableStream` request body end the call. `shouldRetry` is not called.\n2. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.\n3. `shouldRetry(context)` decides. Without it, `context.retryable` does.\n4. HTTP only: a retry that the `budget` cannot pay for ends the call.\n5. The call waits for the backoff delay, then the balancer picks an endpoint again. Every endpoint is a candidate, including the one that just failed, so a single endpoint is tried again after the delay.",
+    "description": "Opt-in retry policy for HTTP, SSE, and WebSocket.\n\nCall {@link withRetry}() or pass `{}` to enable retries with the defaults. Without a policy every call makes one attempt. Per call, `client({ retry })` replaces the client's policy as a whole value.\n\nAfter each failed attempt the policy decides in this order:\n\n1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, a WebSocket whose constructor throws, and a `ReadableStream` request body end the call. `shouldRetry` is not called.\n2. When `retryAfter` is enabled and a `429` or `503` response carries a valid `Retry-After` delay exceeding `maxRetryAfterMs`, the call ends immediately without calling `shouldRetry` or spending `budget`.\n3. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.\n4. `shouldRetry(context)` decides. Without it, `context.retryable` does.\n5. HTTP only: a retry that the `budget` cannot pay for ends the call.\n6. The call waits for the `Retry-After` delay (when present on a `429` or `503` response and enabled, with positive jitter up to `maxRetryAfterMs`) or the exponential backoff delay, then the balancer picks an endpoint again. Every endpoint is a candidate, including the one that just failed, so a single endpoint is tried again after the delay.",
     "related": ["@defjs/core:withRetry"],
     "exampleFiles": [
       {
         "path": "examples/client/http-retry.ts",
         "region": "example",
-        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxRetries: 2,\n    attemptTimeoutMs: 2_000,\n    delayMs: 500,\n    maxDelayMs: 5_000,\n    // The default retries a connection failure, a 502, 503, or 504, and a timeout.\n    // This policy also retries a 429 and leaves every other decision to the default.\n    shouldRetry: (context) =>\n      context.retryable ||\n      (context.transport === \"http\" && context.status === 429),\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [err, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (err) {\n    console.error(err.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
+        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxRetries: 2,\n    attemptTimeoutMs: 2_000,\n    delayMs: 500,\n    maxDelayMs: 5_000,\n    // The default retries a connection failure, a 429, 502, 503, or 504, and a timeout.\n    // This policy also retries a 408 Request Timeout and leaves every other decision to the default.\n    shouldRetry: (context) =>\n      context.retryable ||\n      (context.transport === \"http\" && context.status === 408),\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [err, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (err) {\n    console.error(err.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
       }
     ],
     "returns": [],
@@ -1220,7 +1256,7 @@
       },
       {
         "name": "jitter",
-        "description": "Multiplicative jitter in [0, 1]. Defaults to 0.2, plus or minus twenty percent.",
+        "description": "Multiplicative jitter in [0, 1]. Defaults to 0.2, plus or minus twenty percent for exponential backoff, or positive-only `[1, 1 + jitter]` for `Retry-After`.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -1246,6 +1282,33 @@
         "tags": []
       },
       {
+        "name": "statusCodes",
+        "description": "HTTP and SSE non-2xx status codes retried by default. Defaults to `[429, 502, 503, 504]`. WebSocket ignores it.",
+        "type": "readonly number[] | undefined",
+        "simplifiedType": "array",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retryAfter",
+        "description": "Whether to honor the RFC 9110 `Retry-After` header on `429` and `503` HTTP and SSE handshake responses. Defaults to `true`.",
+        "type": "boolean | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "maxRetryAfterMs",
+        "description": "Maximum `Retry-After` delay in milliseconds that the policy will wait. Defaults to `60000`; `Infinity` removes the cap (platform timer cap still applies). A longer server-requested delay ends the call immediately without waiting or drawing from `budget`.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
         "name": "shouldRetry",
         "description": "Decides whether a failed attempt is retried. It is called after the `maxRetries` check and replaces `context.retryable`; return it to keep the default. It may return a promise, which the caller's signal can cancel. A throw ends the call with `EXT_HOOK_FAILED` and the thrown value as `cause`; an open SSE stream reports that code in `closed.code`, and an open WebSocket session ends with `closed.kind: \"error\"` and the thrown value as `closed.cause`.",
         "type": "((context: RetryContext) => boolean | Promise<boolean>) | undefined",
@@ -1266,7 +1329,7 @@
     ],
     "overloads": [
       {
-        "signature": "interface RetryOptions {\n  readonly maxRetries?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly maxDelayMs?: number;\n  readonly jitter?: number;\n  readonly attemptTimeoutMs?: number;\n  readonly methods?: readonly string[];\n  readonly shouldRetry?: (context: RetryContext) => boolean | Promise<boolean>;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}",
+        "signature": "interface RetryOptions {\n  readonly maxRetries?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly maxDelayMs?: number;\n  readonly jitter?: number;\n  readonly attemptTimeoutMs?: number;\n  readonly methods?: readonly string[];\n  readonly statusCodes?: readonly number[];\n  readonly retryAfter?: boolean;\n  readonly maxRetryAfterMs?: number;\n  readonly shouldRetry?: (context: RetryContext) => boolean | Promise<boolean>;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}",
         "parameters": []
       }
     ]
@@ -1318,7 +1381,7 @@
     "slug": "core/sseretrycontext-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "What `shouldRetry` receives after an SSE handshake or stream failed.\n\n`cause` is the failure: an `HTTP_STATUS` fault for a non-2xx handshake, otherwise the error that ended the attempt. `retryable` is `true` for a method in `methods` and a handshake network failure, a 502, 503, or 504 handshake, an attempt timeout, or a network error after the stream opened. A normal end of the stream never retries.",
+    "description": "What `shouldRetry` receives after an SSE handshake or stream failed.\n\n`cause` is the failure: an `HTTP_STATUS` fault for a non-2xx handshake, otherwise the error that ended the attempt. `retryable` is `true` for a method in `methods` and a handshake network failure, a handshake status in `statusCodes` (429, 502, 503, or 504 by default), an attempt timeout, or a network error after the stream opened. A normal end of the stream never retries.",
     "related": ["@defjs/core:RetryOptions"],
     "exampleFiles": [],
     "returns": [],
@@ -1355,7 +1418,7 @@
       {
         "name": "open",
         "description": "The latest handshake response, when one arrived.",
-        "type": "{ readonly response: { readonly status: number; readonly statusText: string; readonly url: string; }; readonly url: string; } | undefined",
+        "type": "{ readonly response: { readonly status: number; readonly statusText: string; readonly url: string; readonly headers: Headers; }; readonly url: string; } | undefined",
         "simplifiedType": "object",
         "required": false,
         "deprecated": false,
@@ -1364,6 +1427,24 @@
       {
         "name": "status",
         "description": "Status of the handshake response, when one arrived.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "headers",
+        "description": "Handshake response headers, when a handshake response arrived.",
+        "type": "Headers | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retryAfterMs",
+        "description": "Parsed RFC 9110 `Retry-After` delay in milliseconds for a `429` or `503` handshake when `retryAfter` is enabled.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -1400,7 +1481,7 @@
     ],
     "overloads": [
       {
-        "signature": "interface SSERetryContext extends RetryContextBase {\n  readonly transport: \"sse\";\n  readonly method: string;\n  readonly lastEventId: string;\n  readonly open?: {\n    readonly response: {\n      readonly status: number;\n      readonly statusText: string;\n      readonly url: string;\n    };\n    readonly url: string;\n  };\n  readonly status?: number;\n}",
+        "signature": "interface SSERetryContext extends RetryContextBase {\n  readonly transport: \"sse\";\n  readonly method: string;\n  readonly lastEventId: string;\n  readonly open?: {\n    readonly response: {\n      readonly status: number;\n      readonly statusText: string;\n      readonly url: string;\n      readonly headers: Headers;\n    };\n    readonly url: string;\n  };\n  readonly status?: number;\n  readonly headers?: Headers;\n  readonly retryAfterMs?: number;\n}",
         "parameters": []
       }
     ]
@@ -1601,7 +1682,7 @@
     "name": "isNoCandidateCause",
     "kind": "function",
     "slug": "core/isnocandidatecause",
-    "source": "packages/core/src/balancer/balancer.ts",
+    "source": "packages/core/src/balancer/no_candidate.ts",
     "group": "client",
     "description": "Whether `cause` is {@link ERR_NO_CANDIDATE}, including a copy from another Core build.\n\nReturns `true` when `cause` carries the non-enumerable\n`Symbol.for(\"defjs.cause.no-endpoint\")` brand. Other values return `false`.\nPass `fault.cause`; this does not unwrap faults.",
     "related": ["@defjs/core:ERR_NO_CANDIDATE"],
@@ -1634,7 +1715,7 @@
     "slug": "core/outlierdetection",
     "source": "packages/core/src/balancer/outlier_detection.ts",
     "group": "client",
-    "description": "Wraps a strategy with consecutive-failure ejection by time.\nFive attributed failures eject an endpoint by default. The penalty is the\nminimum penalty (1s by default) times the penalty level, so successive\nejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5\ntimes the base is added, and the total caps at 60s. When the time is up the\nendpoint is selectable again; nothing probes it or decides that it has\nrecovered. As in gRPC outlier detection (gRFC A50) a success never clears the\npenalty level: every ejection raises it by one and every ten seconds without\none lowers it by one, evaluated when the endpoint is next used. An endpoint\nthat accepts a connection and then drops it is therefore ejected for longer\neach time, as long as its failures return faster than one level decays.\nEvery classified failure code fails by default, including NET_TIMEOUT and\nNET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection\ncount timeouts and resets; `isFailure` replaces that rule. An attempted\noutcome without a code resets the streak; unattributed attempts leave it\nunchanged. The outcome of an attempt that began before an\nejection, or while the endpoint was ejected, is ignored even if it arrives\nafter the endpoint is selectable again, so late results do not eject it anew.\nThe child receives the filtered candidates as `endpoints` and the unfiltered\n`members`, so ejection does not look like a membership change to it.\n`isHealthy`, when supplied, is the only health judgement and combines with\nejection by AND: it can keep an endpoint out, and `true` cannot let an ejected\nendpoint in. If it rejects every endpoint that is not ejected, it is ignored\nfor that pick. If every endpoint is ejected, the original current list is\nused (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection\nquota. All callbacks are synchronous; no timer is created. Configuration is\ncaptured at construction.\nHistory holds at least 256 endpoints, and at least the current list, shared\nacross endpoint lists. LRU clean or expired states are evicted first, then\npartial failure sequences, then the oldest protected state only if every\nretained endpoint is ejected. Temporary candidate exclusion does not itself\nerase a penalty.",
+    "description": "Wraps a strategy with consecutive-failure ejection by time.\nFive attributed failures eject an endpoint by default. The penalty is the\nminimum penalty (1s by default) times the penalty level, so successive\nejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5\ntimes the base is added, and the total caps at 60s. By default (`halfOpen:\nfalse`), when the time is up the endpoint is selectable again for every\ncaller; setting `halfOpen: true` admits only one trial request at a time\nafter penalty expiry, restoring full traffic on success or immediately\nre-ejecting on failure. As in gRPC outlier detection (gRFC A50) a success\nnever clears the penalty level: every ejection raises it by one and every ten\nseconds without one lowers it by one, evaluated when the endpoint is next\nused. An endpoint that accepts a connection and then drops it is therefore\nejected for longer each time, as long as its failures return faster than one\nlevel decays.\nEvery classified failure code fails by default, including NET_TIMEOUT and\nNET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection\ncount timeouts and resets; `isFailure` replaces that rule. An attempted\noutcome without a code resets the streak; unattributed attempts leave it\nunchanged. The outcome of an attempt that began before an\nejection, or while the endpoint was ejected, is ignored even if it arrives\nafter the endpoint is selectable again, so late results do not eject it anew.\nThe child receives the filtered candidates as `endpoints` and the unfiltered\n`members`, so ejection does not look like a membership change to it.\n`isHealthy`, when supplied, is the only health judgement and combines with\nejection by AND: it can keep an endpoint out, and `true` cannot let an ejected\nendpoint in. If it rejects every endpoint that is not ejected, it is ignored\nfor that pick. If every endpoint is ejected (or waiting on an in-flight\nhalf-open probe), the original current list is used (Finagle panic mode).\n`maxEjectionPercent` defaults to `100` (no quota); lowering it caps how many\nendpoints may be ejected simultaneously. All callbacks are synchronous; no\ntimer is created. Configuration is captured at construction.\nHistory holds at least 256 endpoints, and at least the current list, shared\nacross endpoint lists. LRU clean or expired states are evicted first, then\npartial failure sequences, then the oldest protected state only if every\nretained endpoint is ejected. Temporary candidate exclusion does not itself\nerase a penalty.",
     "related": [
       "@defjs/core:OutlierDetectionOptions",
       "@defjs/core:roundRobinBalancer",
@@ -1994,13 +2075,13 @@
     "slug": "core/withretry",
     "source": "packages/core/src/client/option.ts",
     "group": "client",
-    "description": "Enables retries for HTTP, SSE, and WebSocket, with backoff and an optional policy function.\n\nRetries are opt-in: without this option every call makes one attempt, and an HTTP call creates no retry budget. Calling it with no argument or `{}` enables the defaults: 3 retries after the first attempt, a 1000 ms delay that doubles per retry up to 30000 ms, and jitter of 0.2. The same options apply to every transport; see {@link RetryOptions} for the decision order after a failure and for what counts as a retryable failure on each one.\n\n- HTTP retries a method in `methods` when the attempt got no response, got a 502, 503, or 504, or ran out of `attemptTimeoutMs`. Each retry rebuilds the request, reruns the complete interceptor chain, and lets the balancer pick again from every endpoint, so a single endpoint is tried again after the delay. Local failures before Fetch starts are not retried. Retry eligibility checks every method actually sent by the attempt, after interceptor rewrites; with no transport invocation it uses the defined method. A `budget` limits how many retries the client can make.\n- SSE retries a method in `methods` after a handshake network failure, a 502, 503, or 504 handshake, an attempt timeout, or a network error after the stream opened. Normal EOF ends the stream. The `retry:` field of the server replaces `delayMs`, and the next attempt sends `Last-Event-ID`. A successful handshake resets the count.\n- WebSocket retries every close that `session.close()` did not request, including a connection that never opened and a heartbeat timeout. A successful `open` resets the count.\n- A `ReadableStream` request body, a caller abort, a manual close, and fatal errors end the call without a retry and without calling `shouldRetry`.\n\nCallers that need a time limit without retries use `withRetry({ maxRetries: 0, attemptTimeoutMs })`. The signal of the caller covers all attempts and waits. A later `withRetry` replaces the policy as a whole, and passing `undefined` is the same as passing `{}`; pass `{ maxRetries: 0 }` to turn retries off after enabling them. The `methods` array and the `budget` record are copied when the option is applied. A request option `retry` replaces this policy for one call, except `budget`, which stays with the client.",
+    "description": "Enables retries for HTTP, SSE, and WebSocket, with backoff and an optional policy function.\n\nRetries are opt-in: without this option every call makes one attempt, and an HTTP call creates no retry budget. Calling it with no argument or `{}` enables the defaults: 3 retries after the first attempt, a 1000 ms delay that doubles per retry up to 30000 ms, and jitter of 0.2. The same options apply to every transport; see {@link RetryOptions} for the decision order after a failure and for what counts as a retryable failure on each one.\n\n- HTTP retries a method in `methods` when the attempt got no response, got a status in `statusCodes` (429, 502, 503, or 504 by default), or ran out of `attemptTimeoutMs`. Each retry rebuilds the request, reruns the complete interceptor chain, and lets the balancer pick again from every endpoint, so a single endpoint is tried again after the delay. Local failures before Fetch starts are not retried. Retry eligibility checks every method actually sent by the attempt, after interceptor rewrites; with no transport invocation it uses the defined method. A `budget` limits how many retries the client can make.\n- SSE retries a method in `methods` after a handshake network failure, a handshake status in `statusCodes` (429, 502, 503, or 504 by default), an attempt timeout, or a network error after the stream opened. Normal EOF ends the stream. The `retry:` field of the server replaces `delayMs`, and the next attempt sends `Last-Event-ID`. A successful handshake resets the count.\n- WebSocket retries every close that `session.close()` did not request, including a connection that never opened and a heartbeat timeout. A successful `open` resets the count.\n- A `ReadableStream` request body, a caller abort, a manual close, and fatal errors end the call without a retry and without calling `shouldRetry`.\n\nCallers that need a time limit without retries use `withRetry({ maxRetries: 0, attemptTimeoutMs })`. The signal of the caller covers all attempts and waits. A later `withRetry` replaces the policy as a whole, and passing `undefined` is the same as passing `{}`; pass `{ maxRetries: 0 }` to turn retries off after enabling them. The `methods` and `statusCodes` arrays and the `budget` record are copied when the option is applied. A request option `retry` replaces this policy for one call, except `budget`, which stays with the client.",
     "related": ["@defjs/core:RetryOptions"],
     "exampleFiles": [
       {
         "path": "examples/client/http-retry.ts",
         "region": "example",
-        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxRetries: 2,\n    attemptTimeoutMs: 2_000,\n    delayMs: 500,\n    maxDelayMs: 5_000,\n    // The default retries a connection failure, a 502, 503, or 504, and a timeout.\n    // This policy also retries a 429 and leaves every other decision to the default.\n    shouldRetry: (context) =>\n      context.retryable ||\n      (context.transport === \"http\" && context.status === 429),\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [err, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (err) {\n    console.error(err.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
+        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxRetries: 2,\n    attemptTimeoutMs: 2_000,\n    delayMs: 500,\n    maxDelayMs: 5_000,\n    // The default retries a connection failure, a 429, 502, 503, or 504, and a timeout.\n    // This policy also retries a 408 Request Timeout and leaves every other decision to the default.\n    shouldRetry: (context) =>\n      context.retryable ||\n      (context.transport === \"http\" && context.status === 408),\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [err, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (err) {\n    console.error(err.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
       }
     ],
     "returns": ["An option that writes `config.retry`."],
@@ -2619,6 +2700,24 @@
         "tags": []
       },
       {
+        "name": "correlationId",
+        "description": "Per-call identifier shared across all attempts of one HTTP execution, including retries. Read-only; never sent automatically as an HTTP header.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retryAttempt",
+        "description": "Zero-based retry attempt count for this HTTP execution (`0` on the initial attempt, `1` on the first retry, and so on). Read-only.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
         "name": "uploadProgress",
         "description": "",
         "type": "HttpProgressFn | undefined",
@@ -2648,7 +2747,7 @@
     ],
     "overloads": [
       {
-        "signature": "interface HttpRequest {\n  signal?: AbortSignal;\n  baseEndpoint?: string;\n  body?:\n    | Blob\n    | ArrayBuffer\n    | FormData\n    | URLSearchParams\n    | ReadableStream<Uint8Array>\n    | object\n    | string\n    | number\n    | boolean\n    | null;\n  bodyContentType?: string | null;\n  downloadProgress?: HttpProgressFn;\n  endpoint: string;\n  headers?: Headers;\n  method: string;\n  readonly meta?: { readonly [key: string]: unknown };\n  query?: URLSearchParams;\n  readonly responseType?: HttpResponseType;\n  readonly errorResponseType?: HttpResponseType;\n  uploadProgress?: HttpProgressFn;\n  withCredentials?: boolean;\n  finalizeHeaders?: (request: HttpRequest, headers: Headers, url: URL) => void;\n}",
+        "signature": "interface HttpRequest {\n  signal?: AbortSignal;\n  baseEndpoint?: string;\n  body?:\n    | Blob\n    | ArrayBuffer\n    | FormData\n    | URLSearchParams\n    | ReadableStream<Uint8Array>\n    | object\n    | string\n    | number\n    | boolean\n    | null;\n  bodyContentType?: string | null;\n  downloadProgress?: HttpProgressFn;\n  endpoint: string;\n  headers?: Headers;\n  method: string;\n  readonly meta?: { readonly [key: string]: unknown };\n  query?: URLSearchParams;\n  readonly responseType?: HttpResponseType;\n  readonly errorResponseType?: HttpResponseType;\n  readonly correlationId?: string;\n  readonly retryAttempt?: number;\n  uploadProgress?: HttpProgressFn;\n  withCredentials?: boolean;\n  finalizeHeaders?: (request: HttpRequest, headers: Headers, url: URL) => void;\n}",
         "parameters": []
       }
     ]
@@ -5107,6 +5206,104 @@
   },
   {
     "package": "@defjs/core",
+    "name": "BulkheadOverflowError",
+    "kind": "type",
+    "slug": "core/bulkheadoverflowerror-type",
+    "source": "packages/core/src/interceptor/concurrency_limit.ts",
+    "group": "interceptors",
+    "description": "Cause attached to `EXT_INTERCEPTOR_FAILED` when {@link concurrencyLimitHttpInterceptor}\nrejects a request because its queue is full (`maxQueue` reached).\n\n`name` is `'BulkheadOverflowError'`. The error carries the saturated bucket\n`key`, `maxConcurrency`, and `maxQueue` for diagnostics and logging.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "key",
+        "description": "Bucket key that overflowed (`\"\"` when no custom `key` selector was configured).",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "maxConcurrency",
+        "description": "Configured maximum in-flight concurrency for the bucket.",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "maxQueue",
+        "description": "Configured maximum queue length for the bucket.",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "class BulkheadOverflowError extends Error {\n  readonly key: string;\n  readonly maxConcurrency: number;\n  readonly maxQueue: number;\n  constructor(key: string, maxConcurrency: number, maxQueue: number);\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ConcurrencyLimitInterceptorOptions",
+    "kind": "type",
+    "slug": "core/concurrencylimitinterceptoroptions-type",
+    "source": "packages/core/src/interceptor/concurrency_limit.ts",
+    "group": "interceptors",
+    "description": "Options for {@link concurrencyLimitHttpInterceptor}.\n\n`maxConcurrency` caps the number of in-flight HTTP attempts allowed at once\nper bucket. Requests beyond that limit wait in FIFO order up to `maxQueue`\n(which defaults to `Infinity`), or fail immediately with\n`EXT_INTERCEPTOR_FAILED` carrying a {@link BulkheadOverflowError} as `cause`\nwhen the queue is full.\n\n`key` partitions limits across independent buckets (for example per selected\norigin via `req.baseEndpoint ?? \"\"`, or by `req.method`). By default all\nrequests share one bucket (`\"\"`).",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "maxConcurrency",
+        "description": "Maximum number of concurrent in-flight HTTP attempts per bucket; must be a positive integer (`>= 1`).",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "maxQueue",
+        "description": "Maximum number of waiters allowed in the FIFO queue per bucket (`0` rejects immediately when busy); defaults to `Infinity`.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "key",
+        "description": "Partitions concurrency and queue budgets into named buckets; defaults to one shared bucket (`\"\"`).",
+        "type": "((req: HttpRequest) => string) | undefined",
+        "simplifiedType": "function",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface ConcurrencyLimitInterceptorOptions {\n  readonly maxConcurrency: number;\n  readonly maxQueue?: number;\n  readonly key?: (req: HttpRequest) => string;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
     "name": "HttpInterceptor",
     "kind": "type",
     "slug": "core/httpinterceptor-type",
@@ -5173,6 +5370,64 @@
             "tags": []
           }
         ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "IdempotencyKeyInterceptorOptions",
+    "kind": "type",
+    "slug": "core/idempotencykeyinterceptoroptions-type",
+    "source": "packages/core/src/interceptor/idempotency_key.ts",
+    "group": "interceptors",
+    "description": "Options for {@link idempotencyKeyHttpInterceptor}.\n\nControls which header name is set, which HTTP methods receive the key, how\nkeys are generated, and whether caller-supplied headers are preserved.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "headerName",
+        "description": "Header name written on matching requests; defaults to `'Idempotency-Key'`.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "methods",
+        "description": "HTTP methods that receive an idempotency key (case-insensitive); defaults to `['POST', 'PATCH']`.",
+        "type": "readonly string[] | undefined",
+        "simplifiedType": "array",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "generate",
+        "description": "Custom key generator; by default reuses `req.correlationId` (or falls back to an RFC 4122 v4 UUID) so retries of one call keep the same key.",
+        "type": "((req: HttpRequest) => string) | undefined",
+        "simplifiedType": "function",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "respectExisting",
+        "description": "When `true` (default), leaves an existing `headerName` untouched without invoking `generate`.",
+        "type": "boolean | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface IdempotencyKeyInterceptorOptions {\n  readonly headerName?: string;\n  readonly methods?: readonly string[];\n  readonly generate?: (req: HttpRequest) => string;\n  readonly respectExisting?: boolean;\n}",
+        "parameters": []
       }
     ]
   },
@@ -5812,6 +6067,37 @@
   },
   {
     "package": "@defjs/core",
+    "name": "concurrencyLimitHttpInterceptor",
+    "kind": "function",
+    "slug": "core/concurrencylimithttpinterceptor",
+    "source": "packages/core/src/interceptor/concurrency_limit.ts",
+    "group": "interceptors",
+    "description": "HTTP interceptor that caps concurrent in-flight HTTP attempts per bucket.\n\nWhen `maxConcurrency` requests are already active in a bucket, further\nrequests wait in FIFO order until a slot frees or `req.signal` aborts. While\nwaiting in the queue, transport `attemptTimeoutMs` and balancer pending-load\ntracking have not started yet, and permits are released during `withRetry`\nbackoff waits so retries cannot deadlock the bulkhead.\n\n- Pre-aborted or mid-queue aborted requests do not consume a permit and fail\n  with `NET_ABORTED` or `NET_TIMEOUT`.\n- Requests that exceed `maxQueue` reject with {@link BulkheadOverflowError},\n  which Defjs reports as `EXT_INTERCEPTOR_FAILED` (`attempt.info` stays\n  `{ attempted: false }`, so balancers do not eject endpoints and retries stop).\n- `maxConcurrency` must be an integer `>= 1` and `maxQueue` an integer `>= 0`\n  or `Infinity`; invalid values throw `RangeError` synchronously.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": ["An `HttpInterceptor` enforcing the bulkhead limit."],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function concurrencyLimitHttpInterceptor(\n  options: ConcurrencyLimitInterceptorOptions,\n): HttpInterceptor;",
+        "parameters": [
+          {
+            "name": "options",
+            "description": "Concurrency cap, optional queue limit, and optional bucket key selector.",
+            "type": "ConcurrencyLimitInterceptorOptions",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
     "name": "createHttpInterceptor",
     "kind": "function",
     "slug": "core/createhttpinterceptor",
@@ -5933,6 +6219,39 @@
             "type": "WebSocketInterceptorFn",
             "simplifiedType": "WebSocketInterceptorFn",
             "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "idempotencyKeyHttpInterceptor",
+    "kind": "function",
+    "slug": "core/idempotencykeyhttpinterceptor",
+    "source": "packages/core/src/interceptor/idempotency_key.ts",
+    "group": "interceptors",
+    "description": "HTTP interceptor that attaches an idempotency key header to mutating requests.\n\nFor requests whose method matches `methods` (default `POST` and `PATCH`),\nclones `req.headers` and sets `headerName` (default `'Idempotency-Key'`).\nWhen `respectExisting` is `true` (default) and the request already carries\n`headerName`, the request passes through unchanged.\n\nWithout a custom `generate` callback, reuses `req.correlationId` so every\n`withRetry` attempt of the same call sends the same idempotency key without\nstoring keys across calls. With a custom `generate` callback, memoizes\ngenerated values by `req.correlationId` in a bounded LRU cache (4,096\nentries) so custom generators are likewise called once per retry chain.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "An `HttpInterceptor` that injects the idempotency key header."
+    ],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function idempotencyKeyHttpInterceptor(\n  options?: IdempotencyKeyInterceptorOptions,\n): HttpInterceptor;",
+        "parameters": [
+          {
+            "name": "options",
+            "description": "Optional header name, target methods, generator, and overwrite flag.",
+            "type": "IdempotencyKeyInterceptorOptions",
+            "simplifiedType": "object",
+            "required": false,
             "deprecated": false,
             "tags": []
           }
@@ -8153,6 +8472,394 @@
     ]
   },
   {
+    "package": "@defjs/core/concurrent",
+    "name": "ConcurrencyOptions",
+    "kind": "type",
+    "slug": "core/concurrent/concurrencyoptions-type",
+    "source": "packages/core/src/concurrent/pool.ts",
+    "group": "client",
+    "description": "Execution bounds and cancellation options shared by helpers in `@defjs/core/concurrent`.\n\n`concurrency` caps how many operations run in parallel (`Infinity` by default).\n`signal` cancels the whole batch, propagating alongside any `signal` already\ncarried on a derived `client(options)`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "concurrency",
+        "description": "Maximum number of concurrent operations allowed in flight at once; must be a positive integer (`>= 1`) or `Infinity` (default).",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "signal",
+        "description": "Cancels the batch and aborts started operations.",
+        "type": "AbortSignal | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface ConcurrencyOptions {\n  readonly concurrency?: number;\n  readonly signal?: AbortSignal;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "ConcurrentTask",
+    "kind": "type",
+    "slug": "core/concurrent/concurrenttask-type",
+    "source": "packages/core/src/concurrent/all.ts",
+    "group": "client",
+    "description": "Thunk passed to {@link concurrentAll} or {@link concurrentAllSettled}.\n\nReceives the batch-derived {@link Client} (`c => getUser(c, input)`) so batch\ncancellation, per-call client options, and fail-fast aborts flow cleanly into\nevery task without changing how operations are called.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type ConcurrentTask<TResult extends OperationResult = OperationResult> =\n  (client: Client) => Promise<TResult>;",
+        "parameters": [
+          {
+            "name": "client",
+            "description": "",
+            "type": "Client",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "ConcurrentTaskRecord",
+    "kind": "type",
+    "slug": "core/concurrent/concurrenttaskrecord-type",
+    "source": "packages/core/src/concurrent/all.ts",
+    "group": "client",
+    "description": "Keyed dictionary of heterogeneous {@link ConcurrentTask} functions passed to\n{@link concurrentAll} or {@link concurrentAllSettled}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [],
+    "overloads": [
+      {
+        "signature": "type ConcurrentTaskRecord = {\n  readonly [key: string]: ConcurrentTask;\n};",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "concurrentAll",
+    "kind": "function",
+    "slug": "core/concurrent/concurrentall",
+    "source": "packages/core/src/concurrent/all.ts",
+    "group": "client",
+    "description": "Runs a tuple of heterogeneous Defjs tasks concurrently, failing fast on the first fault.\n\nEach task receives the batch-derived {@link Client} (`(c) => getUser(c, input)`).\nPreserves heterogeneous result and metadata types in tuple positions without\nrequiring `as const`. On the first fault, aborts remaining siblings, closes\nany SSE streams or WebSocket sessions already opened by earlier tasks in the\nbatch, waits for started tasks to settle, and returns `[firstFault, undefined, undefined]`.\n\n`TupleFault`, `RecordFault`, `TupleSuccessValues`, `TupleSuccessMetas`,\n`RecordSuccessValues`, `RecordSuccessMetas`, `ResultValue`, and `ResultMeta`\nare internal helper types preserving tuple and record inference.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "`[null, resultsTuple, responsesTuple]` on full success, or `[err, undefined, undefined]` on failure.",
+      "`[null, resultsRecord, responsesRecord]` on full success, or `[err, undefined, undefined]` on failure."
+    ],
+    "throws": [
+      "`RangeError` if `options.concurrency` is neither `Infinity` nor a positive integer.",
+      "`RangeError` if `options.concurrency` is neither `Infinity` nor a positive integer."
+    ],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function concurrentAll<const TTasks extends readonly ConcurrentTask[]>(\n  client: Client,\n  tasks: TTasks,\n  options?: ConcurrencyOptions,\n): Promise<\n  | [\n      err: null,\n      results: TupleSuccessValues<TTasks>,\n      responses: TupleSuccessMetas<TTasks>,\n    ]\n  | [err: TupleFault<TTasks>, results: undefined, responses: undefined]\n>;",
+        "parameters": [
+          {
+            "name": "client",
+            "description": "Root or derived Defjs client.",
+            "type": "Client",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "tasks",
+            "description": "Tuple or array of task functions receiving the batch client.",
+            "type": "TTasks",
+            "simplifiedType": "TTasks",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Optional concurrency limit and batch cancellation signal.",
+            "type": "ConcurrencyOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      },
+      {
+        "signature": "function concurrentAll<const TTasks extends ConcurrentTaskRecord>(\n  client: Client,\n  tasks: TTasks,\n  options?: ConcurrencyOptions,\n): Promise<\n  | [\n      err: null,\n      results: RecordSuccessValues<TTasks>,\n      responses: RecordSuccessMetas<TTasks>,\n    ]\n  | [err: RecordFault<TTasks>, results: undefined, responses: undefined]\n>;",
+        "parameters": [
+          {
+            "name": "client",
+            "description": "Root or derived Defjs client.",
+            "type": "Client",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "tasks",
+            "description": "Tuple or array of task functions receiving the batch client.",
+            "type": "TTasks",
+            "simplifiedType": "TTasks",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Optional concurrency limit and batch cancellation signal.",
+            "type": "ConcurrencyOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "concurrentAllSettled",
+    "kind": "function",
+    "slug": "core/concurrent/concurrentallsettled",
+    "source": "packages/core/src/concurrent/all.ts",
+    "group": "client",
+    "description": "Runs a tuple of heterogeneous Defjs tasks concurrently and returns each task's own error-first tuple.\n\nOne failing task never aborts its siblings. Queued tasks skipped because the\nbatch `signal` aborted resolve with `[NET_ABORTED | NET_TIMEOUT, undefined, undefined]`.\n\n`SettledTupleResult`, `SettledRecordResult`, and `SettledTaskResult` are\ninternal helper types preserving per-task settled result inference.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "A tuple of settled error-first results matching `tasks`.",
+      "A keyed record of settled error-first results matching `tasks`."
+    ],
+    "throws": [
+      "`RangeError` if `options.concurrency` is neither `Infinity` nor a positive integer.",
+      "`RangeError` if `options.concurrency` is neither `Infinity` nor a positive integer."
+    ],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function concurrentAllSettled<\n  const TTasks extends readonly ConcurrentTask[],\n>(\n  client: Client,\n  tasks: TTasks,\n  options?: ConcurrencyOptions,\n): Promise<SettledTupleResult<TTasks>>;",
+        "parameters": [
+          {
+            "name": "client",
+            "description": "Root or derived Defjs client.",
+            "type": "Client",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "tasks",
+            "description": "Tuple or array of task functions receiving the batch client.",
+            "type": "TTasks",
+            "simplifiedType": "TTasks",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Optional concurrency limit and batch cancellation signal.",
+            "type": "ConcurrencyOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      },
+      {
+        "signature": "function concurrentAllSettled<const TTasks extends ConcurrentTaskRecord>(\n  client: Client,\n  tasks: TTasks,\n  options?: ConcurrencyOptions,\n): Promise<SettledRecordResult<TTasks>>;",
+        "parameters": [
+          {
+            "name": "client",
+            "description": "Root or derived Defjs client.",
+            "type": "Client",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "tasks",
+            "description": "Tuple or array of task functions receiving the batch client.",
+            "type": "TTasks",
+            "simplifiedType": "TTasks",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Optional concurrency limit and batch cancellation signal.",
+            "type": "ConcurrencyOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "concurrentMap",
+    "kind": "function",
+    "slug": "core/concurrent/concurrentmap",
+    "source": "packages/core/src/concurrent/map.ts",
+    "group": "client",
+    "description": "Runs one operation over many inputs concurrently, failing fast on the first fault.\n\nReturns a pooled error-first tuple `[err, results, responses]`. On success,\n`results` and `responses` preserve the input order regardless of completion\norder. On the first operation fault, already-started sibling calls are\naborted, in-flight calls and balancer hooks are awaited before returning, and\n`[firstFault, undefined, undefined]` is returned; caller cancellation via\n`options.signal` or a derived `client({ signal })` takes precedence as\n`NET_ABORTED` or `NET_TIMEOUT`.\n\n`ResultValue` and `ResultMeta` are internal helper types preserving the\noperation's exact success value and response metadata types. Rejects\nzero-argument operations at compile time; pass operations that accept a\nrequired or optional input. Use {@link concurrentMapSettled} when partial\nresults should be kept.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "`[null, results, responses]` if every call succeeds, or `[err, undefined, undefined]` on failure."
+    ],
+    "throws": [
+      "`RangeError` if `options.concurrency` is neither `Infinity` nor a positive integer."
+    ],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function concurrentMap<\n  TInput,\n  TResult extends OperationResult,\n  TOp extends (client: Client, input: TInput) => Promise<TResult>,\n>(\n  client: Client,\n  operation: TOp &\n    ((client: Client, input: TInput) => Promise<TResult>) &\n    (Parameters<NoInfer<TOp>> extends readonly [Client] ? never : unknown),\n  inputs: readonly NoInfer<TInput>[],\n  options?: ConcurrencyOptions,\n): Promise<\n  | [\n      err: null,\n      results: ResultValue<TResult>[],\n      responses: ResultMeta<TResult>[],\n    ]\n  | [\n      err: Exclude<TResult[0], null> | PreflightFault,\n      results: undefined,\n      responses: undefined,\n    ]\n>;",
+        "parameters": [
+          {
+            "name": "client",
+            "description": "Root or derived Defjs client (any per-call `RequestOptions` except `signal` are preserved, and `signal` combines with `options.signal`).",
+            "type": "Client",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "operation",
+            "description": "Defjs operation (such as a `defineRequest`, `defineEventStream`, or `defineWebSocket` endpoint) accepting an input.",
+            "type": "TOp &\n    ((client: Client, input: TInput) => Promise<TResult>) &\n    (Parameters<NoInfer<TOp>> extends readonly [Client] ? never : unknown)",
+            "simplifiedType": "TOp &\n    ((client: Client, input: TInput) => Promise<TResult>) &\n    (Parameters<NoInfer<TOp>> extends readonly [Client] ? never : unknown)",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "inputs",
+            "description": "Ordered inputs to pass to `operation`.",
+            "type": "readonly NoInfer<TInput>[]",
+            "simplifiedType": "array",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Optional concurrency cap (`concurrency`) and batch cancellation (`signal`).",
+            "type": "ConcurrencyOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/concurrent",
+    "name": "concurrentMapSettled",
+    "kind": "function",
+    "slug": "core/concurrent/concurrentmapsettled",
+    "source": "packages/core/src/concurrent/map.ts",
+    "group": "client",
+    "description": "Runs one operation over many inputs concurrently and collects every error-first result tuple.\n\nUnlike {@link concurrentMap}, one failing item does not cancel its siblings.\nEach item resolves to its own error-first tuple in input order. If the batch\n`signal` aborts while items are still waiting in the concurrency queue,\nunstarted slots resolve with `[NET_ABORTED | NET_TIMEOUT, undefined, undefined]`.\n\n`SettledTaskResult` is an internal helper type preserving the operation's\nresult tuple. Rejects zero-argument operations at compile time; pass\noperations that accept a required or optional input.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": ["An array of per-input error-first tuples in input order."],
+    "throws": [
+      "`RangeError` if `options.concurrency` is neither `Infinity` nor a positive integer."
+    ],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function concurrentMapSettled<\n  TInput,\n  TResult extends OperationResult,\n  TOp extends (client: Client, input: TInput) => Promise<TResult>,\n>(\n  client: Client,\n  operation: TOp &\n    ((client: Client, input: TInput) => Promise<TResult>) &\n    (Parameters<NoInfer<TOp>> extends readonly [Client] ? never : unknown),\n  inputs: readonly NoInfer<TInput>[],\n  options?: ConcurrencyOptions,\n): Promise<SettledTaskResult<TResult>[]>;",
+        "parameters": [
+          {
+            "name": "client",
+            "description": "Root or derived Defjs client.",
+            "type": "Client",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "operation",
+            "description": "Defjs operation accepting an input.",
+            "type": "TOp &\n    ((client: Client, input: TInput) => Promise<TResult>) &\n    (Parameters<NoInfer<TOp>> extends readonly [Client] ? never : unknown)",
+            "simplifiedType": "TOp &\n    ((client: Client, input: TInput) => Promise<TResult>) &\n    (Parameters<NoInfer<TOp>> extends readonly [Client] ? never : unknown)",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "inputs",
+            "description": "Ordered inputs to pass to `operation`.",
+            "type": "readonly NoInfer<TInput>[]",
+            "simplifiedType": "array",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Optional concurrency cap (`concurrency`) and batch cancellation (`signal`).",
+            "type": "ConcurrencyOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
     "package": "@defjs/core/xsrf",
     "name": "XSRFOptions",
     "kind": "type",
@@ -8214,6 +8921,914 @@
             "name": "options",
             "description": "Cookie name and header name.",
             "type": "XSRFOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortClientOptions",
+    "kind": "type",
+    "slug": "core/port/portclientoptions-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Options shared by `withPortTransport`, `createPortHTTPHandle`, `createPortSSEHandle`, and `createPortWebSocketHandle`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "mode",
+        "description": "Frame payload mode. Defaults to `port.mode ?? \"structured\"`.",
+        "type": "PortWireMode | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "chunkSize",
+        "description": "Maximum byte size per chunked binary frame (`1` to `1048576`). Defaults to `262144` (256 KiB).",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "creditWindow",
+        "description": "Initial flow-control credit window in response body chunks. Defaults to `8`.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PortClientOptions {\n  readonly mode?: PortWireMode;\n  readonly chunkSize?: number;\n  readonly creditWindow?: number;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortDisconnectListener",
+    "kind": "type",
+    "slug": "core/port/portdisconnectlistener-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Listener invoked when the underlying port disconnects.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type PortDisconnectListener = () => void;",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortEndpoint",
+    "kind": "type",
+    "slug": "core/port/portendpoint-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Custom bidirectional port abstraction accepted by `withPortTransport` and `attachPortHost` alongside native `MessagePort`.\n\nUse this interface when adapting Worker bridges, Electron `MessagePortMain`, sandboxed iframes, or WebExtension ports (`fromWebExtPort`).",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "mode",
+        "description": "Preferred wire mode for binary frames. Defaults to `\"structured\"` when omitted.",
+        "type": "PortWireMode | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "postMessage",
+        "description": "Sends a frame to the peer port. `transfer` is supplied only in `\"structured\"` mode.",
+        "type": "(message: unknown, transfer?: Transferable[]) => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "onMessage",
+        "description": "Subscribes to incoming messages and returns an unsubscribe function.",
+        "type": "(listener: PortMessageListener) => () => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "onDisconnect",
+        "description": "Subscribes to port disconnect events and returns an unsubscribe function.",
+        "type": "((listener: PortDisconnectListener) => () => void) | undefined",
+        "simplifiedType": "function",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "ensureConnected",
+        "description": "Ensures a lazily-connected or hibernated port is connected before starting a new channel.",
+        "type": "(() => void) | undefined",
+        "simplifiedType": "function",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PortEndpoint {\n  readonly mode?: PortWireMode;\n  postMessage: (message: unknown, transfer?: Transferable[]) => void;\n  onMessage: (listener: PortMessageListener) => () => void;\n  onDisconnect?: (listener: PortDisconnectListener) => () => void;\n  ensureConnected?: () => void;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortHostHandle",
+    "kind": "type",
+    "slug": "core/port/porthosthandle-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Handle returned by `attachPortHost` to tear down active channels and detach listeners.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "close",
+        "description": "Aborts in-flight HTTP/SSE channels, closes open WebSockets, sends a `port.close` notification, and detaches port listeners. Safe to call repeatedly.",
+        "type": "() => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "[Symbol.dispose]",
+        "description": "Disposable alias for close.",
+        "type": "() => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PortHostHandle {\n  close: () => void;\n  [Symbol.dispose]: () => void;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortHostOptions",
+    "kind": "type",
+    "slug": "core/port/porthostoptions-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Configuration passed to `attachPortHost`.\n\nHosts fail closed (default-deny): supply at least one of non-empty `allowedOrigins`, `allowRequest`, or `allowAnyOrigin: true`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "allowedOrigins",
+        "description": "Allowed target origins such as `\"https://api.example.com\"`. An `http:` origin permits `http:` and `ws:`; `https:` permits `https:` and `wss:`; `ws:` permits `ws:`; `wss:` permits `wss:`.",
+        "type": "readonly string[] | undefined",
+        "simplifiedType": "array",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "allowRequest",
+        "description": "Custom policy hook evaluated after scheme, credential, and `allowedOrigins` checks. Returning `false` or throwing denies the channel.",
+        "type": "((context: PortRequestCheckContext) => boolean | Promise<boolean>) | undefined",
+        "simplifiedType": "function",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "allowAnyOrigin",
+        "description": "Explicitly allows any `http:`, `https:`, `ws:`, or `wss:` origin without credentials. Defaults to `false`.",
+        "type": "boolean | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "fetch",
+        "description": "Fetch implementation invoked by the host for HTTP and SSE requests. Defaults to `globalThis.fetch`.",
+        "type": "FetchHandle | undefined",
+        "simplifiedType": "FetchHandle",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "WebSocket",
+        "description": "WebSocket constructor invoked by the host for WebSocket channels. Defaults to `globalThis.WebSocket`.",
+        "type": "PortWebSocketConstructor | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "mode",
+        "description": "Frame payload mode. Defaults to `port.mode ?? \"structured\"`.",
+        "type": "PortWireMode | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "chunkSize",
+        "description": "Maximum byte size per chunked binary frame (`1` to `1048576`). Defaults to `262144` (256 KiB).",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "maxRequestBodyBytes",
+        "description": "Maximum buffered HTTP request body size in bytes accepted by the host. Defaults to `33554432` (32 MiB).",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PortHostOptions {\n  readonly allowedOrigins?: readonly string[];\n  readonly allowRequest?: (\n    context: PortRequestCheckContext,\n  ) => boolean | Promise<boolean>;\n  readonly allowAnyOrigin?: boolean;\n  readonly fetch?: FetchHandle;\n  readonly WebSocket?: PortWebSocketConstructor;\n  readonly mode?: PortWireMode;\n  readonly chunkSize?: number;\n  readonly maxRequestBodyBytes?: number;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortLike",
+    "kind": "type",
+    "slug": "core/port/portlike-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Native `MessagePort` or custom {@link PortEndpoint} accepted by `@defjs/core/port`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type PortLike = MessagePort | PortEndpoint;",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortMessageListener",
+    "kind": "type",
+    "slug": "core/port/portmessagelistener-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Listener invoked when an incoming wire frame arrives from the peer port.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type PortMessageListener = (data: unknown) => void;",
+        "parameters": [
+          {
+            "name": "data",
+            "description": "",
+            "type": "unknown",
+            "simplifiedType": "unknown",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortRequestCheckContext",
+    "kind": "type",
+    "slug": "core/port/portrequestcheckcontext-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Normalized outgoing request context passed to {@link PortHostOptions.allowRequest}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "transport",
+        "description": "Requested transport (`\"http\"` covers both HTTP and SSE requests).",
+        "type": "\"http\" | \"websocket\"",
+        "simplifiedType": "union",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "url",
+        "description": "Parsed target URL, already verified to use an HTTP(S) or WS(S) scheme without embedded credentials.",
+        "type": "URL",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "method",
+        "description": "HTTP method, or `\"GET\"` for WebSocket connections.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "headers",
+        "description": "Copied request headers for HTTP/SSE, or an empty `Headers` object for WebSocket.",
+        "type": "Headers",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PortRequestCheckContext {\n  readonly transport: \"http\" | \"websocket\";\n  readonly url: URL;\n  readonly method: string;\n  readonly headers: Headers;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortWebSocketConstructor",
+    "kind": "type",
+    "slug": "core/port/portwebsocketconstructor-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Constructor signature accepted by {@link PortHostOptions.WebSocket}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "OPEN",
+        "description": "Standard `WebSocket.OPEN` constant (`1`).",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PortWebSocketConstructor {\n  readonly OPEN: number;\n  new (url: string | URL, protocols?: string | string[]): WebSocketHandle;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortWebSocketHandle",
+    "kind": "type",
+    "slug": "core/port/portwebsockethandle-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "WebSocket instance handle returned by `createPortWebSocketHandle`, exposing mutable `binaryType`.\n\nAssignable to `@defjs/core`'s {@link WebSocketHandle}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "binaryType",
+        "description": "Data type used for incoming binary WebSocket messages (`\"blob\"` or `\"arraybuffer\"`).",
+        "type": "BinaryType",
+        "simplifiedType": "BinaryType",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "readyState",
+        "description": "",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PortWebSocketHandle extends WebSocketHandle {\n  binaryType: BinaryType;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortWebSocketHandleConstructor",
+    "kind": "type",
+    "slug": "core/port/portwebsockethandleconstructor-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Constructor returned by `createPortWebSocketHandle`, directly constructable and assignable to `@defjs/core`'s `WebSocketHandleConstructor`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "CONNECTING",
+        "description": "Ready state `CONNECTING` constant (`0`).",
+        "type": "0",
+        "simplifiedType": "0",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "OPEN",
+        "description": "Ready state `OPEN` constant (`1`).",
+        "type": "1",
+        "simplifiedType": "1",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "CLOSING",
+        "description": "Ready state `CLOSING` constant (`2`).",
+        "type": "2",
+        "simplifiedType": "2",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "CLOSED",
+        "description": "Ready state `CLOSED` constant (`3`).",
+        "type": "3",
+        "simplifiedType": "3",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PortWebSocketHandleConstructor {\n  readonly CONNECTING: 0;\n  readonly OPEN: 1;\n  readonly CLOSING: 2;\n  readonly CLOSED: 3;\n  new (url: string | URL, protocols?: string | string[]): PortWebSocketHandle;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "PortWireMode",
+    "kind": "type",
+    "slug": "core/port/portwiremode-type",
+    "source": "packages/core/src/port/types.ts",
+    "group": "port",
+    "description": "Encoding mode used for binary payloads over a multiplexed port.\n\n- `\"structured\"` transfers owned `ArrayBuffer` instances directly over `MessagePort` structured clone.\n- `\"json\"` chunks binary payloads and Base64-encodes them into JSON-serializable objects, suitable for WebExtension `runtime.Port`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type PortWireMode = \"structured\" | \"json\";",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "attachPortHost",
+    "kind": "function",
+    "slug": "core/port/attachporthost",
+    "source": "packages/core/src/port/host.ts",
+    "group": "port",
+    "description": "Attaches the network-capable host side of a multiplexed `@defjs/core/port` channel.\n\nEvaluates target scheme, embedded credential, `allowedOrigins`, and `allowRequest` policies before executing HTTP, SSE, or WebSocket operations.\nHosts fail closed and throw a `RangeError` unless `allowedOrigins`, `allowRequest`, or `allowAnyOrigin: true` is supplied.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "A handle whose `close()` or `[Symbol.dispose]()` tears down active channels and detaches port listeners."
+    ],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function attachPortHost(\n  port: PortLike,\n  options: PortHostOptions,\n): PortHostHandle;",
+        "parameters": [
+          {
+            "name": "port",
+            "description": "Native `MessagePort` or custom `PortEndpoint`.",
+            "type": "PortLike",
+            "simplifiedType": "PortLike",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Origin allowlist, per-request policy callback, transport overrides, and framing limits.",
+            "type": "PortHostOptions",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "createPortHTTPHandle",
+    "kind": "function",
+    "slug": "core/port/createporthttphandle",
+    "source": "packages/core/src/port/client.ts",
+    "group": "port",
+    "description": "Builds a `FetchHandle` that proxies HTTP requests across `port` using the shared multiplexer for that port.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "A `FetchHandle` accepted by `@defjs/core`'s `withHTTPHandle`."
+    ],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function createPortHTTPHandle(\n  port: PortLike,\n  options?: PortClientOptions,\n): FetchHandle;",
+        "parameters": [
+          {
+            "name": "port",
+            "description": "Native `MessagePort` or custom `PortEndpoint`.",
+            "type": "PortLike",
+            "simplifiedType": "PortLike",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Wire framing mode, chunk size, and response backpressure credit window.",
+            "type": "PortClientOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "createPortSSEHandle",
+    "kind": "function",
+    "slug": "core/port/createportssehandle",
+    "source": "packages/core/src/port/client.ts",
+    "group": "port",
+    "description": "Builds a `FetchHandle` that proxies Server-Sent Events handshakes and chunked streams across `port` using the shared multiplexer for that port.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": ["A `FetchHandle` accepted by `@defjs/core`'s `withSSEHandle`."],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function createPortSSEHandle(\n  port: PortLike,\n  options?: PortClientOptions,\n): FetchHandle;",
+        "parameters": [
+          {
+            "name": "port",
+            "description": "Native `MessagePort` or custom `PortEndpoint`.",
+            "type": "PortLike",
+            "simplifiedType": "PortLike",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Wire framing mode, chunk size, and stream backpressure credit window.",
+            "type": "PortClientOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "createPortWebSocketHandle",
+    "kind": "function",
+    "slug": "core/port/createportwebsockethandle",
+    "source": "packages/core/src/port/client.ts",
+    "group": "port",
+    "description": "Builds a `WebSocketHandleConstructor` that proxies WebSocket sessions across `port` using the shared multiplexer for that port.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "A `WebSocketHandleConstructor` accepted by `@defjs/core`'s `withWebSocketHandle`."
+    ],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function createPortWebSocketHandle(\n  port: PortLike,\n  options?: PortClientOptions,\n): PortWebSocketHandleConstructor;",
+        "parameters": [
+          {
+            "name": "port",
+            "description": "Native `MessagePort` or custom `PortEndpoint`.",
+            "type": "PortLike",
+            "simplifiedType": "PortLike",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Wire framing mode and maximum binary chunk size.",
+            "type": "PortClientOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port",
+    "name": "withPortTransport",
+    "kind": "function",
+    "slug": "core/port/withporttransport",
+    "source": "packages/core/src/port/client.ts",
+    "group": "port",
+    "description": "Configures an application-owned `@defjs/core` client to route HTTP, SSE, and WebSocket operations over a multiplexed port.\n\nSets `config.http.handle`, `config.sse.handle`, and `config.webSocket.handle`, sharing one underlying `PortMux` per port instance.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": ["A `ClientOption` for `createClient`."],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function withPortTransport(\n  port: PortLike,\n  options?: PortClientOptions,\n): ClientOption;",
+        "parameters": [
+          {
+            "name": "port",
+            "description": "Native `MessagePort` or custom `PortEndpoint`.",
+            "type": "PortLike",
+            "simplifiedType": "PortLike",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Wire framing mode, chunk size, and response backpressure credit window.",
+            "type": "PortClientOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port/webext",
+    "name": "WebExtEvent",
+    "kind": "type",
+    "slug": "core/port/webext/webextevent-type",
+    "source": "packages/core/src/port/webext/webext.ts",
+    "group": "port",
+    "description": "Minimal event subscription surface compatible with WebExtension `runtime.Port.onMessage` and `runtime.Port.onDisconnect`.\n\nDeclared structurally without requiring `@types/chrome` or `webextension-polyfill`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "addListener",
+        "description": "Registers a listener with the extension port event.",
+        "type": "(listener: TListener) => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "removeListener",
+        "description": "Unregisters a previously added listener from the extension port event.",
+        "type": "(listener: TListener) => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface WebExtEvent<TListener> {\n  addListener: (listener: TListener) => void;\n  removeListener: (listener: TListener) => void;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port/webext",
+    "name": "WebExtPort",
+    "kind": "type",
+    "slug": "core/port/webext/webextport-type",
+    "source": "packages/core/src/port/webext/webext.ts",
+    "group": "port",
+    "description": "Minimal WebExtension `runtime.Port` structural interface accepted by {@link fromWebExtPort}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "name",
+        "description": "Optional port channel name assigned during `runtime.connect`.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "postMessage",
+        "description": "Sends a JSON-serializable frame to the extension peer (`chrome.runtime.Port.postMessage`).",
+        "type": "(message: unknown) => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "onMessage",
+        "description": "Event fired when a message arrives from the extension peer.",
+        "type": "WebExtEvent<(message: unknown) => void>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "onDisconnect",
+        "description": "Event fired when the extension peer disconnects or the MV3 Service Worker suspends.",
+        "type": "WebExtEvent<() => void>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface WebExtPort {\n  readonly name?: string;\n  postMessage: (message: unknown) => void;\n  readonly onMessage: WebExtEvent<(message: unknown) => void>;\n  readonly onDisconnect: WebExtEvent<() => void>;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port/webext",
+    "name": "WebExtPortOptions",
+    "kind": "type",
+    "slug": "core/port/webext/webextportoptions-type",
+    "source": "packages/core/src/port/webext/webext.ts",
+    "group": "port",
+    "description": "Options accepted by {@link fromWebExtPort}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "mode",
+        "description": "Wire encoding mode for the endpoint. Defaults to `\"json\"`, which chunks and Base64-encodes binary payloads for extension IPC.",
+        "type": "PortWireMode | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface WebExtPortOptions {\n  readonly mode?: PortWireMode;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/port/webext",
+    "name": "fromWebExtPort",
+    "kind": "function",
+    "slug": "core/port/webext/fromwebextport",
+    "source": "packages/core/src/port/webext/webext.ts",
+    "group": "port",
+    "description": "Adapts a WebExtension `runtime.Port` instance or lazy connector callback into a {@link PortEndpoint}.\n\n- Pass a lazy factory (`() => chrome.runtime.connect({ name: \"defjs-proxy\" })`) on extension UI or content-script clients: connects lazily on first operation call and reconnects automatically after MV3 Service Worker hibernation disconnects.\n- Pass a concrete `WebExtPort` instance inside `chrome.runtime.onConnect`: attaches immediately to that peer connection without automatic reconnection after disconnect.\n\nDefaults to `mode: \"json\"` and sends single-argument `postMessage` frames compatible with Chromium, Firefox, and Safari WebExtensions.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "A {@link PortEndpoint} accepted by `withPortTransport` and `attachPortHost`."
+    ],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function fromWebExtPort(\n  portOrConnect: WebExtPort | (() => WebExtPort),\n  options?: WebExtPortOptions,\n): PortEndpoint;",
+        "parameters": [
+          {
+            "name": "portOrConnect",
+            "description": "Connected `WebExtPort` or factory returning a new `WebExtPort`.",
+            "type": "WebExtPort | (() => WebExtPort)",
+            "simplifiedType": "union",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "options",
+            "description": "Endpoint encoding mode (`\"json\"` by default).",
+            "type": "WebExtPortOptions",
             "simplifiedType": "object",
             "required": false,
             "deprecated": false,
@@ -8761,6 +10376,701 @@
             "type": "OpenTelemetryServerOptions",
             "simplifiedType": "object",
             "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "CliDiagnostic",
+    "kind": "type",
+    "slug": "cli/clidiagnostic-type",
+    "source": "packages/cli/src/runtime/types.ts",
+    "group": "cli",
+    "description": "Structured diagnostic emitted during CLI parsing, lowering, or generation.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "code",
+        "description": "Machine-readable diagnostic code.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "severity",
+        "description": "Diagnostic severity.",
+        "type": "CliDiagnosticSeverity",
+        "simplifiedType": "CliDiagnosticSeverity",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "message",
+        "description": "Human-readable explanation.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "location",
+        "description": "Optional operation identifier or JSON pointer location.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface CliDiagnostic {\n  readonly code: string;\n  readonly severity: CliDiagnosticSeverity;\n  readonly message: string;\n  readonly location?: string;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "CliDiagnosticSeverity",
+    "kind": "type",
+    "slug": "cli/clidiagnosticseverity-type",
+    "source": "packages/cli/src/runtime/types.ts",
+    "group": "cli",
+    "description": "Severity level attached to a CLI diagnostic.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type CliDiagnosticSeverity = \"warning\" | \"error\";",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "CliIo",
+    "kind": "type",
+    "slug": "cli/cliio-type",
+    "source": "packages/cli/src/runtime/types.ts",
+    "group": "cli",
+    "description": "Output streams injected into {@link runCli}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "stdout",
+        "description": "Receives standard CLI output such as help text and summaries.",
+        "type": "(text: string) => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "stderr",
+        "description": "Receives warnings and error messages.",
+        "type": "(text: string) => void",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "cwd",
+        "description": "Working directory override. Defaults to `process.cwd()`.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "fetch",
+        "description": "Optional custom `fetch` passed to OpenAPI URL loading.",
+        "type": "((url: string) => Promise<Response>) | undefined",
+        "simplifiedType": "function",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface CliIo {\n  readonly stdout: (text: string) => void;\n  readonly stderr: (text: string) => void;\n  readonly cwd?: string;\n  readonly fetch?: (url: string) => Promise<Response>;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "DefjsConfig",
+    "kind": "type",
+    "slug": "cli/defjsconfig-type",
+    "source": "packages/cli/src/config/types.ts",
+    "group": "cli",
+    "description": "Root configuration accepted by {@link defineConfig} in `defjs.config.ts`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "openapi",
+        "description": "One or more OpenAPI generation targets.",
+        "type": "OpenApiTargetConfig | readonly OpenApiTargetConfig[] | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface DefjsConfig {\n  readonly openapi?: OpenApiTargetConfig | readonly OpenApiTargetConfig[];\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "GenerateOpenApiOptions",
+    "kind": "type",
+    "slug": "cli/generateopenapioptions-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Programmatic options passed to {@link generateOpenApi}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "target",
+        "description": "Single OpenAPI target configuration to execute.",
+        "type": "OpenApiTargetConfig",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "cwd",
+        "description": "Working directory used to resolve relative paths. Defaults to `process.cwd()`.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "check",
+        "description": "When `true`, compares expected files against disk without writing or deleting.",
+        "type": "boolean | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "fetch",
+        "description": "Optional custom `fetch` implementation used for `http(s):` OpenAPI URLs.",
+        "type": "((url: string) => Promise<Response>) | undefined",
+        "simplifiedType": "function",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface GenerateOpenApiOptions {\n  readonly target: OpenApiTargetConfig;\n  readonly cwd?: string;\n  readonly check?: boolean;\n  readonly fetch?: (url: string) => Promise<Response>;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiDocumentObject",
+    "kind": "type",
+    "slug": "cli/openapidocumentobject-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Plain OpenAPI document object, such as an imported JSON or TypeScript specification module.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [],
+    "overloads": [
+      {
+        "signature": "type OpenApiDocumentObject = { readonly [key: string]: unknown };",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiErrorStrategy",
+    "kind": "type",
+    "slug": "cli/openapierrorstrategy-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Strategy for emitting `error` structs on HTTP operations.\n\n- `\"none\"`: Omits `error` structs so non-2xx proxy or gateway payloads (such as HTML 502s) do not fail decoding\n- `\"union\"`: Synthesizes a union or discriminated union from documented non-2xx JSON responses",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type OpenApiErrorStrategy = \"none\" | \"union\";",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiGenerateResult",
+    "kind": "type",
+    "slug": "cli/openapigenerateresult-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Summary returned by {@link generateOpenApi}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "outDir",
+        "description": "Output directory path.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "written",
+        "description": "File paths created or updated (relative to `outDir`).",
+        "type": "readonly string[]",
+        "simplifiedType": "array",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "skipped",
+        "description": "Existing file paths preserved untouched in `\"scaffold\"` mode (relative to `outDir`).",
+        "type": "readonly string[]",
+        "simplifiedType": "array",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "deleted",
+        "description": "Stale managed file paths removed in `\"sync\"` mode (relative to `outDir`).",
+        "type": "readonly string[]",
+        "simplifiedType": "array",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "unchanged",
+        "description": "Up-to-date file paths that did not need changes (relative to `outDir`).",
+        "type": "readonly string[]",
+        "simplifiedType": "array",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "drifted",
+        "description": "Out-of-sync file paths detected when `check` is `true` (relative to `outDir`).",
+        "type": "readonly string[]",
+        "simplifiedType": "array",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "diagnostics",
+        "description": "Diagnostics produced during parsing, lowering, or emission.",
+        "type": "readonly CliDiagnostic[]",
+        "simplifiedType": "array",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "operationCount",
+        "description": "Number of operations emitted in this target.",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "schemaCount",
+        "description": "Number of named schemas emitted in this target.",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface OpenApiGenerateResult {\n  readonly outDir: string;\n  readonly written: readonly string[];\n  readonly skipped: readonly string[];\n  readonly deleted: readonly string[];\n  readonly unchanged: readonly string[];\n  readonly drifted: readonly string[];\n  readonly diagnostics: readonly CliDiagnostic[];\n  readonly operationCount: number;\n  readonly schemaCount: number;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiGenerationMode",
+    "kind": "type",
+    "slug": "cli/openapigenerationmode-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "File synchronization strategy for OpenAPI code generation.\n\n- `\"sync\"`: Updates managed files and deletes stale managed files removed from the spec\n- `\"scaffold\"`: Writes only missing files and preserves existing files untouched",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type OpenApiGenerationMode = \"sync\" | \"scaffold\";",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiInput",
+    "kind": "type",
+    "slug": "cli/openapiinput-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Accepted OpenAPI source for {@link OpenApiTargetConfig}.\n\nSupports a local YAML/JSON/TS/JS file path, an `http(s):` URL, inline YAML/JSON text,\nan imported OpenAPI object, or a zero-argument loader function.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type OpenApiInput =\n  | string\n  | OpenApiDocumentObject\n  | (() =>\n      string | OpenApiDocumentObject | Promise<string | OpenApiDocumentObject>);",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiMixed2xxStrategy",
+    "kind": "type",
+    "slug": "cli/openapimixed2xxstrategy-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Strategy when an operation declares both body-bearing 2xx responses (such as 200 JSON)\nand empty 2xx responses (such as 204 No Content).\n\n- `\"omit\"`: Emits a diagnostic warning and omits `output` from the operation\n- `\"split\"`: Emits the primary operation with `output` and a companion `<name>NoContent` operation without `output`",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type OpenApiMixed2xxStrategy = \"omit\" | \"split\";",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiOutputConfig",
+    "kind": "type",
+    "slug": "cli/openapioutputconfig-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Output directory and formatting options for a generated Defjs API target.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "dir",
+        "description": "Target directory where `index`, `request/`, and `schema/` files are written.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "format",
+        "description": "Emitted file format. Defaults to `\"ts\"`.",
+        "type": "OpenApiOutputFormat | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "coreImport",
+        "description": "Module specifier used when importing Defjs runtime primitives. Defaults to `\"@defjs/core\"`.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface OpenApiOutputConfig {\n  readonly dir: string;\n  readonly format?: OpenApiOutputFormat;\n  readonly coreImport?: string;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiOutputFormat",
+    "kind": "type",
+    "slug": "cli/openapioutputformat-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Supported output module formats for generated Defjs definitions.\n\n- `\"ts\"`: TypeScript ESM files (`.ts`)\n- `\"tsx\"`: TypeScript JSX ESM files (`.tsx`)\n- `\"js\"`: JavaScript ESM files (`.js`) with companion `.d.ts` declarations\n- `\"mjs\"`: ES module files (`.mjs`) with companion `.d.mts` declarations",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type OpenApiOutputFormat = \"ts\" | \"tsx\" | \"js\" | \"mjs\";",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "OpenApiTargetConfig",
+    "kind": "type",
+    "slug": "cli/openapitargetconfig-type",
+    "source": "packages/cli/src/commands/openapi/types.ts",
+    "group": "cli",
+    "description": "Single OpenAPI generation target configured in `defjs.config.ts` or passed to {@link generateOpenApi}.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "input",
+        "description": "OpenAPI source path, URL, inline specification string, imported object, or loader function.",
+        "type": "OpenApiInput",
+        "simplifiedType": "OpenApiInput",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "output",
+        "description": "Destination directory and output module format.",
+        "type": "OpenApiOutputConfig",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "mode",
+        "description": "File management mode. Defaults to `\"sync\"`.",
+        "type": "OpenApiGenerationMode | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "errorStrategy",
+        "description": "Non-2xx response `error` struct generation strategy. Defaults to `\"none\"`.",
+        "type": "OpenApiErrorStrategy | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "mixed2xxStrategy",
+        "description": "Mixed body + empty 2xx response handling strategy. Defaults to `\"omit\"`.",
+        "type": "OpenApiMixed2xxStrategy | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "include",
+        "description": "Optional allowlist of operationIds or `\"METHOD /path\"` keys to generate.",
+        "type": "readonly string[] | undefined",
+        "simplifiedType": "array",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "exclude",
+        "description": "Optional blocklist of operationIds or `\"METHOD /path\"` keys to omit.",
+        "type": "readonly string[] | undefined",
+        "simplifiedType": "array",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface OpenApiTargetConfig {\n  readonly input: OpenApiInput;\n  readonly output: OpenApiOutputConfig;\n  readonly mode?: OpenApiGenerationMode;\n  readonly errorStrategy?: OpenApiErrorStrategy;\n  readonly mixed2xxStrategy?: OpenApiMixed2xxStrategy;\n  readonly include?: readonly string[];\n  readonly exclude?: readonly string[];\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "defineConfig",
+    "kind": "function",
+    "slug": "cli/defineconfig",
+    "source": "packages/cli/src/config/define.ts",
+    "group": "cli",
+    "description": "Identity configuration helper that provides type safety for `defjs.config.ts`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": ["The same configuration object unchanged."],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function defineConfig(config: DefjsConfig): DefjsConfig;",
+        "parameters": [
+          {
+            "name": "config",
+            "description": "Defjs CLI configuration object.",
+            "type": "DefjsConfig",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "generateOpenApi",
+    "kind": "function",
+    "slug": "cli/generateopenapi",
+    "source": "packages/cli/src/commands/openapi/generate.ts",
+    "group": "cli",
+    "description": "Generates Defjs request, event-stream, and schema modules from a single OpenAPI target.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "Summary of written, skipped, deleted, unchanged, drifted files, and diagnostics."
+    ],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function generateOpenApi(\n  options: GenerateOpenApiOptions,\n): Promise<OpenApiGenerateResult>;",
+        "parameters": [
+          {
+            "name": "options",
+            "description": "Generation target, working directory, check mode, and optional custom `fetch`.",
+            "type": "GenerateOpenApiOptions",
+            "simplifiedType": "object",
+            "required": true,
+            "deprecated": false,
+            "tags": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/cli",
+    "name": "runCli",
+    "kind": "function",
+    "slug": "cli/runcli",
+    "source": "packages/cli/src/runtime/run.ts",
+    "group": "cli",
+    "description": "Executes the `@defjs/cli` command router with explicit arguments and I/O streams.\n\nCalling with no arguments prints top-level help and exits with code `0`.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [
+      "Process exit code (`0` on success, `1` on execution/drift failure, `2` on invalid usage)."
+    ],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "function runCli(\n  argv?: readonly string[],\n  io?: CliIo,\n): Promise<number>;",
+        "parameters": [
+          {
+            "name": "argv",
+            "description": "Command-line arguments excluding the runtime binary and script path.",
+            "type": "readonly string[]",
+            "simplifiedType": "array",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          },
+          {
+            "name": "io",
+            "description": "Optional stdout/stderr writers, working directory, and custom `fetch`.",
+            "type": "CliIo",
+            "simplifiedType": "object",
+            "required": false,
             "deprecated": false,
             "tags": []
           }

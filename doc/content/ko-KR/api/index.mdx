@@ -13,24 +13,26 @@ Defjs SDK를 만들거나 사용할 때 이 레퍼런스를 보세요. SDK 작�
 
 ## 패키지
 
-| 패키지                                                           | 여기서 찾는 것                                                    |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`@defjs/core`](/ko-KR/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
-| [`@defjs/vue`](/ko-KR/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
-| [`@defjs/react`](/ko-KR/api/react)                               | `ClientProvider`, `useClient`                                     |
-| [`@defjs/opentelemetry-server`](/ko-KR/api/opentelemetry-server) | `withOpenTelemetryServer`, 전송별 옵션                            |
+| 패키지                                                           | 여기서 찾는 것                                                                                                  |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`@defjs/core`](/ko-KR/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket, `@defjs/core/concurrent`, `@defjs/core/port` |
+| [`@defjs/cli`](/ko-KR/api/cli)                                   | `defineConfig`, `generateOpenApi`, `runCli`, OpenAPI 대상 옵션                                                  |
+| [`@defjs/vue`](/ko-KR/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`                                                             |
+| [`@defjs/react`](/ko-KR/api/react)                               | `ClientProvider`, `useClient`                                                                                   |
+| [`@defjs/opentelemetry-server`](/ko-KR/api/opentelemetry-server) | `withOpenTelemetryServer`, 전송별 옵션                                                                          |
 
 ## @defjs/core
 
-| 페이지                                  | 여기서 찾는 것                                                        |
-| --------------------------------------- | --------------------------------------------------------------------- |
-| [Client](/ko-KR/api/client)             | `createClient`, `with*` options, `Client`                             |
-| [HTTP](/ko-KR/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
-| [Struct](/ko-KR/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
-| [Errors](/ko-KR/api/errors)             | `Fault` 종류와 팩토리                                                 |
-| [Interceptors](/ko-KR/api/interceptors) | HTTP / SSE / WebSocket 인터셉터 헬퍼                                  |
-| [SSE](/ko-KR/api/sse)                   | `defineEventStream`, stream handle                                    |
-| [WebSocket](/ko-KR/api/web-socket)      | `defineWebSocket`, session                                            |
+| 페이지                                  | 여기서 찾는 것                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Client](/ko-KR/api/client)             | `createClient`, `with*` options, `Client`, `@defjs/core/concurrent`                   |
+| [HTTP](/ko-KR/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse`                 |
+| [Struct](/ko-KR/api/struct)             | `struct.*`, `Infer`, `StructError`                                                    |
+| [Errors](/ko-KR/api/errors)             | `Fault` 종류와 팩토리                                                                 |
+| [Interceptors](/ko-KR/api/interceptors) | HTTP / SSE / WebSocket / 내장 인터셉터 헬퍼                                           |
+| [SSE](/ko-KR/api/sse)                   | `defineEventStream`, stream handle                                                    |
+| [WebSocket](/ko-KR/api/web-socket)      | `defineWebSocket`, session                                                            |
+| [Port](/ko-KR/api/port)                 | `withPortTransport`, `attachPortHost`, `createPort*Handle`, `@defjs/core/port/webext` |
 
 ## 관련
 

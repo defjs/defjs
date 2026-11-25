@@ -118,4 +118,70 @@ describe("request http runtime with client config", () => {
     expect((await second(client))[0]).toBeNull();
     expect(paths).toEqual(["/first", "/second"]);
   });
+
+  test("handles empty endpoints, invalid input, FormData with default headers, and direct text/serialized query", async () => {
+    const emptyClient = createClient();
+    const ping = defineRequest({ method: "GET", path: "/ping" });
+    const [emptyErr] = await ping(emptyClient);
+    expect(emptyErr?.code).toBe("REQ_BUILD_FAILED");
+
+    const controller = new AbortController();
+    const [guardedEmptyErr] = await ping(
+      emptyClient({ signal: controller.signal }),
+    );
+    expect(guardedEmptyErr?.code).toBe("REQ_BUILD_FAILED");
+
+    const withInput = defineRequest({
+      method: "GET",
+      path: "/items/:id",
+      input: struct.object({ id: struct.string() }),
+      builder: (input) => ({ path: { id: input.id } }),
+    });
+    const directClient = createClient(
+      withEndpoint("https://example.test"),
+      withHTTPHandle(() =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      ),
+    );
+    const [inputErr] = await withInput(directClient, {
+      // @ts-expect-error passing a number exercises REQ_INPUT_INVALID on direct HTTP preflight
+      id: 123,
+    });
+    expect(inputErr?.code).toBe("REQ_INPUT_INVALID");
+
+    const seenRequests: Request[] = [];
+    const headerClient = createClient(
+      withEndpoint("https://example.test"),
+      (config) => {
+        config.headers = new Headers({
+          "content-type": "multipart/form-data",
+          "x-client": "1",
+        });
+      },
+      withHTTPHandle((input) => {
+        if (input instanceof Request) {
+          seenRequests.push(input);
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }),
+    );
+
+    const uploadForm = defineRequest({
+      method: "POST",
+      path: "/upload",
+      input: struct.unknown(),
+      builder: () => {
+        const form = new FormData();
+        form.set("field", "value");
+        return { body: form };
+      },
+    });
+
+    const [formErr] = await uploadForm(headerClient, {});
+    expect(formErr).toBeNull();
+    expect(seenRequests[0]?.headers.get("content-type")).toMatch(
+      /^multipart\/form-data; boundary=/,
+    );
+    expect(seenRequests[0]?.headers.get("x-client")).toBe("1");
+  });
 });

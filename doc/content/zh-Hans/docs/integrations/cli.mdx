@@ -1,0 +1,105 @@
+---
+title: CLI 与 OpenAPI 生成器
+description: 使用 @defjs/cli 将 Swagger 2.0 与 OpenAPI 3.0–3.2 规范转换为无状态的 ESM @defjs/core 定义与 struct schema。
+---
+
+# CLI 与 OpenAPI 生成器
+
+`@defjs/cli` 是一个面向 Node.js（`>= 22.18.0`）和 Bun 的开发期 CLI 工具（以零运行时依赖的单文件 ESM 包发布，将 `@defjs/core` 作为可选 peer 依赖，并内嵌打包了 `@scalar/openapi-parser`），使用内置的 2 空格 AST 打印器将 Swagger 2.0 与 OpenAPI 3.0–3.2 规范转换为**无状态 ESM** 格式的 `@defjs/core` 接口定义与 `struct` schema。生成的模块不捕获任何 Client、不创建任何类，并为纯声明加上 `/*#__PURE__*/` 注解以利 Tree-shaking。
+
+作为开发依赖安装：
+
+```bash
+bun add -D @defjs/cli
+```
+
+不带任何参数运行 `defjs` 会打印帮助信息并正常退出。
+
+## 配置与编程式 API
+
+在 `defjs.config.ts`（或 `.mts` / `.mjs` / `.js`，通过 Node `>= 22.18` 或 Bun 原生 `import()` 加载）中使用 `defineConfig` 配置生成目标，或者在自定义脚本中调用 `generateOpenApi`：
+
+<Tabs items={["openapi/orders.json", "defjs.config.ts", "app/generate.ts"]}>
+  <Tab>
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Orders API", "version": "1.0.0" },
+  "paths": {
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "getOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "status"],
+                  "properties": {
+                    "id": { "type": "number" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/defjs.config.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/cli/app/generate.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+随后通过 CLI 执行代码生成或 CI 漂移检查：
+
+```bash
+npx @defjs/cli openapi generate
+npx @defjs/cli openapi generate --check
+```
+
+## 关键参数与 Defjs 护栏规则
+
+| 参数 / 配置项                       | 可选值                                                                                          | 行为说明                                                                                                                                                            |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--input`, `input`                  | 本地 `.yaml`/`.yml`/`.json`/`.ts`/`.mts`/`.js`/`.mjs`、`http(s):` URL、导入的对象或异步加载函数 | 通过 Node `>= 22.18` / Bun 原生 `import()` 加载 `.ts`/`.mts`/`.js`/`.mjs` 模块，并通过 Scalar 加载规范（单文件 Swagger 2.0 / 3.0 自动升级；保留多文件 `$ref` 引用） |
+| `--format`, `format`                | `ts`（默认）、`tsx`、`js`（`.js` + `.d.ts`）、`mjs`（`.mjs` + `.d.mts`）                        | 按 tag 分组生成位于 `schema/` 和 `request/` 下的无状态 ESM 模块（需要时另在根目录生成共享的 `util` 模块）                                                           |
+| `--mode`, `mode`                    | `sync`（默认）、`scaffold`                                                                      | `sync` 会清理陈旧的托管文件并校验文件头所有权；`scaffold` 仅写入尚未存在的文件                                                                                      |
+| `--error-strategy`, `errorStrategy` | `none`（默认）、`union`                                                                         | `none` 避免对非 2xx HTML 网关错误页面强行解码；`union` 则为文档化的非 2xx 响应合成联合 `error` struct                                                               |
+| `--mixed-2xx`, `mixed2xxStrategy`   | `omit`（默认）、`split`                                                                         | 当同一操作混用带响应体的 2xx 与 `204` 时，`omit` 发出清晰警告并省略 `output`，而 `split` 额外生成 `<op>NoContent`                                                   |
+| `--check`                           | 布尔值                                                                                          | 当任意托管文件存在差异或待删除时，以退出码 `1` 退出                                                                                                                 |
+
+生成的代码严格遵守所有 Defjs 契约：
+
+- `input` 搭配显式同步 `builder`（当 JSON 请求体包含 `.alias(...)` 重命名时，直接透传带类型的 `body: input.body`）
+- 非默认 query 序列化样式（`deepObject`、`pipeDelimited`、`spaceDelimited`、`explode: false` 的 `form`、`json`）以及非默认 path 与 header 参数序列化器（数组/对象的 `label`、`matrix`、`simple`）只会将所需的辅助函数闭包输出到共享的根目录 `util` 模块（`util.ts`/`.tsx`/`.js`/`.mjs`，JS 格式另附 `util.d.ts`/`.d.mts`），由 `request/<group>` 文件通过 `../util` 导入
+- 流式 `text/event-stream`（`itemSchema`）响应会生成 `defineEventStream`，而非 `defineRequest`
+- 相互递归或自递归 schema 按拓扑后序生成声明，并在对象环上使用惰性 getter 属性，防止模块加载时出现 `ReferenceError` TDZ 崩溃
+
+参阅 [CLI API 参考](/zh-Hans/api/cli)。

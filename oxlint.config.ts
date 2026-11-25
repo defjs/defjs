@@ -4,6 +4,7 @@ import { defineConfig } from "oxlint";
 // `correctness: "off"` keeps oxlint's own default set from running on top.
 // Type-aware rules (the `no-unsafe-*` family among them) run through oxlint-tsgolint.
 export default defineConfig({
+  ignorePatterns: ["bench/**"],
   plugins: ["typescript", "import", "react", "vitest"],
   jsPlugins: ["./lint/plugin.ts"],
   categories: { correctness: "off" },
