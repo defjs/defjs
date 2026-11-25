@@ -7,7 +7,7 @@ export default defineConfig({
   ...libraryConfig(
     manifest,
     { index: "src/cli.ts" },
-    { bin: { defjs: "./index.js" } },
+    { bin: { defjs: "index.js" } },
   ),
   platform: "node",
   fixedExtension: false,

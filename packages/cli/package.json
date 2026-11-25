@@ -15,7 +15,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "defjs": "./dist/index.js"
+    "defjs": "dist/index.js"
   },
   "exports": {
     ".": {

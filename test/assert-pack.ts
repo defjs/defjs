@@ -7,7 +7,6 @@
  */
 
 const entryFields = [
-  "bin",
   "exports",
   "types",
   "main",
@@ -57,6 +56,49 @@ function collectPaths(value: unknown, into: Set<string>): void {
   for (const entry of Object.values(value ?? {})) collectPaths(entry, into);
 }
 
+// npm normalizes `bin` targets without leading `./` and warns if `./` is present.
+function isNormalizedBinPath(value: string): boolean {
+  if (
+    value.length === 0 ||
+    value.startsWith("./") ||
+    value.startsWith("/") ||
+    value.includes("\\")
+  ) {
+    return false;
+  }
+  return value
+    .split("/")
+    .every(
+      (segment) => segment.length > 0 && segment !== "." && segment !== "..",
+    );
+}
+
+function collectBinPaths(value: unknown, into: Set<string>): void {
+  if (value === undefined) return;
+  if (typeof value === "string") {
+    if (!isNormalizedBinPath(value)) {
+      throw new Error(
+        `assert-pack: bin entry "${value}" must be a normalized relative path without leading "./"`,
+      );
+    }
+    into.add(value);
+    return;
+  }
+  if (!isRecord(value)) {
+    throw new Error(
+      "assert-pack: bin field must be a string or record of strings",
+    );
+  }
+  for (const entry of Object.values(value)) {
+    if (typeof entry !== "string") {
+      throw new Error(
+        "assert-pack: bin field must be a string or record of strings",
+      );
+    }
+    collectBinPaths(entry, into);
+  }
+}
+
 function packedFiles(dir: string): Set<string> {
   const result = Bun.spawnSync({
     cmd: ["npm", "pack", "--dry-run", "--json", "--silent"],
@@ -95,6 +137,7 @@ if (dir === undefined || extra.length > 0) {
 const required = new Set(requiredRootFiles);
 const manifest = await readManifest(dir);
 for (const field of entryFields) collectPaths(manifest[field], required);
+collectBinPaths(manifest["bin"], required);
 
 const packed = packedFiles(dir);
 console.log(`packed: ${[...packed].sort().join(", ")}`);

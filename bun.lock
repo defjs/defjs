@@ -58,7 +58,7 @@
       "name": "@defjs/cli",
       "version": "0.1.0",
       "bin": {
-        "defjs": "./dist/index.js",
+        "defjs": "dist/index.js",
       },
       "devDependencies": {
         "@scalar/openapi-parser": "0.29.27",

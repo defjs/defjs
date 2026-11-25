@@ -979,6 +979,17 @@ export default {
       `${tsdownProc.stdout.toString()}\n${tsdownProc.stderr.toString()}`,
     ).toBe(0);
 
+    const builtManifest: unknown = JSON.parse(
+      readFileSync(join(builtDir, "package.json"), "utf8"),
+    );
+    expect(
+      typeof builtManifest === "object" &&
+        builtManifest !== null &&
+        "bin" in builtManifest
+        ? builtManifest.bin
+        : undefined,
+    ).toEqual({ defjs: "index.js" });
+
     expect(
       readdirSync(builtDir).filter((file) => file.endsWith(".js")),
     ).toEqual(["index.js"]);
